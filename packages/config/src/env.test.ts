@@ -5,6 +5,7 @@ const validSource = {
   NODE_ENV: "test",
   DEFAULT_USER_ID: "00000000-0000-0000-0000-000000000001",
   DATABASE_URL: "postgres://user:pass@localhost:5432/career_intel",
+  MIGRATIONS_DATABASE_URL: "postgres://career_intel:career_intel@localhost:5432/career_intel",
   REDIS_URL: "redis://localhost:6379",
   MINIO_ENDPOINT: "http://localhost:9000",
   MINIO_ACCESS_KEY: "minioadmin",
@@ -43,5 +44,10 @@ describe("loadEnv", () => {
   it("rejects a missing required field with a readable message", () => {
     const { DATABASE_URL, ...rest } = validSource;
     expect(() => loadEnv(rest)).toThrow(/DATABASE_URL/);
+  });
+
+  it("requires MIGRATIONS_DATABASE_URL as a separate field from DATABASE_URL", () => {
+    const { MIGRATIONS_DATABASE_URL, ...rest } = validSource;
+    expect(() => loadEnv(rest)).toThrow(/MIGRATIONS_DATABASE_URL/);
   });
 });

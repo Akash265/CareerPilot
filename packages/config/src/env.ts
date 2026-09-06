@@ -5,6 +5,7 @@ const envSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]),
     DEFAULT_USER_ID: z.string().uuid(),
     DATABASE_URL: z.string().url(),
+    MIGRATIONS_DATABASE_URL: z.string().url(),
     REDIS_URL: z.string().url(),
     MINIO_ENDPOINT: z.string().url(),
     MINIO_ACCESS_KEY: z.string().min(1),
