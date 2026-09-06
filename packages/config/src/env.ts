@@ -1,0 +1,39 @@
+import { z } from "zod";
+
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]),
+    DEFAULT_USER_ID: z.string().uuid(),
+    DATABASE_URL: z.string().url(),
+    REDIS_URL: z.string().url(),
+    MINIO_ENDPOINT: z.string().url(),
+    MINIO_ACCESS_KEY: z.string().min(1),
+    MINIO_SECRET_KEY: z.string().min(1),
+    ANTHROPIC_API_KEY: z.string().min(1),
+    EMBEDDING_PROVIDER: z.enum(["voyage", "self-hosted"]),
+    VOYAGE_API_KEY: z.string().min(1).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.EMBEDDING_PROVIDER === "voyage" && !val.VOYAGE_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["VOYAGE_API_KEY"],
+        message: "VOYAGE_API_KEY is required when EMBEDDING_PROVIDER=voyage",
+      });
+    }
+  });
+
+export type Env = z.infer<typeof envSchema>;
+
+export function loadEnv(
+  source: Record<string, string | undefined> = process.env
+): Env {
+  const result = envSchema.safeParse(source);
+  if (!result.success) {
+    const message = result.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`Invalid environment configuration: ${message}`);
+  }
+  return result.data;
+}
