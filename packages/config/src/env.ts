@@ -5,7 +5,12 @@ const envSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]),
     DEFAULT_USER_ID: z.string().uuid(),
     DATABASE_URL: z.string().url(),
-    MIGRATIONS_DATABASE_URL: z.string().url(),
+    // Optional in the shared schema: only `packages/db/drizzle.config.ts`
+    // (run standalone by drizzle-kit, never by the Next.js app or workers)
+    // needs the superuser DSN. Keeping it optional here means the app/worker
+    // processes are never required to hold this credential in their
+    // environment at all — see DECISIONS.md D12.
+    MIGRATIONS_DATABASE_URL: z.string().url().optional(),
     REDIS_URL: z.string().url(),
     MINIO_ENDPOINT: z.string().url(),
     MINIO_ACCESS_KEY: z.string().min(1),

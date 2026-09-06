@@ -1,6 +1,6 @@
 {
-  "id": "966d4c63-cf8f-4f19-83e3-88c8668e6d0e",
-  "prevId": "21959fba-5399-4055-8fca-a070e324d2ce",
+  "id": "d843c1d2-4f54-4b36-80d6-442b42d56ab2",
+  "prevId": "af2dd7ed-26ca-4a71-857d-2cef52c80f9e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -13,7 +13,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "current_setting('app.current_user_id')::uuid"
         },
         "full_name": {
           "name": "full_name",

@@ -46,8 +46,15 @@ describe("loadEnv", () => {
     expect(() => loadEnv(rest)).toThrow(/DATABASE_URL/);
   });
 
-  it("requires MIGRATIONS_DATABASE_URL as a separate field from DATABASE_URL", () => {
+  it("allows a missing MIGRATIONS_DATABASE_URL (only drizzle.config.ts requires it narrowly)", () => {
     const { MIGRATIONS_DATABASE_URL, ...rest } = validSource;
-    expect(() => loadEnv(rest)).toThrow(/MIGRATIONS_DATABASE_URL/);
+    const env = loadEnv(rest);
+    expect(env.MIGRATIONS_DATABASE_URL).toBeUndefined();
+  });
+
+  it("rejects a malformed MIGRATIONS_DATABASE_URL when one is present", () => {
+    expect(() =>
+      loadEnv({ ...validSource, MIGRATIONS_DATABASE_URL: "not-a-url" })
+    ).toThrow(/MIGRATIONS_DATABASE_URL/);
   });
 });

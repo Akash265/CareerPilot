@@ -1,5 +1,5 @@
 {
-  "id": "21959fba-5399-4055-8fca-a070e324d2ce",
+  "id": "af2dd7ed-26ca-4a71-857d-2cef52c80f9e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -13,7 +13,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "gen_random_uuid()"
+          "default": "current_setting('app.current_user_id')::uuid"
         },
         "full_name": {
           "name": "full_name",
