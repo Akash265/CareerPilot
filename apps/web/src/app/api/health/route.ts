@@ -10,8 +10,25 @@ export async function GET() {
 
   try {
     const db = createDbClient(env);
-    await db.execute(sql`SELECT 1`);
-    checks.database = true;
+    try {
+      await db.execute(sql`SELECT 1`);
+      checks.database = true;
+    } finally {
+      // createDbClient opens a fresh postgres connection pool on every call
+      // (see packages/db/src/client.ts). This route is polled repeatedly by
+      // CI/deploy smoke checks, so the pool must be closed every time or it
+      // leaks connections and eventually exhausts Postgres's connection
+      // limit on the exact endpoint meant to prove liveness. `db.$client` is
+      // drizzle-orm's postgres-js escape hatch to the underlying `postgres`
+      // client (set at runtime in postgres-js/driver.js's `construct()`, and
+      // typed on `PostgresJsDatabase`'s return type) -- closing it here is
+      // best-effort cleanup and must not affect the check result above.
+      try {
+        await db.$client?.end();
+      } catch {
+        // Best-effort cleanup only; must not affect the check result above.
+      }
+    }
   } catch {
     checks.database = false;
   }
