@@ -42,6 +42,9 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.7(@types/react@19.2.18)
+      dotenv-cli:
+        specifier: ^7.4.0
+        version: 7.4.4
       eslint:
         specifier: ^9
         version: 9.39.5(jiti@2.7.0)
