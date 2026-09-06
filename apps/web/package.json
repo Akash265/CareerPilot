@@ -7,10 +7,14 @@
     "build": "NODE_ENV=production dotenv -e ../../.env -- next build",
     "start": "NODE_ENV=production dotenv -e ../../.env -- next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "dotenv -e ../../.env -- vitest run"
   },
   "dependencies": {
     "@ai-career/config": "workspace:*",
+    "@ai-career/db": "workspace:*",
+    "drizzle-orm": "^0.36.0",
+    "ioredis": "^5.4.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -24,7 +28,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.0"
   },
   "packageManager": "pnpm@9.15.0"
 }

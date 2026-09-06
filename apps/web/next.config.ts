@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   // it's the documented, bundler-agnostic way to opt a workspace package
   // into transformation, and protects against breakage if Webpack is ever
   // selected instead of Turbopack.
-  transpilePackages: ["@ai-career/config"],
+  transpilePackages: ["@ai-career/config", "@ai-career/db"],
 };
 
 export default nextConfig;
