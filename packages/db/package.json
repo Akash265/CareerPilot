@@ -1,0 +1,25 @@
+{
+  "name": "@ai-career/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/client.ts",
+  "types": "src/client.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
+    "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@ai-career/config": "workspace:*",
+    "drizzle-orm": "^0.36.0",
+    "postgres": "^3.4.0"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.28.0",
+    "dotenv-cli": "^7.4.0",
+    "vitest": "^2.1.0",
+    "typescript": "^5.7.0"
+  }
+}
