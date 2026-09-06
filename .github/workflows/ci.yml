@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: career_intel
+          POSTGRES_PASSWORD: career_intel
+          POSTGRES_DB: career_intel_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U career_intel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DEFAULT_USER_ID: 00000000-0000-0000-0000-000000000001
+      # GitHub Actions `services:` containers don't run infra/postgres/init.sql
+      # (no docker-entrypoint-initdb.d mount here, unlike infra/docker-compose.yml),
+      # so the least-privilege `career_intel_app` role DATABASE_URL points at
+      # doesn't exist until the "Provision career_intel_app role" step below
+      # creates it. `career_intel` (POSTGRES_USER above) is the superuser role,
+      # used here only for that provisioning step and for MIGRATIONS_DATABASE_URL
+      # (DECISIONS.md D12/D13) -- app runtime code must never use it directly.
+      DATABASE_URL: postgres://career_intel_app:career_intel_app@localhost:5432/career_intel_test
+      MIGRATIONS_DATABASE_URL: postgres://career_intel:career_intel@localhost:5432/career_intel_test
+      REDIS_URL: redis://localhost:6379
+      MINIO_ENDPOINT: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      ANTHROPIC_API_KEY: sk-ant-ci-placeholder
+      EMBEDDING_PROVIDER: voyage
+      VOYAGE_API_KEY: ci-placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Enable pgvector/pg_trgm on test db
+        run: |
+          PGPASSWORD=career_intel psql -h localhost -U career_intel -d career_intel_test \
+            -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+      - name: Provision least-privilege career_intel_app role (DECISIONS.md D12/D13)
+        # GitHub Actions services containers skip infra/postgres/init.sql entirely, so
+        # the app-runtime role that DATABASE_URL points at must be created explicitly
+        # here. This reuses the exact role-creation/grant SQL from
+        # infra/postgres/init.sql's career_intel_test block (minus the \connect
+        # dance, since this CI Postgres only ever has the one database).
+        run: |
+          PGPASSWORD=career_intel psql -h localhost -U career_intel -d career_intel_test <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'career_intel_app') THEN
+              CREATE ROLE career_intel_app WITH LOGIN PASSWORD 'career_intel_app'
+                NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+            END IF;
+          END
+          $$;
+
+          GRANT CONNECT ON DATABASE career_intel_test TO career_intel_app;
+          GRANT USAGE ON SCHEMA public TO career_intel_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO career_intel_app;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO career_intel_app;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO career_intel_app;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO career_intel_app;
+          SQL
+      - name: Write .env for dotenv-cli-wrapped scripts
+        # packages/db's db:generate/db:migrate and apps/web's test/build/start
+        # scripts are wrapped with `dotenv -e ../../.env -- <command>`. CI only
+        # sets these as job-level `env:` vars, not a file, so this materializes
+        # the same repo-root .env dotenv-cli expects, keeping CI on the exact
+        # same code path as local dev instead of relying on dotenv-cli's
+        # missing-file fallback behavior.
+        run: |
+          env | grep -E '^(NODE_ENV|DEFAULT_USER_ID|DATABASE_URL|MIGRATIONS_DATABASE_URL|REDIS_URL|MINIO_ENDPOINT|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|ANTHROPIC_API_KEY|EMBEDDING_PROVIDER|VOYAGE_API_KEY)=' > .env
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
