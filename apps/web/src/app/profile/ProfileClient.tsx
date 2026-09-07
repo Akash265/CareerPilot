@@ -1,20 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UploadForm } from "./UploadForm";
 import { ReviewForm, toEditableProfile, type EditableProfile } from "./ReviewForm";
+import { ProfileDashboard } from "./ProfileDashboard";
 
-type Stage = "upload" | "reviewing" | "saved";
+type Stage = "loading" | "upload" | "reviewing" | "dashboard";
 
 export function ProfileClient() {
-  const [stage, setStage] = useState<Stage>("upload");
+  const [stage, setStage] = useState<Stage>("loading");
   const [editableProfile, setEditableProfile] = useState<EditableProfile | null>(null);
 
-  if (stage === "reviewing" && editableProfile) {
-    return <ReviewForm initialProfile={editableProfile} onSaved={() => setStage("saved")} />;
+  function loadProfile() {
+    return fetch("/api/profile")
+      .then((res) => res.json())
+      .then((body) => {
+        setEditableProfile(body.profile);
+        setStage(body.profile ? "dashboard" : "upload");
+      });
   }
-  if (stage === "saved") {
-    return <p>Profile saved.</p>;
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  if (stage === "loading") return <p>Loading...</p>;
+  if (stage === "dashboard" && editableProfile) {
+    return (
+      <ProfileDashboard
+        profile={editableProfile}
+        onEdit={() => setStage("reviewing")}
+      />
+    );
+  }
+  if (stage === "reviewing" && editableProfile) {
+    return (
+      <ReviewForm
+        initialProfile={editableProfile}
+        onSaved={() => loadProfile()}
+      />
+    );
   }
   return (
     <UploadForm
