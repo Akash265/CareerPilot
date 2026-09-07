@@ -18,6 +18,8 @@ const envSchema = z
     ANTHROPIC_API_KEY: z.string().min(1),
     EMBEDDING_PROVIDER: z.enum(["voyage", "self-hosted"]),
     VOYAGE_API_KEY: z.string().min(1).optional(),
+    ANTHROPIC_MODEL_FAST: z.string().min(1),
+    VOYAGE_EMBEDDING_MODEL: z.string().min(1),
   })
   .superRefine((val, ctx) => {
     if (val.EMBEDDING_PROVIDER === "voyage" && !val.VOYAGE_API_KEY) {

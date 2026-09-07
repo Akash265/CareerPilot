@@ -13,6 +13,8 @@ const validSource = {
   ANTHROPIC_API_KEY: "sk-ant-test",
   EMBEDDING_PROVIDER: "voyage",
   VOYAGE_API_KEY: "voyage-test-key",
+  ANTHROPIC_MODEL_FAST: "claude-haiku-4-5-20251001",
+  VOYAGE_EMBEDDING_MODEL: "voyage-3.5",
 };
 
 describe("loadEnv", () => {
@@ -56,5 +58,15 @@ describe("loadEnv", () => {
     expect(() =>
       loadEnv({ ...validSource, MIGRATIONS_DATABASE_URL: "not-a-url" })
     ).toThrow(/MIGRATIONS_DATABASE_URL/);
+  });
+
+  it("rejects a missing ANTHROPIC_MODEL_FAST", () => {
+    const { ANTHROPIC_MODEL_FAST, ...rest } = validSource;
+    expect(() => loadEnv(rest)).toThrow(/ANTHROPIC_MODEL_FAST/);
+  });
+
+  it("rejects a missing VOYAGE_EMBEDDING_MODEL", () => {
+    const { VOYAGE_EMBEDDING_MODEL, ...rest } = validSource;
+    expect(() => loadEnv(rest)).toThrow(/VOYAGE_EMBEDDING_MODEL/);
   });
 });
