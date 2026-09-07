@@ -32,3 +32,8 @@ rationale behind each architectural choice.
 Foundation phase (Phase 0/1) complete: monorepo, Docker Compose
 infrastructure, validated env config, single-user RLS pattern, Next.js
 shell, health-check route, CI. No product features implemented yet.
+
+Phase 2 (Candidate Profile) complete: resume upload (PDF/DOCX/LaTeX) to
+MinIO, AI-assisted structured extraction with mandatory user review,
+normalized candidate-profile schema, and profile_facts generation +
+Voyage embeddings. Visit /profile after `pnpm dev` to use it.

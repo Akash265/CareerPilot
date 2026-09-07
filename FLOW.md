@@ -126,3 +126,192 @@ Notes:
 - The cast `tx as unknown as DbClient` exists because `db.transaction`'s
   callback receives a transaction-scoped client type that isn't structurally
   identical to `DbClient`, but is used identically for query purposes.
+
+---
+
+## 4. Candidate Profile: upload → AI extraction → review → confirm → dashboard (request-driven)
+
+Entry point (browser): `apps/web/src/app/profile/page.tsx` renders
+`ProfileClient` (`apps/web/src/app/profile/ProfileClient.tsx`), a client
+component that owns a `Stage` state machine (`loading` → `upload` |
+`dashboard` → `reviewing`) and drives which of `UploadForm`, `ReviewForm`,
+or `ProfileDashboard` is on screen. On mount it calls `GET /api/profile`
+(see §4c) to decide whether to start at `upload` (no profile yet) or
+`dashboard` (profile exists).
+
+### 4a. Upload + AI extraction
+
+```
+UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadForm.tsx]
+└─ fetch POST /api/profile/resume  (multipart FormData, field "file")
+   └─ route.ts: POST()                       [apps/web/src/app/api/profile/resume/route.ts]
+      ├─ loadEnv()                           [@ai-career/config]
+      ├─ validate: file present, size ≤ 10MB (else 400, before any I/O)
+      ├─ detectResumeFileType(buffer, file.name)   [@ai-career/ai]
+      │  └─ content-sniffs magic bytes (not just the extension/MIME header,
+      │     per DECISIONS.md D15's security note) → "pdf" | "docx" | "tex"
+      │  └─ throws UnsupportedFileTypeError → caught → 400
+      ├─ createStorageClient(env)            [@ai-career/storage, MinIO/S3 client]
+      ├─ createDbClient(env)                 [@ai-career/db]
+      ├─ uploadResume(storageClient, { userId: env.DEFAULT_USER_ID, buffer,
+      │                                 fileExtension: fileType })
+      │  └─ [@ai-career/storage] writes object under a UUID-derived key
+      │     (never the original filename — DECISIONS.md D15 security note)
+      │     → returns { objectKey }
+      ├─ withUserContext(db, DEFAULT_USER_ID, tx => ...)   [@ai-career/db]
+      │  ├─ tx.update(resumeDocuments).set({isActive:false}).where(isActive=true)
+      │  │  (deactivates any prior resume — D18: single active resume)
+      │  └─ tx.insert(resumeDocuments).values({objectKey, originalFilename,
+      │        mimeType, fileSizeBytes, extractionStatus:"pending", isActive:true})
+      │     .returning id
+      ├─ extractText(buffer, fileType)       [@ai-career/ai]
+      │  └─ pdf/docx → library-based text extraction; tex → read as UTF-8
+      │     plain text with no stripping (D15)
+      ├─ createAnthropicClient(env)          [@ai-career/ai]
+      ├─ extractWithRetry(anthropic, env, text)   [route.ts local helper]
+      │  └─ extractProfileFromResume(anthropic, env, text)   [@ai-career/ai]
+      │     ├─ calls Anthropic (fast/cheap tier per D7) with a structured
+      │     │  extraction prompt → parses/validates response against the
+      │     │  ResumeExtractionDraft schema (Zod)
+      │     ├─ on schema validation failure → throws ExtractionValidationError
+      │     │  → extractWithRetry retries the call exactly once, then
+      │     │  propagates a second failure
+      │     └─ success → returns ResumeExtractionDraft (contact, education,
+      │        workExperiences[+bullets], skills, projects, certifications,
+      │        achievements — no preferences/salary/company lists; those are
+      │        review-only fields with no signal in resume text, defaulted
+      │        by ReviewForm's `toEditableProfile`)
+      ├─ on success: withUserContext(... set extractionStatus:"extracted")
+      │  → NextResponse.json({ resumeDocumentId, status:"extracted", draft })
+      │  (draft is NOT persisted to any profile table here — D15's mandatory
+      │  review gate)
+      └─ on extraction failure: withUserContext(... set extractionStatus:
+         "failed", extractionError) → 200 response with status:"failed"
+         (resume stays uploaded/active; user can still fill the profile
+         manually — UploadForm surfaces `body.error` and leaves the user on
+         the upload stage)
+UploadForm receives { status:"extracted", draft } → calls onExtracted(draft)
+└─ ProfileClient: toEditableProfile(draft)   [apps/web/src/app/profile/ReviewForm.tsx]
+   └─ merges the draft with zero-valued defaults for review-only fields
+      (preferences, salary, visa, company lists) → EditableProfile
+   └─ setStage("reviewing")  → renders <ReviewForm initialProfile=... />
+```
+
+### 4b. Review + confirm (persist)
+
+```
+ReviewForm (user edits EditableProfile fields, then clicks confirm)
+└─ handleConfirm()                           [apps/web/src/app/profile/ReviewForm.tsx]
+   └─ fetch POST /api/profile/confirm  (JSON body = the full EditableProfile)
+      └─ route.ts: POST()                    [.../api/profile/confirm/route.ts]
+         ├─ loadEnv()
+         ├─ ConfirmedProfileSchema.safeParse(body)   [.../lib/profile/
+         │     confirmedProfileSchema.ts] — Zod validation; 400 on failure
+         └─ saveConfirmedProfile(env, parsed.data)   [.../lib/profile/
+               saveProfile.ts]
+            ├─ createDbClient(env)
+            └─ withUserContext(db, DEFAULT_USER_ID, async tx => {
+               ├─ tx.insert(candidateProfiles).values({...})
+               │     .onConflictDoUpdate({target: userId, set: {...}})
+               │  (full upsert of the 1:1 scalar/preference row — D14)
+               ├─ tx.delete(...) on education, workExperienceBullets,
+               │     workExperiences, skills, projects, certifications,
+               │     achievements, companyPreferences
+               │  (full-replace strategy: every confirm/edit wipes and
+               │  re-inserts these normalized child tables — same code path
+               │  serves both first-time confirm and later edits, see §4d)
+               ├─ re-insert loop per section (education, workExperiences
+               │     +bullets, skills, projects, certifications, achievements,
+               │     preferred/excluded companyPreferences) — each insert
+               │     .returning({id}) so the new row id can be referenced
+               ├─ deriveFact(sourceType, sourceId, factText)   [.../lib/
+               │     profile/deriveFacts.ts] called once per atomic item
+               │     (D16: facts derive from the CONFIRMED profile, not raw
+               │     resume text) → { sourceType, sourceId, factText,
+               │     contentHash } (contentHash = hash of factText, D16's
+               │     reuse key)
+               ├─ tx.select().from(profileFacts)  → existing rows, indexed
+               │     by contentHash, to detect which facts are unchanged
+               ├─ embedTexts(env, [unmatched facts' text])   [@ai-career/ai,
+               │     Voyage AI per D7] → embeddings only for NEW/changed
+               │     fact text (D16's embedding-cache reuse — unchanged
+               │     facts reuse their existing embedding + embeddingModel,
+               │     never re-call Voyage for identical text)
+               ├─ tx.delete(profileFacts)  (full-replace, mirrors the
+               │     normalized-table strategy above)
+               └─ tx.insert(profileFacts).values({sourceType, sourceId,
+                     factText, embedding, embeddingModel, contentHash})
+                  per fact (embedding is null if Voyage call failed for that
+                  batch — accepted current behavior per this task's brief
+                  §"Open implementation-time decisions")
+               → returns { factsGenerated: facts.length }
+         └─ NextResponse.json({ status:"saved", factsGenerated })
+ReviewForm: body.status === "saved" → onSaved()
+└─ ProfileClient: loadProfile() → re-fetches GET /api/profile → setStage(
+      "dashboard") once a profile comes back
+```
+
+### 4c. Dashboard read
+
+```
+ProfileClient (on mount, and again after onSaved())
+└─ fetch GET /api/profile
+   └─ route.ts: GET()                        [.../api/profile/route.ts]
+      ├─ loadEnv(); createDbClient(env)
+      └─ withUserContext(db, DEFAULT_USER_ID, tx => serializeProfile(tx))
+            [.../lib/profile/serializeProfile.ts]
+         ├─ selects candidateProfiles, workExperiences,
+         │  workExperienceBullets, companyPreferences, education, skills,
+         │  projects, certifications, achievements (all scoped to the
+         │  RLS-filtered transaction)
+         ├─ returns null if no candidateProfiles row exists yet (drives
+         │  ProfileClient's upload-vs-dashboard branch)
+         ├─ coerces `numeric` columns (salaryExpectationMin/Max) from the
+         │  string form postgres-js returns back to `number`, so the same
+         │  shape can round-trip straight into ConfirmedProfileSchema on a
+         │  later PATCH/confirm without a validation failure
+         └─ reshapes every section into the same ID-free plain-object shape
+            ConfirmedProfileSchema accepts (bullets flattened to string[]
+            sorted by displayOrder, achievements flattened to string[], etc.)
+      → NextResponse.json({ profile })
+ProfileClient: body.profile truthy → setStage("dashboard")
+└─ renders <ProfileDashboard profile={editableProfile} onEdit={...} />
+      [apps/web/src/app/profile/ProfileDashboard.tsx] — read-only display of
+      all sections above.
+```
+
+### 4d. Edit path (reuses the confirm endpoint, not PATCH)
+
+```
+ProfileDashboard "Edit" button → onEdit()
+└─ ProfileClient: setStage("reviewing")
+   → renders <ReviewForm initialProfile={editableProfile} onSaved={...} />
+     (the SAME already-fetched GET /api/profile response, pre-filled — no
+     re-upload, no new extraction call)
+User edits fields → handleConfirm() → POST /api/profile/confirm
+   (identical path to §4b — the full delete-and-re-insert save + fact
+   re-derivation + embedding-cache reuse runs again)
+```
+
+Notes:
+- `PATCH /api/profile` (`.../api/profile/route.ts`) calls the same
+  `saveConfirmedProfile` and is covered by its own route test, but nothing
+  in the UI currently calls it — `ProfileDashboard`'s Edit button routes
+  through `ReviewForm` → `POST /api/profile/confirm` instead, since both
+  endpoints run the identical full-replace save path today (no partial-PATCH
+  semantics exist yet; see DECISIONS.md D16, which anticipates `PATCH`
+  eventually re-deriving/re-embedding only *changed* facts as a future
+  optimization, not yet implemented).
+- The extraction draft (§4a) and the confirmed/saved profile (§4b–d) are
+  deliberately different shapes: `ResumeExtractionDraft` (AI-extracted,
+  no preferences) vs. `EditableProfile` (draft + zero-valued preference
+  defaults, edited client-side) vs. `ConfirmedProfile` (the same shape,
+  Zod-validated server-side before persistence). `serializeProfile`'s output
+  is shaped to satisfy `ConfirmedProfileSchema` directly so the dashboard's
+  fetched profile can be handed straight back into `ReviewForm` and then
+  `POST /api/profile/confirm` unchanged (see DECISIONS.md D19's note on the
+  `numeric`-to-`number` coercion needed for this round-trip).
+- `DELETE /api/profile/resume` (same route file as §4a's `POST`) deactivates
+  by deleting the active `resumeDocuments` row and its MinIO object; it does
+  not touch `candidateProfiles` or any other profile table — resume-file
+  deletion and confirmed-profile data are independent lifecycles.
