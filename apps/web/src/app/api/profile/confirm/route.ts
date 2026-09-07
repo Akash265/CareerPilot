@@ -10,6 +10,8 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.message }, { status: 400 });
   }
+  // saveConfirmedProfile creates and closes its own connection pool, so this
+  // route never opens one of its own (see packages/db/src/client.ts).
   const result = await saveConfirmedProfile(env, parsed.data);
   return NextResponse.json({ status: "saved", factsGenerated: result.factsGenerated });
 }
