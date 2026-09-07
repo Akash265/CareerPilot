@@ -164,6 +164,8 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
       │  └─ tx.insert(resumeDocuments).values({objectKey, originalFilename,
       │        mimeType, fileSizeBytes, extractionStatus:"pending", isActive:true})
       │     .returning id
+      ├─ [inside the handled try/catch below — a corrupt-but-well-sniffed
+      │   file must produce the status:"failed" response, not a 500]
       ├─ extractText(buffer, fileType)       [@ai-career/ai]
       │  └─ pdf/docx → library-based text extraction; tex → read as UTF-8
       │     plain text with no stripping (D15)
@@ -187,9 +189,16 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
       │  review gate)
       └─ on extraction failure: withUserContext(... set extractionStatus:
          "failed", extractionError) → 200 response with status:"failed"
-         (resume stays uploaded/active; user can still fill the profile
-         manually — UploadForm surfaces `body.error` and leaves the user on
-         the upload stage)
+         (resume stays uploaded/active). UploadForm surfaces `body.error`
+         and leaves the user on the upload stage to retry with a different
+         file. There is currently NO manual-entry entry point: ProfileClient
+         only advances to `reviewing` on a successful extraction or on an
+         already-saved profile fetched by GET /api/profile, so a user with
+         neither cannot reach ReviewForm at all. (The design spec's
+         "manual-entry fallback" — POST /api/profile/confirm accepting a
+         hand-built profile — is supported by the API and by ReviewForm's
+         now-complete field coverage, but no UI affordance starts a blank
+         profile without an upload. Not implemented in this phase.)
 UploadForm receives { status:"extracted", draft } → calls onExtracted(draft)
 └─ ProfileClient: toEditableProfile(draft)   [apps/web/src/app/profile/ReviewForm.tsx]
    └─ merges the draft with zero-valued defaults for review-only fields
@@ -209,8 +218,9 @@ ReviewForm (user edits EditableProfile fields, then clicks confirm)
          │     confirmedProfileSchema.ts] — Zod validation; 400 on failure
          └─ saveConfirmedProfile(env, parsed.data)   [.../lib/profile/
                saveProfile.ts]
-            ├─ createDbClient(env)
-            └─ withUserContext(db, DEFAULT_USER_ID, async tx => {
+            ├─ createDbClient(env)   (pool closed in this function's
+            │     `finally`, so no route needs to close it — see §4e)
+            └─ TRANSACTION 1 — withUserContext(db, DEFAULT_USER_ID, async tx => {
                ├─ tx.insert(candidateProfiles).values({...})
                │     .onConflictDoUpdate({target: userId, set: {...}})
                │  (full upsert of the 1:1 scalar/preference row — D14)
@@ -230,20 +240,32 @@ ReviewForm (user edits EditableProfile fields, then clicks confirm)
                │     resume text) → { sourceType, sourceId, factText,
                │     contentHash } (contentHash = hash of factText, D16's
                │     reuse key)
-               ├─ tx.select().from(profileFacts)  → existing rows, indexed
-               │     by contentHash, to detect which facts are unchanged
-               ├─ embedTexts(env, [unmatched facts' text])   [@ai-career/ai,
-               │     Voyage AI per D7] → embeddings only for NEW/changed
-               │     fact text (D16's embedding-cache reuse — unchanged
-               │     facts reuse their existing embedding + embeddingModel,
-               │     never re-call Voyage for identical text)
+               └─ tx.select().from(profileFacts)  → existing rows, indexed
+                     by contentHash, to detect which facts are unchanged
+               }) ← TRANSACTION 1 COMMITS HERE. The confirmed profile is now
+                    durable regardless of what the embedding provider does
+                    next (design spec §7: "Voyage embedding failure during
+                    confirm → the profile data still commits").
+            ├─ OUTSIDE any transaction:
+            │  embedTexts(env, [unmatched facts' text])   [@ai-career/ai,
+            │     Voyage AI per D7] → embeddings only for NEW/changed fact
+            │     text (D16's embedding-cache reuse — unchanged facts reuse
+            │     their existing embedding + embeddingModel, never re-call
+            │     Voyage for identical text). Wrapped in try/catch: a Voyage
+            │     failure degrades to an all-null embedding list instead of
+            │     throwing, so the save still completes. Deliberately NOT
+            │     logged — the error text can contain fact text (PII), which
+            │     the spec §6 / CLAUDE.md §9 forbid logging.
+            └─ TRANSACTION 2 — withUserContext(db, DEFAULT_USER_ID, async tx => {
                ├─ tx.delete(profileFacts)  (full-replace, mirrors the
                │     normalized-table strategy above)
                └─ tx.insert(profileFacts).values({sourceType, sourceId,
                      factText, embedding, embeddingModel, contentHash})
-                  per fact (embedding is null if Voyage call failed for that
-                  batch — accepted current behavior per this task's brief
-                  §"Open implementation-time decisions")
+                  per fact — embedding = the reused cached vector when the
+                  content hash matched, else the freshly computed one, else
+                  null when the Voyage call failed (the column is nullable
+                  precisely so these rows can be back-filled later)
+               })
                → returns { factsGenerated: facts.length }
          └─ NextResponse.json({ status:"saved", factsGenerated })
 ReviewForm: body.status === "saved" → onSaved()
@@ -257,7 +279,7 @@ ReviewForm: body.status === "saved" → onSaved()
 ProfileClient (on mount, and again after onSaved())
 └─ fetch GET /api/profile
    └─ route.ts: GET()                        [.../api/profile/route.ts]
-      ├─ loadEnv(); createDbClient(env)
+      ├─ loadEnv(); createDbClient(env)   (closed in a `finally` — see §4e)
       └─ withUserContext(db, DEFAULT_USER_ID, tx => serializeProfile(tx))
             [.../lib/profile/serializeProfile.ts]
          ├─ selects candidateProfiles, workExperiences,
@@ -288,10 +310,45 @@ ProfileDashboard "Edit" button → onEdit()
    → renders <ReviewForm initialProfile={editableProfile} onSaved={...} />
      (the SAME already-fetched GET /api/profile response, pre-filled — no
      re-upload, no new extraction call)
-User edits fields → handleConfirm() → POST /api/profile/confirm
+User edits fields → handleConfirm() → toPayload(profile) → POST
+   /api/profile/confirm
    (identical path to §4b — the full delete-and-re-insert save + fact
    re-derivation + embedding-cache reuse runs again)
 ```
+
+`ReviewForm` renders an editable control for every field of
+`EditableProfile` — contact (5 text inputs), preferences (number inputs, a
+work-mode `<select>`, a visa checkbox, a notes textarea, and 5
+comma-separated string-list inputs), plus add/remove repeating groups for
+education, work experience (with a one-bullet-per-line textarea), skills,
+projects, certifications and achievements. Conversion happens at the edges:
+`orNull`/`orNullNumber` on each change (blank input ⇒ `null`), and a single
+`toPayload()` pass immediately before `fetch` that strips the placeholder
+empty entries the comma-list and bullet editors keep around so typing a
+separator isn't swallowed by the controlled input. `ProfileDashboard`
+mirrors the same field set read-only.
+
+### 4e. Postgres connection-pool lifecycle (cross-cutting)
+
+```
+createDbClient(env)                        [packages/db/src/client.ts]
+└─ postgres(env.DATABASE_URL) → a NEW connection pool on every call
+```
+
+Every caller therefore owns the pool it creates and closes it once the
+request's DB work is done, via `db.$client?.end()` inside a `finally`,
+wrapped in its own try/catch so a failing close can never change the
+response. Callers doing this today:
+
+- `GET /api/health`               [.../api/health/route.ts] — original site of
+  the pattern
+- `GET /api/profile`              [.../api/profile/route.ts] (local
+  `closePool` helper)
+- `POST` / `DELETE /api/profile/resume` [.../api/profile/resume/route.ts]
+  (local `closePool` helper)
+- `saveConfirmedProfile`          [.../lib/profile/saveProfile.ts] — closes
+  its own pool, which is why `POST /api/profile/confirm` and
+  `PATCH /api/profile` create none of their own
 
 Notes:
 - `PATCH /api/profile` (`.../api/profile/route.ts`) calls the same
