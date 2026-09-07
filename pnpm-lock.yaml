@@ -17,12 +17,18 @@ importers:
 
   apps/web:
     dependencies:
+      '@ai-career/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@ai-career/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@ai-career/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ai-career/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       drizzle-orm:
         specifier: ^0.36.0
         version: 0.36.4(@types/react@19.2.18)(postgres@3.4.9)(react@19.2.8)
