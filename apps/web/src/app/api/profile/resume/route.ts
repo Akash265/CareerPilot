@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { loadEnv } from "@ai-career/config";
 import { createDbClient, withUserContext, schema } from "@ai-career/db";
-import { createStorageClient, uploadResume } from "@ai-career/storage";
+import { createStorageClient, uploadResume, deleteResume } from "@ai-career/storage";
 import {
   detectResumeFileType,
   extractText,
@@ -104,4 +104,26 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ resumeDocumentId, status: "failed", error: message }, { status: 200 });
   }
+}
+
+export async function DELETE() {
+  const env = loadEnv();
+  const db = createDbClient(env);
+  const storageClient = createStorageClient(env);
+
+  const activeResume = await withUserContext(db, env.DEFAULT_USER_ID, async (tx) => {
+    const [row] = await tx.select().from(schema.resumeDocuments).where(eq(schema.resumeDocuments.isActive, true));
+    return row ?? null;
+  });
+
+  if (!activeResume) {
+    return NextResponse.json({ error: "No active resume" }, { status: 404 });
+  }
+
+  await deleteResume(storageClient, activeResume.objectKey);
+  await withUserContext(db, env.DEFAULT_USER_ID, (tx) =>
+    tx.delete(schema.resumeDocuments).where(eq(schema.resumeDocuments.id, activeResume.id))
+  );
+
+  return NextResponse.json({ status: "deleted" });
 }
