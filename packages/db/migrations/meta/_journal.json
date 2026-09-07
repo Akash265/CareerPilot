@@ -15,6 +15,20 @@
       "when": 1788702095587,
       "tag": "0001_users_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788786776998,
+      "tag": "0002_wooden_chimera",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788786787290,
+      "tag": "0003_candidate_profile_rls",
+      "breakpoints": true
     }
   ]
 }

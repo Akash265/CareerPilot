@@ -9,6 +9,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
+    "db:generate:custom": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=candidate_profile_rls",
     "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate"
   },
   "dependencies": {

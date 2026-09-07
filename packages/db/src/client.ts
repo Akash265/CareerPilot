@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { Env } from "@ai-career/config";
-import * as schema from "./schema/users";
+import * as schema from "./schema";
 
 export type DbClient = ReturnType<typeof drizzle<typeof schema>>;
 
