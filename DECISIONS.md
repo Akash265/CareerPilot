@@ -86,4 +86,44 @@ Append-only log of meaningful decisions made while designing/building the AI Car
 
 ---
 
+## 2026-09-07 — Phase 2 (Candidate Profile) design decisions
+
+### D14. Candidate profile data model: normalized relational tables, not a JSONB blob
+**Decision:** The candidate profile is modeled as separate normalized tables — `candidate_profiles` (1:1 scalar/preference fields), `education`, `work_experiences` + `work_experience_bullets`, `skills`, `projects`, `certifications`, `achievements`, `preferred_companies`/`excluded_companies`, `resume_documents`, and `profile_facts` — rather than a single `candidate_profiles` row with array-valued JSONB columns for education/experience/skills.
+**Alternatives considered:** A semi-structured JSONB profile with one row per user and array columns for each repeating section.
+**Why:** The spec (§4) and D5 require every AI-generated resume edit to be traceable to a concrete source fact. That requires a real reference from `profile_facts` back to the exact row it was derived from (a specific bullet, skill, or achievement) — a JSONB array offers no stable per-item identity to point at. Normalized tables also let each entity type be validated independently with its own Zod schema and RLS policy, consistent with D2/D12's per-table pattern, instead of one large nested object.
+**What it affects:** `packages/db` schema (new tables under `packages/db/src/schema/`), all Phase 2 CRUD endpoints, and every later phase that reads profile data (resume optimization, matching).
+
+Simple unstructured preference lists (`preferred_role_titles`, `preferred_industries`, `excluded_industries`) are kept as `text[]` columns on `candidate_profiles` rather than their own tables — they are not D5-guarded facts and don't need per-item lineage, so a dedicated table would be premature normalization.
+
+`profile_facts.source_id` is an application-enforced polymorphic reference (paired with `source_type`), not a database-level foreign key — Postgres cannot express a single FK constraint that targets one of several different tables depending on a discriminator column. Accepted as a reasonable tradeoff at single-user scale; alternatives (a separate nullable FK column per source table) were rejected as needless schema clutter for the same integrity guarantee application code already provides via `withUserContext`-scoped writes.
+
+### D15. Resume ingestion: AI-assisted extraction with mandatory user review, not autonomous or fully manual
+**Decision:** Uploading a resume triggers AI extraction into a structured draft, but nothing is persisted to the canonical profile tables until the user explicitly reviews and confirms it via a separate `POST /api/profile/confirm` step.
+**Alternatives considered:** (a) Fully autonomous — persist AI-extracted fields directly as canonical profile data. (b) Fully manual — resume upload only for storage/reference; all profile fields entered by hand via forms.
+**Why:** Autonomous extraction risks silently writing incorrect facts into the very source-of-truth that D5's hallucination guardrail depends on being accurate — an extraction error would then propagate as a false "verified fact" into later resume optimization. Fully manual entry is safe but ignores that the spec's own user journey is resume-first ("Upload Master Resume → Build Candidate Profile") and would make onboarding needlessly tedious. Mandatory review keeps the AI as a drafting aid, not an authority, consistent with CLAUDE.md §6/§7's "AI recommends, user confirms" pattern already used for the Career Goal Statement.
+**What it affects:** `apps/web` profile UI (upload → review-and-edit screen → confirm, as two distinct steps/endpoints, not one); the extraction endpoint returns a draft object and writes nothing to profile tables itself.
+
+Accepted resume formats for Phase 2: PDF, DOCX, and LaTeX (`.tex`). LaTeX source is read as plain UTF-8 text and passed directly to the extraction prompt with no stripping step — Claude parses LaTeX markup adequately as source text, so a dedicated LaTeX-to-text converter would be speculative tooling for a format only a minority of resumes use.
+
+### D16. `profile_facts` are derived from the confirmed structured profile, not extracted directly from raw resume text
+**Decision:** Each `profile_facts` row is generated from an atomic item in the user-confirmed profile (one education entry, one work-experience bullet, one skill, one project, one certification, one achievement) after `POST /api/profile/confirm`, not from the original resume's raw bullet points during extraction.
+**Alternatives considered:** Generating facts straight from the raw resume text at extraction time, independent of how the user edits the structured draft afterward.
+**Why:** Facts must stay in sync with what the user has actually approved as true. If facts were frozen from the raw resume at extraction time, a later edit to the confirmed profile (e.g. correcting a mis-extracted date or removing a bullet) would leave a stale, unreferenced fact that the D5 guardrail could still validate new resume text against — reintroducing exactly the kind of drift the guardrail exists to prevent.
+**What it affects:** `POST /api/profile/confirm`'s transaction (persist profile rows → derive facts → embed facts, in that order); `PATCH /api/profile` must re-derive and re-embed only the facts whose source content actually changed, using `profile_facts.content_hash` to skip unchanged ones (reuses D8's permanent embedding-cache pattern).
+
+### D17. Resume extraction runs synchronously inside the API request, not as a BullMQ worker job
+**Decision:** `POST /api/profile/resume` performs text extraction and the Anthropic structured-extraction call inline within the request/response cycle, returning the draft directly, rather than enqueuing a BullMQ job and having the client poll for status.
+**Alternatives considered:** Enqueueing extraction as an asynchronous worker job (consistent with the worker layer already provisioned for job ingestion/resume-optimization/browser-automation in `docs/architecture.md` §2).
+**Why:** This is a one-shot onboarding action a user performs once (or occasionally, on re-upload), not a recurring or high-volume background process — the class of work D8 and the architecture doc's worker layer are designed for. A single PDF/DOCX/LaTeX text extraction plus one fast/cheap-tier Anthropic call completes in a few seconds, well within a normal request timeout. Adding a job queue, status polling, and a loading-state UI for this would be speculative infrastructure the task doesn't need yet (CLAUDE.md's "avoid unnecessary abstractions" / Karpathy no-speculative-work guidance).
+**What it affects:** `apps/web`'s upload flow (synchronous fetch + loading state, no polling UI); does not change the worker architecture for later phases — resume *optimization* (D8) remains a lazy, on-demand worker job triggered by a shortlist action, since that is a genuinely different (higher-latency, deep-reasoning-tier) operation.
+
+### D18. Single master resume with soft-deactivation history, not multi-version storage
+**Decision:** `resume_documents` allows only one `is_active = true` row per user at a time. Re-uploading a resume sets the previous active row's `is_active` to `false` (row retained, not deleted) and inserts a new active row.
+**Alternatives considered:** Supporting multiple concurrently-active resume versions the user can switch between.
+**Why:** The spec (§6.1, §10) consistently frames "the master resume" in the singular as the canonical source. Multi-version support (per-job resume variants) is a distinct, later capability already covered by the resume-optimization pipeline (§10, D5) — building version-switching UI now would be building ahead of a requirement that doesn't exist yet. Soft-deactivation (versus hard delete) is kept only for audit purposes at negligible cost, not to support switching.
+**What it affects:** `resume_documents` schema (`is_active` boolean, not a separate `active_resume_id` pointer elsewhere); the confirm/extraction flow always operates against "the current active resume."
+
+---
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
