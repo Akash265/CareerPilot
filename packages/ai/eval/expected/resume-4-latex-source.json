@@ -1,0 +1,73 @@
+{
+  "contact": {
+    "fullName": "Wei Zhang",
+    "email": "wei.zhang@proton.me",
+    "phoneNumber": "+1 (206) 555-0147",
+    "linkedinUrl": "linkedin.com/in/weizhang-dev",
+    "addressLine1": "Seattle, WA"
+  },
+  "education": [
+    {
+      "institution": "University of Washington",
+      "degree": "M.S. in Computer Science",
+      "fieldOfStudy": "Computer Science",
+      "startDate": "September 2017",
+      "endDate": "June 2019",
+      "gpa": null
+    },
+    {
+      "institution": "Zhejiang University",
+      "degree": "B.S. in Applied Mathematics",
+      "fieldOfStudy": "Applied Mathematics",
+      "startDate": "September 2013",
+      "endDate": "June 2017",
+      "gpa": null
+    }
+  ],
+  "workExperiences": [
+    {
+      "company": "Amazon",
+      "title": "Machine Learning Engineer",
+      "location": "Seattle, WA",
+      "employmentType": null,
+      "startDate": "April 2022",
+      "endDate": "Present",
+      "bullets": [
+        "Trained and shipped a demand forecasting model used by the fulfillment planning team, cutting overstock by 9%",
+        "Built a feature store on top of DynamoDB serving 50 real-time features to inference services",
+        "Owned the on-call rotation for the forecasting inference cluster"
+      ]
+    },
+    {
+      "company": "Microsoft",
+      "title": "Applied Scientist I",
+      "location": "Redmond, WA",
+      "employmentType": null,
+      "startDate": "August 2019",
+      "endDate": "March 2022",
+      "bullets": [
+        "Developed anomaly detection models for Azure billing pipelines, reducing false alerts by 25%",
+        "Co-authored an internal paper on streaming feature engineering adopted by two other org teams"
+      ]
+    }
+  ],
+  "skills": [
+    { "name": "Python", "category": null },
+    { "name": "PyTorch", "category": null },
+    { "name": "TensorFlow", "category": null },
+    { "name": "SQL", "category": null },
+    { "name": "DynamoDB", "category": null },
+    { "name": "Spark", "category": null },
+    { "name": "AWS", "category": null }
+  ],
+  "projects": [],
+  "certifications": [
+    {
+      "name": "AWS Certified Machine Learning - Specialty",
+      "issuer": "Amazon Web Services",
+      "issueDate": "March 2023",
+      "expiryDate": null
+    }
+  ],
+  "achievements": []
+}

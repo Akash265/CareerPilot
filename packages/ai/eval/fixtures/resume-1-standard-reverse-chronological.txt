@@ -1,0 +1,33 @@
+Priya Raman
+priya.raman@gmail.com | +1 (415) 555-0182 | linkedin.com/in/priyaraman | San Francisco, CA
+
+SUMMARY
+Backend engineer with 6 years of experience building high-throughput payment systems.
+
+EXPERIENCE
+
+Senior Software Engineer, Stripe — Remote
+March 2021 - Present
+- Led migration of the ledger service from a monolith to a sharded Postgres architecture, cutting p99 latency by 40%
+- Designed an idempotency-key system adopted by 12 downstream teams
+- Mentored 3 junior engineers and ran the backend on-call rotation
+
+Software Engineer, Square — San Francisco, CA
+June 2018 - February 2021
+- Built the merchant risk-scoring pipeline in Python, processing 2M transactions/day
+- Implemented rate limiting middleware in Go for the public API gateway
+- Reduced fraud false-positive rate by 18% through feature engineering
+
+EDUCATION
+
+University of California, Berkeley
+B.S. in Electrical Engineering and Computer Sciences
+August 2014 - May 2018
+GPA: 3.7
+
+SKILLS
+Python, Go, PostgreSQL, Kafka, AWS, Docker, Kubernetes
+
+ACHIEVEMENTS
+Speaker at PyCon 2022 on distributed idempotency patterns
+Awarded Square's Founders Award for the fraud pipeline project

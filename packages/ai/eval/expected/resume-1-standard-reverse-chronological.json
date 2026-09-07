@@ -1,0 +1,62 @@
+{
+  "contact": {
+    "fullName": "Priya Raman",
+    "email": "priya.raman@gmail.com",
+    "phoneNumber": "+1 (415) 555-0182",
+    "linkedinUrl": "linkedin.com/in/priyaraman",
+    "addressLine1": "San Francisco, CA"
+  },
+  "education": [
+    {
+      "institution": "University of California, Berkeley",
+      "degree": "B.S. in Electrical Engineering and Computer Sciences",
+      "fieldOfStudy": "Electrical Engineering and Computer Sciences",
+      "startDate": "August 2014",
+      "endDate": "May 2018",
+      "gpa": "3.7"
+    }
+  ],
+  "workExperiences": [
+    {
+      "company": "Stripe",
+      "title": "Senior Software Engineer",
+      "location": "Remote",
+      "employmentType": null,
+      "startDate": "March 2021",
+      "endDate": "Present",
+      "bullets": [
+        "Led migration of the ledger service from a monolith to a sharded Postgres architecture, cutting p99 latency by 40%",
+        "Designed an idempotency-key system adopted by 12 downstream teams",
+        "Mentored 3 junior engineers and ran the backend on-call rotation"
+      ]
+    },
+    {
+      "company": "Square",
+      "title": "Software Engineer",
+      "location": "San Francisco, CA",
+      "employmentType": null,
+      "startDate": "June 2018",
+      "endDate": "February 2021",
+      "bullets": [
+        "Built the merchant risk-scoring pipeline in Python, processing 2M transactions/day",
+        "Implemented rate limiting middleware in Go for the public API gateway",
+        "Reduced fraud false-positive rate by 18% through feature engineering"
+      ]
+    }
+  ],
+  "skills": [
+    { "name": "Python", "category": null },
+    { "name": "Go", "category": null },
+    { "name": "PostgreSQL", "category": null },
+    { "name": "Kafka", "category": null },
+    { "name": "AWS", "category": null },
+    { "name": "Docker", "category": null },
+    { "name": "Kubernetes", "category": null }
+  ],
+  "projects": [],
+  "certifications": [],
+  "achievements": [
+    "Speaker at PyCon 2022 on distributed idempotency patterns",
+    "Awarded Square's Founders Award for the fraud pipeline project"
+  ]
+}

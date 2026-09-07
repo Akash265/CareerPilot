@@ -1,0 +1,88 @@
+{
+  "contact": {
+    "fullName": "Jasmine Okafor",
+    "email": "jasmine.okafor@yahoo.com",
+    "phoneNumber": "(512) 555-0173",
+    "linkedinUrl": null,
+    "addressLine1": "Austin, TX"
+  },
+  "education": [
+    {
+      "institution": "Austin Community College",
+      "degree": "Associate of Applied Science in Information Technology",
+      "fieldOfStudy": "Information Technology",
+      "startDate": "August 2015",
+      "endDate": "May 2017",
+      "gpa": null
+    }
+  ],
+  "workExperiences": [
+    {
+      "company": "Self-employed",
+      "title": "Freelance Cloud Consultant",
+      "location": "Remote",
+      "employmentType": "Part-time",
+      "startDate": "January 2021",
+      "endDate": "Present",
+      "bullets": [
+        "Migrated 5 small-business clients from on-prem servers to AWS, averaging 30% infrastructure cost savings",
+        "Built CI/CD pipelines using GitHub Actions and Terraform for client projects"
+      ]
+    },
+    {
+      "company": "Bluefin Analytics",
+      "title": "DevOps Contractor",
+      "location": "Austin, TX",
+      "employmentType": "Part-time",
+      "startDate": "March 2022",
+      "endDate": "Present",
+      "bullets": [
+        "Manage Kubernetes clusters across staging and production for a 15-person engineering team",
+        "Set up centralized logging with the ELK stack, reducing incident triage time by half"
+      ]
+    },
+    {
+      "company": "National Instruments",
+      "title": "Site Reliability Engineer",
+      "location": "Austin, TX",
+      "employmentType": null,
+      "startDate": "June 2017",
+      "endDate": "December 2020",
+      "bullets": [
+        "Maintained 99.95% uptime SLA for internal manufacturing software",
+        "Automated infrastructure provisioning with Ansible, replacing manual server setup"
+      ]
+    }
+  ],
+  "skills": [
+    { "name": "AWS", "category": null },
+    { "name": "Terraform", "category": null },
+    { "name": "Kubernetes", "category": null },
+    { "name": "Docker", "category": null },
+    { "name": "Ansible", "category": null },
+    { "name": "GitHub Actions", "category": null },
+    { "name": "Python", "category": null }
+  ],
+  "projects": [],
+  "certifications": [
+    {
+      "name": "AWS Certified Solutions Architect - Professional",
+      "issuer": "Amazon Web Services",
+      "issueDate": "June 2021",
+      "expiryDate": "June 2024"
+    },
+    {
+      "name": "Certified Kubernetes Administrator",
+      "issuer": "The Linux Foundation",
+      "issueDate": "November 2022",
+      "expiryDate": "November 2025"
+    },
+    {
+      "name": "HashiCorp Certified: Terraform Associate",
+      "issuer": "HashiCorp",
+      "issueDate": "February 2023",
+      "expiryDate": null
+    }
+  ],
+  "achievements": []
+}

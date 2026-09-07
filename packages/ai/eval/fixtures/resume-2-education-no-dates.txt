@@ -1,0 +1,33 @@
+Marcus Ohene
+marcus.ohene@outlook.com
+Manchester, United Kingdom
++44 7700 900123
+
+PROFILE
+Data analyst focused on retail forecasting and inventory optimization.
+
+WORK HISTORY
+
+Data Analyst
+Tesco PLC, Manchester, UK
+January 2020 to Present
+- Built demand-forecasting models in R that reduced stockouts by 12% across 200 stores
+- Automated weekly reporting pipeline, saving the team roughly 6 hours per week
+- Partnered with supply chain leads to redesign the replenishment dashboard
+
+Junior Data Analyst
+Boots UK, Nottingham, UK
+July 2017 to December 2019
+- Maintained SQL data marts feeding the merchandising BI suite
+- Produced ad-hoc analyses for category managers on promotional lift
+
+EDUCATION
+
+MSc Business Analytics
+University of Manchester
+
+BSc Mathematics
+University of Leeds
+
+SKILLS
+R, SQL, Tableau, Excel, Python, Power BI

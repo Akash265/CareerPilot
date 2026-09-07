@@ -1,0 +1,44 @@
+Sofia Delgado
+sofia.delgado04@student.mit.edu | (617) 555-0199
+github.com/sdelgado | Cambridge, MA
+
+EDUCATION
+Massachusetts Institute of Technology
+B.S. Computer Science, Minor in Mathematics
+Expected May 2026
+GPA: 3.9/4.0
+
+PROJECTS
+
+RouteWise — Real-time transit delay predictor
+github.com/sdelgado/routewise
+- Built an ML pipeline in PyTorch predicting MBTA delays with 87% accuracy on held-out data
+- Deployed as a FastAPI service with a React frontend, serving 500 daily active users during pilot
+- Won 1st place at MIT's HackMIT 2025 transportation track
+
+PaperTrail — Citation graph explorer
+github.com/sdelgado/papertrail
+- Scraped and indexed 40,000 arXiv papers into a Neo4j graph database
+- Implemented a PageRank-style influence score to surface seminal papers
+- Presented at the MIT EECS undergraduate research showcase
+
+Study Buddy — Peer tutoring matcher
+No public repository
+- Designed a matching algorithm pairing tutors and tutees based on availability and subject overlap
+- Used by 300+ students across two semesters through the campus tutoring center
+
+WORK EXPERIENCE
+
+Software Engineering Intern
+Wayfair, Boston, MA
+June 2025 - August 2025
+- Improved the product search ranking service, contributing a reranking feature that lifted click-through rate by 3%
+- Wrote integration tests covering the new ranking pipeline
+
+TEACHING ASSISTANT
+6.006 Introduction to Algorithms, MIT
+September 2024 - December 2024
+- Held weekly office hours for 40 students and graded problem sets
+
+SKILLS
+Python, PyTorch, TypeScript, React, FastAPI, Neo4j, C++

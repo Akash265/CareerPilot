@@ -1,0 +1,65 @@
+{
+  "contact": {
+    "fullName": "Marcus Ohene",
+    "email": "marcus.ohene@outlook.com",
+    "phoneNumber": "+44 7700 900123",
+    "linkedinUrl": null,
+    "addressLine1": "Manchester, United Kingdom"
+  },
+  "education": [
+    {
+      "institution": "University of Manchester",
+      "degree": "MSc Business Analytics",
+      "fieldOfStudy": "Business Analytics",
+      "startDate": null,
+      "endDate": null,
+      "gpa": null
+    },
+    {
+      "institution": "University of Leeds",
+      "degree": "BSc Mathematics",
+      "fieldOfStudy": "Mathematics",
+      "startDate": null,
+      "endDate": null,
+      "gpa": null
+    }
+  ],
+  "workExperiences": [
+    {
+      "company": "Tesco PLC",
+      "title": "Data Analyst",
+      "location": "Manchester, UK",
+      "employmentType": null,
+      "startDate": "January 2020",
+      "endDate": "Present",
+      "bullets": [
+        "Built demand-forecasting models in R that reduced stockouts by 12% across 200 stores",
+        "Automated weekly reporting pipeline, saving the team roughly 6 hours per week",
+        "Partnered with supply chain leads to redesign the replenishment dashboard"
+      ]
+    },
+    {
+      "company": "Boots UK",
+      "title": "Junior Data Analyst",
+      "location": "Nottingham, UK",
+      "employmentType": null,
+      "startDate": "July 2017",
+      "endDate": "December 2019",
+      "bullets": [
+        "Maintained SQL data marts feeding the merchandising BI suite",
+        "Produced ad-hoc analyses for category managers on promotional lift"
+      ]
+    }
+  ],
+  "skills": [
+    { "name": "R", "category": null },
+    { "name": "SQL", "category": null },
+    { "name": "Tableau", "category": null },
+    { "name": "Excel", "category": null },
+    { "name": "Python", "category": null },
+    { "name": "Power BI", "category": null }
+  ],
+  "projects": [],
+  "certifications": [],
+  "achievements": []
+}

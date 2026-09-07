@@ -1,0 +1,40 @@
+Jasmine Okafor
+jasmine.okafor@yahoo.com
+Austin, TX | (512) 555-0173
+
+OBJECTIVE
+Freelance cloud consultant seeking a full-time DevOps role.
+
+EXPERIENCE
+
+Freelance Cloud Consultant (Part-time)
+Self-employed, Remote
+January 2021 - Present
+- Migrated 5 small-business clients from on-prem servers to AWS, averaging 30% infrastructure cost savings
+- Built CI/CD pipelines using GitHub Actions and Terraform for client projects
+
+Part-time DevOps Contractor
+Bluefin Analytics, Austin, TX
+March 2022 - Present
+- Manage Kubernetes clusters across staging and production for a 15-person engineering team
+- Set up centralized logging with the ELK stack, reducing incident triage time by half
+
+Site Reliability Engineer
+National Instruments, Austin, TX
+June 2017 - December 2020
+- Maintained 99.95% uptime SLA for internal manufacturing software
+- Automated infrastructure provisioning with Ansible, replacing manual server setup
+
+EDUCATION
+
+Austin Community College
+Associate of Applied Science in Information Technology
+August 2015 - May 2017
+
+CERTIFICATIONS
+AWS Certified Solutions Architect - Professional, Amazon Web Services, issued June 2021, expires June 2024
+Certified Kubernetes Administrator, The Linux Foundation, issued November 2022, expires November 2025
+HashiCorp Certified: Terraform Associate, HashiCorp, issued February 2023
+
+SKILLS
+AWS, Terraform, Kubernetes, Docker, Ansible, GitHub Actions, Python

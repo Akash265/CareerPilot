@@ -1,0 +1,42 @@
+\documentclass[11pt]{article}
+\usepackage{enumitem}
+\begin{document}
+
+\begin{center}
+{\Large \textbf{Wei Zhang}} \\
+wei.zhang@proton.me \quad | \quad +1 (206) 555-0147 \quad | \quad linkedin.com/in/weizhang-dev \\
+Seattle, WA
+\end{center}
+
+\section*{Experience}
+
+\textbf{Machine Learning Engineer} \hfill Amazon, Seattle, WA \\
+\textit{April 2022 -- Present}
+\begin{itemize}[noitemsep]
+  \item Trained and shipped a demand forecasting model used by the fulfillment planning team, cutting overstock by 9\%
+  \item Built a feature store on top of DynamoDB serving 50 real-time features to inference services
+  \item Owned the on-call rotation for the forecasting inference cluster
+\end{itemize}
+
+\textbf{Applied Scientist I} \hfill Microsoft, Redmond, WA \\
+\textit{August 2019 -- March 2022}
+\begin{itemize}[noitemsep]
+  \item Developed anomaly detection models for Azure billing pipelines, reducing false alerts by 25\%
+  \item Co-authored an internal paper on streaming feature engineering adopted by two other org teams
+\end{itemize}
+
+\section*{Education}
+
+\textbf{University of Washington} \hfill Seattle, WA \\
+M.S. in Computer Science \hfill \textit{September 2017 -- June 2019}
+
+\textbf{Zhejiang University} \hfill Hangzhou, China \\
+B.S. in Applied Mathematics \hfill \textit{September 2013 -- June 2017}
+
+\section*{Skills}
+Python, PyTorch, TensorFlow, SQL, DynamoDB, Spark, AWS
+
+\section*{Certifications}
+AWS Certified Machine Learning -- Specialty, Amazon Web Services, issued March 2023
+
+\end{document}
