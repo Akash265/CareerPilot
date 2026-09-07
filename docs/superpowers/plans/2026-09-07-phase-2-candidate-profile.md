@@ -2156,7 +2156,7 @@ describe("GET/PATCH /api/profile", () => {
 
     const getRes = await GET();
     const body = await getRes.json();
-    expect(body.profile.fullName).toBe("Grace Hopper");
+    expect(body.profile.contact.fullName).toBe("Grace Hopper");
     expect(body.profile.skills).toEqual([{ name: "COBOL", category: null }]);
   });
 });
@@ -2187,15 +2187,24 @@ export async function serializeProfile(tx: DbClient) {
   const companyPreferences = await tx.select().from(schema.companyPreferences);
 
   return {
-    fullName: profileRow.fullName,
-    email: profileRow.email,
-    phoneNumber: profileRow.phoneNumber,
-    linkedinUrl: profileRow.linkedinUrl,
-    addressLine1: profileRow.addressLine1,
+    contact: {
+      fullName: profileRow.fullName,
+      email: profileRow.email,
+      phoneNumber: profileRow.phoneNumber,
+      linkedinUrl: profileRow.linkedinUrl,
+      addressLine1: profileRow.addressLine1,
+    },
     yearsOfExperience: profileRow.yearsOfExperience,
     workModePreference: profileRow.workModePreference,
-    salaryExpectationMin: profileRow.salaryExpectationMin,
-    salaryExpectationMax: profileRow.salaryExpectationMax,
+    // Postgres `numeric` columns commonly round-trip through drizzle-orm's
+    // postgres-js driver as strings (to avoid float precision loss), but
+    // ConfirmedProfileSchema/EditableProfile require `number` — coerce
+    // explicitly so a GET -> edit -> POST /api/profile/confirm round-trip
+    // doesn't fail schema validation on the way back in.
+    salaryExpectationMin:
+      profileRow.salaryExpectationMin === null ? null : Number(profileRow.salaryExpectationMin),
+    salaryExpectationMax:
+      profileRow.salaryExpectationMax === null ? null : Number(profileRow.salaryExpectationMax),
     salaryCurrency: profileRow.salaryCurrency,
     visaSponsorshipRequired: profileRow.visaSponsorshipRequired,
     workAuthorizationNotes: profileRow.workAuthorizationNotes,
@@ -2476,15 +2485,27 @@ Expected: PASS.
 
 - [ ] **Step 7: Write the failing ReviewForm test**
 
-`apps/web/src/app/profile/ReviewForm.test.tsx` (`@vitest-environment` docblock first, same as `UploadForm.test.tsx`):
+`apps/web/src/app/profile/ReviewForm.test.tsx` (`@vitest-environment` docblock first, same as `UploadForm.test.tsx`). `ReviewForm` takes an already-fully-shaped `initialProfile` (an `EditableProfile`, the same shape `ConfirmedProfileSchema` accepts) rather than a bare AI-extraction draft, so it works identically whether the caller is reviewing a fresh extraction or editing an already-saved profile (Task 10 reuses it for editing without modification):
 ```typescript
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { ReviewForm } from "./ReviewForm";
+import { ReviewForm, type EditableProfile } from "./ReviewForm";
 
-const draft = {
+const initialProfile: EditableProfile = {
   contact: { fullName: "Ada Lovelace", email: "ada@example.com", phoneNumber: null, linkedinUrl: null, addressLine1: null },
+  yearsOfExperience: null,
+  workModePreference: "any",
+  salaryExpectationMin: null,
+  salaryExpectationMax: null,
+  salaryCurrency: null,
+  visaSponsorshipRequired: false,
+  workAuthorizationNotes: null,
+  preferredRoleTitles: [],
+  preferredIndustries: [],
+  excludedIndustries: [],
+  preferredCompanies: [],
+  excludedCompanies: [],
   education: [],
   workExperiences: [],
   skills: [{ name: "Analytical Engines", category: null }],
@@ -2500,7 +2521,7 @@ describe("ReviewForm", () => {
 
   it("lets the user edit the full name before confirming", async () => {
     const onSaved = vi.fn();
-    render(<ReviewForm draft={draft} onSaved={onSaved} />);
+    render(<ReviewForm initialProfile={initialProfile} onSaved={onSaved} />);
 
     const nameInput = screen.getByLabelText(/full name/i);
     fireEvent.change(nameInput, { target: { value: "Grace Hopper" } });
@@ -2521,14 +2542,14 @@ Expected: FAIL — `Cannot find module './ReviewForm'`.
 
 - [ ] **Step 9: Implement ReviewForm**
 
-`apps/web/src/app/profile/ReviewForm.tsx`:
+`apps/web/src/app/profile/ReviewForm.tsx`. `EditableProfile` and `toEditableProfile` are exported here (not kept as internal-only helpers) because Task 10's `ProfileClient` needs both: `toEditableProfile` to convert a fresh AI-extraction draft into the form's shape right after upload, and the `EditableProfile` type to hold an already-saved profile (from `GET /api/profile`, which already matches this shape) when the user clicks "Edit" — in both cases `ReviewForm` itself only ever deals with one shape, `EditableProfile`, so editing an existing profile reuses this exact component with no changes:
 ```tsx
 "use client";
 
 import { useState } from "react";
 import type { ResumeExtractionDraft } from "@ai-career/ai";
 
-type EditableProfile = ResumeExtractionDraft & {
+export type EditableProfile = ResumeExtractionDraft & {
   yearsOfExperience: number | null;
   workModePreference: "remote" | "hybrid" | "onsite" | "any";
   salaryExpectationMin: number | null;
@@ -2543,7 +2564,7 @@ type EditableProfile = ResumeExtractionDraft & {
   excludedCompanies: string[];
 };
 
-function toEditableProfile(draft: ResumeExtractionDraft): EditableProfile {
+export function toEditableProfile(draft: ResumeExtractionDraft): EditableProfile {
   return {
     ...draft,
     yearsOfExperience: null,
@@ -2562,13 +2583,13 @@ function toEditableProfile(draft: ResumeExtractionDraft): EditableProfile {
 }
 
 export function ReviewForm({
-  draft,
+  initialProfile,
   onSaved,
 }: {
-  draft: ResumeExtractionDraft;
+  initialProfile: EditableProfile;
   onSaved: () => void;
 }) {
-  const [profile, setProfile] = useState<EditableProfile>(() => toEditableProfile(draft));
+  const [profile, setProfile] = useState<EditableProfile>(initialProfile);
   const [isSaving, setIsSaving] = useState(false);
 
   async function handleConfirm() {
@@ -2634,18 +2655,17 @@ Expected: PASS.
 "use client";
 
 import { useState } from "react";
-import type { ResumeExtractionDraft } from "@ai-career/ai";
 import { UploadForm } from "./UploadForm";
-import { ReviewForm } from "./ReviewForm";
+import { ReviewForm, toEditableProfile, type EditableProfile } from "./ReviewForm";
 
 type Stage = "upload" | "reviewing" | "saved";
 
 export function ProfileClient() {
   const [stage, setStage] = useState<Stage>("upload");
-  const [draft, setDraft] = useState<ResumeExtractionDraft | null>(null);
+  const [editableProfile, setEditableProfile] = useState<EditableProfile | null>(null);
 
-  if (stage === "reviewing" && draft) {
-    return <ReviewForm draft={draft} onSaved={() => setStage("saved")} />;
+  if (stage === "reviewing" && editableProfile) {
+    return <ReviewForm initialProfile={editableProfile} onSaved={() => setStage("saved")} />;
   }
   if (stage === "saved") {
     return <p>Profile saved.</p>;
@@ -2653,7 +2673,7 @@ export function ProfileClient() {
   return (
     <UploadForm
       onExtracted={(extracted) => {
-        setDraft(extracted);
+        setEditableProfile(toEditableProfile(extracted));
         setStage("reviewing");
       }}
     />
@@ -2698,7 +2718,7 @@ EOF
 - Test: `apps/web/src/app/profile/ProfileDashboard.test.tsx`
 
 **Interfaces:**
-- Consumes: `GET /api/profile`, `PATCH /api/profile` (Task 8).
+- Consumes: `GET /api/profile` (Task 8) and `ReviewForm`/`toEditableProfile`/`EditableProfile` (Task 9) — editing reuses `ReviewForm` directly (which posts to `POST /api/profile/confirm`, the same full-replace upsert `PATCH /api/profile` performs — see Task 8's rationale) rather than introducing a second save path through `PATCH`.
 - Produces: `<ProfileDashboard profile={...} onEdit={...} />`, wired into `ProfileClient` so a returning user with a saved profile sees the dashboard instead of the upload form.
 
 - [ ] **Step 1: Write the failing test**
@@ -2711,8 +2731,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { ProfileDashboard } from "./ProfileDashboard";
 
 const profile = {
-  fullName: "Ada Lovelace",
-  email: "ada@example.com",
+  contact: { fullName: "Ada Lovelace", email: "ada@example.com", phoneNumber: null, linkedinUrl: null, addressLine1: null },
   skills: [{ name: "SQL", category: null }],
   workExperiences: [],
   education: [],
@@ -2746,29 +2765,24 @@ Expected: FAIL — `Cannot find module './ProfileDashboard'`.
 
 - [ ] **Step 3: Implement**
 
-`apps/web/src/app/profile/ProfileDashboard.tsx`:
+`apps/web/src/app/profile/ProfileDashboard.tsx`. `profile` is typed as `EditableProfile` (the same shape `GET /api/profile` returns and `ReviewForm` edits) rather than a separately-declared shape, so there is exactly one profile shape in the UI layer:
 ```tsx
 "use client";
 
-interface SerializedProfile {
-  fullName: string;
-  email: string;
-  skills: { name: string; category: string | null }[];
-  [key: string]: unknown;
-}
+import type { EditableProfile } from "./ReviewForm";
 
 export function ProfileDashboard({
   profile,
   onEdit,
 }: {
-  profile: SerializedProfile;
+  profile: EditableProfile;
   onEdit: () => void;
 }) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-semibold">{profile.fullName}</h2>
-        <p className="text-sm text-gray-500">{profile.email}</p>
+        <h2 className="text-lg font-semibold">{profile.contact.fullName}</h2>
+        <p className="text-sm text-gray-500">{profile.contact.email}</p>
       </div>
       <div>
         <h3 className="text-sm font-medium">Skills</h3>
@@ -2797,65 +2811,62 @@ Expected: PASS.
 
 - [ ] **Step 5: Wire the dashboard into ProfileClient**
 
-Replace `apps/web/src/app/profile/ProfileClient.tsx` with:
+Replace `apps/web/src/app/profile/ProfileClient.tsx` with a version that fetches the saved profile on mount and, when the user clicks "Edit", goes straight to `ReviewForm` pre-filled with that saved data — not back through `UploadForm` (there is no reason to force a resume re-upload just to edit one field, and `ReviewForm` already accepts the exact shape `GET /api/profile` returns):
 ```tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import type { ResumeExtractionDraft } from "@ai-career/ai";
 import { UploadForm } from "./UploadForm";
-import { ReviewForm } from "./ReviewForm";
+import { ReviewForm, toEditableProfile, type EditableProfile } from "./ReviewForm";
 import { ProfileDashboard } from "./ProfileDashboard";
 
 type Stage = "loading" | "upload" | "reviewing" | "dashboard";
 
 export function ProfileClient() {
   const [stage, setStage] = useState<Stage>("loading");
-  const [draft, setDraft] = useState<ResumeExtractionDraft | null>(null);
-  const [profile, setProfile] = useState<any>(null);
+  const [editableProfile, setEditableProfile] = useState<EditableProfile | null>(null);
 
-  useEffect(() => {
-    fetch("/api/profile")
+  function loadProfile() {
+    return fetch("/api/profile")
       .then((res) => res.json())
       .then((body) => {
-        if (body.profile) {
-          setProfile(body.profile);
-          setStage("dashboard");
-        } else {
-          setStage("upload");
-        }
+        setEditableProfile(body.profile);
+        setStage(body.profile ? "dashboard" : "upload");
       });
+  }
+
+  useEffect(() => {
+    loadProfile();
   }, []);
 
   if (stage === "loading") return <p>Loading...</p>;
-  if (stage === "dashboard" && profile) {
-    return <ProfileDashboard profile={profile} onEdit={() => setStage("upload")} />;
+  if (stage === "dashboard" && editableProfile) {
+    return (
+      <ProfileDashboard
+        profile={editableProfile}
+        onEdit={() => setStage("reviewing")}
+      />
+    );
   }
-  if (stage === "reviewing" && draft) {
+  if (stage === "reviewing" && editableProfile) {
     return (
       <ReviewForm
-        draft={draft}
-        onSaved={() => {
-          fetch("/api/profile")
-            .then((res) => res.json())
-            .then((body) => {
-              setProfile(body.profile);
-              setStage("dashboard");
-            });
-        }}
+        initialProfile={editableProfile}
+        onSaved={() => loadProfile()}
       />
     );
   }
   return (
     <UploadForm
       onExtracted={(extracted) => {
-        setDraft(extracted);
+        setEditableProfile(toEditableProfile(extracted));
         setStage("reviewing");
       }}
     />
   );
 }
 ```
+Note for the implementer: `stage === "reviewing"` is now reached two ways — from `UploadForm`'s `onExtracted` (a fresh draft, defaults filled by `toEditableProfile`) and from `ProfileDashboard`'s `onEdit` (the already-saved profile, used as-is) — both set `editableProfile` before switching to `"reviewing"`, so `ReviewForm` itself needs no changes to serve both cases.
 
 - [ ] **Step 6: Manual verification**
 
