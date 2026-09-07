@@ -25,8 +25,31 @@ const adminSql = postgres(
     "postgres://career_intel:career_intel@localhost:5432/career_intel_test"
 );
 
+// Must match the DEFAULT_USER_ID returned by the mocked loadEnv() above.
+const TEST_USER_ID = "00000000-0000-0000-0000-00000000000d";
+
 beforeAll(async () => {
   await migrate(drizzle(adminSql), { migrationsFolder: MIGRATIONS_FOLDER });
+
+  // Clean slate for this test file's fixture user, same pattern as
+  // packages/db/src/rls.test.ts / profileTables.rls.test.ts. Without this,
+  // the "returns profile: null before any profile has been saved" assertion
+  // only holds on a fresh database -- a second local run (against the same
+  // Postgres container, no reset in between) would find the
+  // candidate_profiles row this file's own PATCH test left behind and fail.
+  // child tables first (work_experience_bullets has a cascading FK to
+  // work_experiences, but every row is deleted explicitly here anyway for
+  // clarity/robustness against future schema changes), then the parent row.
+  await adminSql`DELETE FROM work_experience_bullets WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM work_experiences WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM education WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM skills WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM projects WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM certifications WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM achievements WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM company_preferences WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM profile_facts WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM candidate_profiles WHERE user_id = ${TEST_USER_ID}`;
 });
 
 afterAll(async () => {

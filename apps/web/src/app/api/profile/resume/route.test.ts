@@ -16,6 +16,12 @@ const {
   dbValuesMock,
   dbInsertMock,
   extractProfileFromResumeMock,
+  dbSelectWhereMock,
+  dbSelectFromMock,
+  dbSelectMock,
+  dbDeleteWhereMock,
+  dbDeleteMock,
+  deleteResumeMock,
 } = vi.hoisted(() => {
   const dbWhereMock = vi.fn().mockResolvedValue(undefined);
   const dbSetMock = vi.fn(() => ({ where: dbWhereMock }));
@@ -24,6 +30,18 @@ const {
   const dbValuesMock = vi.fn(() => ({ returning: dbInsertReturningMock }));
   const dbInsertMock = vi.fn(() => ({ values: dbValuesMock }));
   const extractProfileFromResumeMock = vi.fn();
+
+  // Chain shapes for the DELETE handler: `.select().from(...).where(...)`
+  // and `.delete(...).where(...)`, each mirroring the same "one link
+  // returns the next" convention as the update/insert chains above.
+  const dbSelectWhereMock = vi.fn().mockResolvedValue([]);
+  const dbSelectFromMock = vi.fn(() => ({ where: dbSelectWhereMock }));
+  const dbSelectMock = vi.fn(() => ({ from: dbSelectFromMock }));
+  const dbDeleteWhereMock = vi.fn().mockResolvedValue(undefined);
+  const dbDeleteMock = vi.fn(() => ({ where: dbDeleteWhereMock }));
+
+  const deleteResumeMock = vi.fn().mockResolvedValue(undefined);
+
   return {
     dbWhereMock,
     dbSetMock,
@@ -32,19 +50,26 @@ const {
     dbValuesMock,
     dbInsertMock,
     extractProfileFromResumeMock,
+    dbSelectWhereMock,
+    dbSelectFromMock,
+    dbSelectMock,
+    dbDeleteWhereMock,
+    dbDeleteMock,
+    deleteResumeMock,
   };
 });
 
 vi.mock("@ai-career/db", () => ({
   createDbClient: () => ({}),
   withUserContext: async (_db: unknown, _userId: string, fn: (tx: unknown) => unknown) =>
-    fn({ update: dbUpdateMock, insert: dbInsertMock }),
+    fn({ update: dbUpdateMock, insert: dbInsertMock, select: dbSelectMock, delete: dbDeleteMock }),
   schema: { resumeDocuments: { isActive: "isActive", id: "id" } },
 }));
 
 vi.mock("@ai-career/storage", () => ({
   createStorageClient: () => ({}),
   uploadResume: vi.fn().mockResolvedValue({ objectKey: "user-1/file.pdf" }),
+  deleteResume: deleteResumeMock,
 }));
 
 vi.mock("@ai-career/ai", () => ({
@@ -60,7 +85,7 @@ vi.mock("@ai-career/config", () => ({
   loadEnv: () => ({ DEFAULT_USER_ID: "user-1" }),
 }));
 
-import { POST } from "./route";
+import { POST, DELETE } from "./route";
 
 function makeRequest(): Request {
   const formData = new FormData();
@@ -70,6 +95,12 @@ function makeRequest(): Request {
 
 beforeEach(() => {
   extractProfileFromResumeMock.mockReset();
+  dbSelectWhereMock.mockReset().mockResolvedValue([]);
+  dbDeleteWhereMock.mockReset().mockResolvedValue(undefined);
+  dbSelectFromMock.mockClear();
+  dbSelectMock.mockClear();
+  dbDeleteMock.mockClear();
+  deleteResumeMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe("POST /api/profile/resume", () => {
@@ -94,5 +125,40 @@ describe("POST /api/profile/resume", () => {
     expect(res.status).toBe(200);
     expect(body.status).toBe("failed");
     expect(extractProfileFromResumeMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("DELETE /api/profile/resume", () => {
+  it("deletes the storage object before deleting the DB row, and returns status: deleted", async () => {
+    dbSelectWhereMock.mockResolvedValue([{ id: "resume-doc-1", objectKey: "user-1/file.pdf" }]);
+
+    const res = await DELETE();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({ status: "deleted" });
+
+    expect(deleteResumeMock).toHaveBeenCalledWith(expect.anything(), "user-1/file.pdf");
+    expect(dbDeleteWhereMock).toHaveBeenCalledTimes(1);
+
+    // The storage object must be gone before the DB row is removed, so a
+    // crash between the two calls never leaves a DB row pointing at a
+    // deleted object.
+    const deleteResumeOrder = deleteResumeMock.mock.invocationCallOrder[0];
+    const dbDeleteOrder = dbDeleteWhereMock.mock.invocationCallOrder[0];
+    expect(deleteResumeOrder).toBeLessThan(dbDeleteOrder);
+  });
+
+  it("returns 404 without touching storage when there is no active resume", async () => {
+    dbSelectWhereMock.mockResolvedValue([]);
+
+    const res = await DELETE();
+    const body = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(body.error).toBeTruthy();
+
+    expect(deleteResumeMock).not.toHaveBeenCalled();
+    expect(dbDeleteMock).not.toHaveBeenCalled();
   });
 });
