@@ -9,11 +9,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // above them, not ordinary variable declarations — without this wrapper the
 // factories below would reference the mocks before they're initialized.
 const {
-  dbWhereMock,
-  dbSetMock,
   dbUpdateMock,
-  dbInsertReturningMock,
-  dbValuesMock,
   dbInsertMock,
   extractProfileFromResumeMock,
   dbSelectWhereMock,
@@ -43,11 +39,7 @@ const {
   const deleteResumeMock = vi.fn().mockResolvedValue(undefined);
 
   return {
-    dbWhereMock,
-    dbSetMock,
     dbUpdateMock,
-    dbInsertReturningMock,
-    dbValuesMock,
     dbInsertMock,
     extractProfileFromResumeMock,
     dbSelectWhereMock,

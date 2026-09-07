@@ -39,8 +39,8 @@ describe("ReviewForm", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirm.*save/i }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
-    const [, requestInit] = (fetch as any).mock.calls[0];
-    const sentBody = JSON.parse(requestInit.body);
+    const [, requestInit] = vi.mocked(fetch).mock.calls[0];
+    const sentBody = JSON.parse(requestInit?.body as string);
     expect(sentBody.contact.fullName).toBe("Grace Hopper");
   });
 });
