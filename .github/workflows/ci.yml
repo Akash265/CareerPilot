@@ -98,6 +98,12 @@ jobs:
         run: |
           env | grep -E '^(NODE_ENV|DEFAULT_USER_ID|DATABASE_URL|MIGRATIONS_DATABASE_URL|REDIS_URL|MINIO_ENDPOINT|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|ANTHROPIC_API_KEY|EMBEDDING_PROVIDER|VOYAGE_API_KEY)=' > .env
       - run: pnpm lint
+      # `build` must run before `typecheck`: apps/web's tsc run depends on
+      # `LayoutProps` and other ambient types Next.js's typed-routes feature
+      # generates into .next/types/ only during `next build`/`next dev`.
+      # Locally this is easy to miss because a leftover .next/ from a prior
+      # dev/build run masks it -- a fresh CI checkout has no such leftover,
+      # so typecheck-before-build fails deterministically on every run.
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build
