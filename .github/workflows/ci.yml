@@ -48,6 +48,14 @@ jobs:
       ANTHROPIC_API_KEY: sk-ant-ci-placeholder
       EMBEDDING_PROVIDER: voyage
       VOYAGE_API_KEY: ci-placeholder
+      # Required since Phase 2 (packages/config/src/env.ts) -- role-based
+      # model selection per DECISIONS.md D7, not a hardcoded version string.
+      # No real API call is ever made in CI (Anthropic/Voyage clients are
+      # mocked in every test that would otherwise need them), so these
+      # placeholders only need to satisfy loadEnv()'s schema, not resolve to
+      # real models.
+      ANTHROPIC_MODEL_FAST: claude-haiku-4-5-20251001
+      VOYAGE_EMBEDDING_MODEL: voyage-3.5
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -96,7 +104,7 @@ jobs:
         # same code path as local dev instead of relying on dotenv-cli's
         # missing-file fallback behavior.
         run: |
-          env | grep -E '^(NODE_ENV|DEFAULT_USER_ID|DATABASE_URL|MIGRATIONS_DATABASE_URL|REDIS_URL|MINIO_ENDPOINT|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|ANTHROPIC_API_KEY|EMBEDDING_PROVIDER|VOYAGE_API_KEY)=' > .env
+          env | grep -E '^(NODE_ENV|DEFAULT_USER_ID|DATABASE_URL|MIGRATIONS_DATABASE_URL|REDIS_URL|MINIO_ENDPOINT|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|ANTHROPIC_API_KEY|EMBEDDING_PROVIDER|VOYAGE_API_KEY|ANTHROPIC_MODEL_FAST|VOYAGE_EMBEDDING_MODEL)=' > .env
       - run: pnpm lint
       # `build` must run before `typecheck`: apps/web's tsc run depends on
       # `LayoutProps` and other ambient types Next.js's typed-routes feature
