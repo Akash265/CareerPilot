@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const {
   dbUpdateMock,
   dbInsertMock,
+  dbValuesMock,
   extractProfileFromResumeMock,
   dbSelectWhereMock,
   dbSelectFromMock,
@@ -41,6 +42,7 @@ const {
   return {
     dbUpdateMock,
     dbInsertMock,
+    dbValuesMock,
     extractProfileFromResumeMock,
     dbSelectWhereMock,
     dbSelectFromMock,
@@ -85,14 +87,19 @@ function makeRequest(): Request {
   return new Request("http://localhost/api/profile/resume", { method: "POST", body: formData });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   extractProfileFromResumeMock.mockReset();
   dbSelectWhereMock.mockReset().mockResolvedValue([]);
   dbDeleteWhereMock.mockReset().mockResolvedValue(undefined);
   dbSelectFromMock.mockClear();
   dbSelectMock.mockClear();
   dbDeleteMock.mockClear();
+  dbValuesMock.mockClear();
+  dbUpdateMock.mockClear();
+  dbInsertMock.mockClear();
   deleteResumeMock.mockReset().mockResolvedValue(undefined);
+  const { detectResumeFileType } = await import("@ai-career/ai");
+  vi.mocked(detectResumeFileType).mockReset().mockResolvedValue("pdf");
 });
 
 describe("POST /api/profile/resume", () => {
@@ -117,6 +124,68 @@ describe("POST /api/profile/resume", () => {
     expect(res.status).toBe(200);
     expect(body.status).toBe("failed");
     expect(extractProfileFromResumeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects with 400 when no file is provided", async () => {
+    const req = new Request("http://localhost/api/profile/resume", {
+      method: "POST",
+      body: new FormData(),
+    });
+
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/no file/i);
+    expect(dbInsertMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects with 400 when the declared Content-Length exceeds the 10MB cap, before buffering the body", async () => {
+    const formData = new FormData();
+    formData.append("file", new File([Buffer.from("%PDF-1.4")], "resume.pdf", { type: "application/pdf" }));
+    const req = new Request("http://localhost/api/profile/resume", {
+      method: "POST",
+      body: formData,
+      headers: { "content-length": String(11 * 1024 * 1024) },
+    });
+
+    const res = await POST(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/10mb/i);
+    expect(dbInsertMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects with 400 when content-sniffing the file type fails", async () => {
+    const { detectResumeFileType, UnsupportedFileTypeError } = await import("@ai-career/ai");
+    vi.mocked(detectResumeFileType).mockRejectedValueOnce(new UnsupportedFileTypeError("looks like a PNG"));
+
+    const res = await POST(makeRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/looks like a png/i);
+    expect(dbInsertMock).not.toHaveBeenCalled();
+  });
+
+  it("stores the content-sniffed MIME type, never the client-supplied one", async () => {
+    extractProfileFromResumeMock.mockResolvedValue({ contact: { fullName: "Ada" } });
+    const formData = new FormData();
+    // The client claims a bogus type; detectResumeFileType is mocked to
+    // resolve "pdf" regardless, so the stored mimeType must reflect that
+    // sniffed result, not this client-supplied value.
+    formData.append(
+      "file",
+      new File([Buffer.from("%PDF-1.4")], "resume.pdf", { type: "application/x-bogus" })
+    );
+    const req = new Request("http://localhost/api/profile/resume", { method: "POST", body: formData });
+
+    await POST(req);
+
+    expect(dbValuesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ mimeType: "application/pdf" })
+    );
   });
 });
 

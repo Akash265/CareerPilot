@@ -15,6 +15,12 @@ import {
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
+const MIME_BY_FILE_TYPE: Record<Awaited<ReturnType<typeof detectResumeFileType>>, string> = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  tex: "text/x-tex",
+};
+
 /**
  * `createDbClient` opens a fresh postgres connection pool on every call (see
  * packages/db/src/client.ts), so every request that creates one must close it
@@ -47,6 +53,19 @@ async function extractWithRetry(
 
 export async function POST(request: Request) {
   const env = loadEnv();
+
+  // Reject an oversized upload from its declared Content-Length BEFORE
+  // request.formData() buffers the entire multipart body into memory --
+  // checking file.size afterward is too late to avoid that allocation.
+  // This isn't a complete guarantee (a client could omit/lie about the
+  // header, or use chunked transfer with no Content-Length at all), but it
+  // stops the common case of an oversized upload without extra parsing
+  // machinery, and file.size below remains the authoritative check.
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_FILE_SIZE_BYTES) {
+    return NextResponse.json({ error: "File exceeds 10MB limit" }, { status: 400 });
+  }
+
   const formData = await request.formData();
   const file = formData.get("file");
   if (!(file instanceof File)) {
@@ -89,7 +108,11 @@ export async function POST(request: Request) {
         .values({
           objectKey,
           originalFilename: file.name,
-          mimeType: file.type || "application/octet-stream",
+          // The content-sniffed type (fileType), never the client-supplied
+          // file.type -- storing the latter would defeat the point of
+          // sniffing in the first place (spec §2: "detected via content
+          // sniffing, not trusted from the client").
+          mimeType: MIME_BY_FILE_TYPE[fileType],
           fileSizeBytes: file.size,
           extractionStatus: "pending",
           isActive: true,
