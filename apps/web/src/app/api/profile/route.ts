@@ -1,24 +1,9 @@
 import { NextResponse } from "next/server";
 import { loadEnv } from "@ai-career/config";
-import { createDbClient, withUserContext } from "@ai-career/db";
+import { createDbClient, closeDbClient, withUserContext } from "@ai-career/db";
 import { ConfirmedProfileSchema } from "../../../lib/profile/confirmedProfileSchema";
 import { saveConfirmedProfile } from "../../../lib/profile/saveProfile";
 import { serializeProfile } from "../../../lib/profile/serializeProfile";
-
-/**
- * `createDbClient` opens a fresh postgres connection pool on every call (see
- * packages/db/src/client.ts), so every request that creates one must close it
- * or connections accumulate towards Postgres's `max_connections`. Same
- * best-effort pattern already used by apps/web/src/app/api/health/route.ts:
- * failing to close must never change the response.
- */
-async function closePool(db: ReturnType<typeof createDbClient>): Promise<void> {
-  try {
-    await db.$client?.end();
-  } catch {
-    // Best-effort cleanup only; must not affect the response.
-  }
-}
 
 export async function GET() {
   const env = loadEnv();
@@ -27,7 +12,7 @@ export async function GET() {
     const profile = await withUserContext(db, env.DEFAULT_USER_ID, (tx) => serializeProfile(tx));
     return NextResponse.json({ profile });
   } finally {
-    await closePool(db);
+    await closeDbClient(db);
   }
 }
 

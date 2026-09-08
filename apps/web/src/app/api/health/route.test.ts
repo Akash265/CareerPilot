@@ -4,6 +4,7 @@ vi.mock("@ai-career/db", () => ({
   createDbClient: () => ({
     execute: vi.fn().mockResolvedValue([{ ok: 1 }]),
   }),
+  closeDbClient: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("ioredis", () => ({

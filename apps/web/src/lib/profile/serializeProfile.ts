@@ -1,4 +1,5 @@
 import { schema, type DbClient } from "@ai-career/db";
+import { asc } from "drizzle-orm";
 
 // Every array field is mapped to a plain, ID-free shape — the same shape
 // ConfirmedProfileSchema accepts — so the UI (ReviewForm/ProfileDashboard)
@@ -8,7 +9,10 @@ export async function serializeProfile(tx: DbClient) {
   const [profileRow] = await tx.select().from(schema.candidateProfiles);
   if (!profileRow) return null;
 
-  const workExperiences = await tx.select().from(schema.workExperiences);
+  const workExperiences = await tx
+    .select()
+    .from(schema.workExperiences)
+    .orderBy(asc(schema.workExperiences.displayOrder));
   const bullets = await tx.select().from(schema.workExperienceBullets);
   const companyPreferences = await tx.select().from(schema.companyPreferences);
 
@@ -37,7 +41,9 @@ export async function serializeProfile(tx: DbClient) {
     preferredRoleTitles: profileRow.preferredRoleTitles,
     preferredIndustries: profileRow.preferredIndustries,
     excludedIndustries: profileRow.excludedIndustries,
-    education: (await tx.select().from(schema.education)).map((e) => ({
+    education: (
+      await tx.select().from(schema.education).orderBy(asc(schema.education.displayOrder))
+    ).map((e) => ({
       institution: e.institution,
       degree: e.degree,
       fieldOfStudy: e.fieldOfStudy,
@@ -57,19 +63,30 @@ export async function serializeProfile(tx: DbClient) {
         .sort((a, b) => a.displayOrder - b.displayOrder)
         .map((b) => b.text),
     })),
-    skills: (await tx.select().from(schema.skills)).map((s) => ({ name: s.name, category: s.category })),
-    projects: (await tx.select().from(schema.projects)).map((p) => ({
+    skills: (
+      await tx.select().from(schema.skills).orderBy(asc(schema.skills.displayOrder))
+    ).map((s) => ({ name: s.name, category: s.category })),
+    projects: (
+      await tx.select().from(schema.projects).orderBy(asc(schema.projects.displayOrder))
+    ).map((p) => ({
       name: p.name,
       description: p.description,
       url: p.url,
     })),
-    certifications: (await tx.select().from(schema.certifications)).map((c) => ({
+    certifications: (
+      await tx
+        .select()
+        .from(schema.certifications)
+        .orderBy(asc(schema.certifications.displayOrder))
+    ).map((c) => ({
       name: c.name,
       issuer: c.issuer,
       issueDate: c.issueDate,
       expiryDate: c.expiryDate,
     })),
-    achievements: (await tx.select().from(schema.achievements)).map((a) => a.description),
+    achievements: (
+      await tx.select().from(schema.achievements).orderBy(asc(schema.achievements.displayOrder))
+    ).map((a) => a.description),
     preferredCompanies: companyPreferences.filter((c) => c.listType === "preferred").map((c) => c.companyName),
     excludedCompanies: companyPreferences.filter((c) => c.listType === "excluded").map((c) => c.companyName),
   };

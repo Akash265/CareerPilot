@@ -12,6 +12,7 @@ export const workExperiences = pgTable("work_experiences", {
   employmentType: text("employment_type"),
   startDate: text("start_date"),
   endDate: text("end_date"), // null = current role
+  displayOrder: integer("display_order").notNull().default(0),
 });
 
 export const workExperienceBullets = pgTable("work_experience_bullets", {

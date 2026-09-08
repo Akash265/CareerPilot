@@ -1,4 +1,4 @@
-import { createDbClient, withUserContext, schema } from "@ai-career/db";
+import { createDbClient, closeDbClient, withUserContext, schema } from "@ai-career/db";
 import { embedTexts } from "@ai-career/ai";
 import type { Env } from "@ai-career/config";
 import type { ConfirmedProfile } from "./confirmedProfileSchema";
@@ -93,16 +93,20 @@ export async function saveConfirmedProfile(
 
         const derived: DerivedFact[] = [];
 
-        for (const edu of profile.education) {
+        // Every list below is fully deleted and reinserted on each save, so
+        // Postgres has no ordering guarantee left to lean on -- displayOrder
+        // captures the confirmed profile's own array order explicitly
+        // (serializeProfile.ts orders by it on the way back out).
+        for (const [index, edu] of profile.education.entries()) {
           const [row] = await tx
             .insert(schema.education)
-            .values(edu)
+            .values({ ...edu, displayOrder: index })
             .returning({ id: schema.education.id });
           const factText = `${edu.degree} in ${edu.fieldOfStudy ?? "unspecified field"} from ${edu.institution}`;
           derived.push(deriveFact("education", row.id as string, factText));
         }
 
-        for (const exp of profile.workExperiences) {
+        for (const [expIndex, exp] of profile.workExperiences.entries()) {
           const [row] = await tx
             .insert(schema.workExperiences)
             .values({
@@ -112,6 +116,7 @@ export async function saveConfirmedProfile(
               employmentType: exp.employmentType,
               startDate: exp.startDate,
               endDate: exp.endDate,
+              displayOrder: expIndex,
             })
             .returning({ id: schema.workExperiences.id });
           for (const [index, bulletText] of exp.bullets.entries()) {
@@ -123,31 +128,34 @@ export async function saveConfirmedProfile(
           }
         }
 
-        for (const skill of profile.skills) {
-          const [row] = await tx.insert(schema.skills).values(skill).returning({ id: schema.skills.id });
+        for (const [index, skill] of profile.skills.entries()) {
+          const [row] = await tx
+            .insert(schema.skills)
+            .values({ ...skill, displayOrder: index })
+            .returning({ id: schema.skills.id });
           derived.push(deriveFact("skill", row.id as string, skill.name));
         }
 
-        for (const project of profile.projects) {
+        for (const [index, project] of profile.projects.entries()) {
           const [row] = await tx
             .insert(schema.projects)
-            .values(project)
+            .values({ ...project, displayOrder: index })
             .returning({ id: schema.projects.id });
           derived.push(deriveFact("project", row.id as string, `${project.name}: ${project.description}`));
         }
 
-        for (const cert of profile.certifications) {
+        for (const [index, cert] of profile.certifications.entries()) {
           const [row] = await tx
             .insert(schema.certifications)
-            .values(cert)
+            .values({ ...cert, displayOrder: index })
             .returning({ id: schema.certifications.id });
           derived.push(deriveFact("certification", row.id as string, `${cert.name} (${cert.issuer})`));
         }
 
-        for (const achievement of profile.achievements) {
+        for (const [index, achievement] of profile.achievements.entries()) {
           const [row] = await tx
             .insert(schema.achievements)
-            .values({ description: achievement })
+            .values({ description: achievement, displayOrder: index })
             .returning({ id: schema.achievements.id });
           derived.push(deriveFact("achievement", row.id as string, achievement));
         }
@@ -230,14 +238,6 @@ export async function saveConfirmedProfile(
 
     return { factsGenerated: facts.length };
   } finally {
-    // createDbClient opens a fresh postgres connection pool per call (see
-    // packages/db/src/client.ts); without this the pool leaks on every save
-    // and eventually exhausts Postgres's max_connections. Same best-effort
-    // pattern as apps/web/src/app/api/health/route.ts.
-    try {
-      await db.$client?.end();
-    } catch {
-      // Best-effort cleanup only; must not mask the save's own result/error.
-    }
+    await closeDbClient(db);
   }
 }

@@ -29,6 +29,13 @@
       "when": 1788786787290,
       "tag": "0003_candidate_profile_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788851064358,
+      "tag": "0004_fine_freak",
+      "breakpoints": true
     }
   ]
 }

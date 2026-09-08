@@ -55,6 +55,7 @@ const {
 
 vi.mock("@ai-career/db", () => ({
   createDbClient: () => ({}),
+  closeDbClient: vi.fn().mockResolvedValue(undefined),
   withUserContext: async (_db: unknown, _userId: string, fn: (tx: unknown) => unknown) =>
     fn({ update: dbUpdateMock, insert: dbInsertMock, select: dbSelectMock, delete: dbDeleteMock }),
   schema: { resumeDocuments: { isActive: "isActive", id: "id" } },

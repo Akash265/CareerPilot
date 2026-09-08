@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { loadEnv } from "@ai-career/config";
-import { createDbClient, withUserContext, schema } from "@ai-career/db";
+import { createDbClient, closeDbClient, withUserContext, schema } from "@ai-career/db";
 import { createStorageClient, uploadResume, deleteResume } from "@ai-career/storage";
 import {
   detectResumeFileType,
@@ -20,21 +20,6 @@ const MIME_BY_FILE_TYPE: Record<Awaited<ReturnType<typeof detectResumeFileType>>
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   tex: "text/x-tex",
 };
-
-/**
- * `createDbClient` opens a fresh postgres connection pool on every call (see
- * packages/db/src/client.ts), so every request that creates one must close it
- * or connections accumulate towards Postgres's `max_connections`. Same
- * best-effort pattern already used by apps/web/src/app/api/health/route.ts:
- * failing to close must never change the response.
- */
-async function closePool(db: ReturnType<typeof createDbClient>): Promise<void> {
-  try {
-    await db.$client?.end();
-  } catch {
-    // Best-effort cleanup only; must not affect the response.
-  }
-}
 
 async function extractWithRetry(
   anthropic: ReturnType<typeof createAnthropicClient>,
@@ -152,7 +137,7 @@ export async function POST(request: Request) {
       );
     }
   } finally {
-    await closePool(db);
+    await closeDbClient(db);
   }
 }
 
@@ -181,6 +166,6 @@ export async function DELETE() {
 
     return NextResponse.json({ status: "deleted" });
   } finally {
-    await closePool(db);
+    await closeDbClient(db);
   }
 }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer } from "drizzle-orm/pg-core";
 
 export const achievements = pgTable("achievements", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -7,4 +7,5 @@ export const achievements = pgTable("achievements", {
     .notNull()
     .default(sql`current_setting('app.current_user_id')::uuid`),
   description: text("description").notNull(),
+  displayOrder: integer("display_order").notNull().default(0),
 });

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer } from "drizzle-orm/pg-core";
 
 export const skills = pgTable("skills", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -8,4 +8,5 @@ export const skills = pgTable("skills", {
     .default(sql`current_setting('app.current_user_id')::uuid`),
   name: text("name").notNull(),
   category: text("category"),
+  displayOrder: integer("display_order").notNull().default(0),
 });

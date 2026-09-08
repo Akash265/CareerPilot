@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer } from "drizzle-orm/pg-core";
 
 export const certifications = pgTable("certifications", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -10,4 +10,5 @@ export const certifications = pgTable("certifications", {
   issuer: text("issuer").notNull(),
   issueDate: text("issue_date"),
   expiryDate: text("expiry_date"),
+  displayOrder: integer("display_order").notNull().default(0),
 });

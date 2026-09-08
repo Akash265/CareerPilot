@@ -98,4 +98,37 @@ describe("GET/PATCH /api/profile", () => {
     expect(body.profile.contact.fullName).toBe("Grace Hopper");
     expect(body.profile.skills).toEqual([{ name: "COBOL", category: null }]);
   });
+
+  it("preserves list order across a save (Postgres gives no ordering guarantee without ORDER BY)", async () => {
+    const profileWithOrderedLists = {
+      ...baseProfile,
+      skills: [
+        { name: "Zebra skill", category: null },
+        { name: "Apple skill", category: null },
+        { name: "Mango skill", category: null },
+      ],
+      education: [
+        { institution: "Second University", degree: "MSc", fieldOfStudy: null, startDate: null, endDate: null, gpa: null },
+        { institution: "First University", degree: "BSc", fieldOfStudy: null, startDate: null, endDate: null, gpa: null },
+      ],
+    };
+
+    await PATCH(
+      new Request("http://localhost/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify(profileWithOrderedLists),
+      })
+    );
+
+    const body = await (await GET()).json();
+    expect(body.profile.skills.map((s: { name: string }) => s.name)).toEqual([
+      "Zebra skill",
+      "Apple skill",
+      "Mango skill",
+    ]);
+    expect(body.profile.education.map((e: { institution: string }) => e.institution)).toEqual([
+      "Second University",
+      "First University",
+    ]);
+  });
 });
