@@ -58,6 +58,31 @@ jobs:
       VOYAGE_EMBEDDING_MODEL: voyage-3.5
     steps:
       - uses: actions/checkout@v4
+      - name: Start MinIO
+        # MinIO isn't declared under `services:` like postgres/redis above
+        # because GitHub Actions service containers cannot override a
+        # container's command, and the official minio/minio image's
+        # entrypoint requires one (`server /data ...`) to actually start the
+        # server -- without it the container just prints usage and never
+        # becomes healthy. Run it as a plain background container instead,
+        # matching infra/docker-compose.yml's config, and poll its health
+        # endpoint the same way postgres/redis's `--health-*` options do.
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 -p 9001:9001 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data --console-address ":9001"
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then
+              echo "MinIO is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MinIO did not become healthy in time" >&2
+          docker logs minio
+          exit 1
       - uses: pnpm/action-setup@v4
         # No explicit `version:` here -- pnpm/action-setup@v4 auto-detects it
         # from package.json's "packageManager" field (pnpm@9.15.0). Setting
