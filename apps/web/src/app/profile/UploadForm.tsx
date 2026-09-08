@@ -3,7 +3,13 @@
 import { useState } from "react";
 import type { ResumeExtractionDraft } from "@ai-career/ai";
 
-export function UploadForm({ onExtracted }: { onExtracted: (draft: ResumeExtractionDraft) => void }) {
+export function UploadForm({
+  onExtracted,
+  onStartBlank,
+}: {
+  onExtracted: (draft: ResumeExtractionDraft) => void;
+  onStartBlank: () => void;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -25,6 +31,8 @@ export function UploadForm({ onExtracted }: { onExtracted: (draft: ResumeExtract
       } else {
         setError(body.error ?? "Extraction failed — please fill in your profile manually.");
       }
+    } catch {
+      setError("Could not reach the server — check your connection and try again.");
     } finally {
       setIsUploading(false);
     }
@@ -49,6 +57,13 @@ export function UploadForm({ onExtracted }: { onExtracted: (draft: ResumeExtract
         className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
       >
         {isUploading ? "Uploading..." : "Upload"}
+      </button>
+      <button
+        type="button"
+        onClick={onStartBlank}
+        className="w-fit text-sm text-gray-600 underline"
+      >
+        Start with a blank profile instead
       </button>
     </div>
   );

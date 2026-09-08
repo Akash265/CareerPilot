@@ -142,4 +142,29 @@ describe("ReviewForm", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(sentBody().skills).toEqual([]);
   });
+
+  it("shows an error and does not call onSaved when the server rejects the save", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ json: async () => ({ error: "Invalid profile" }) })
+    );
+    const onSaved = vi.fn();
+    render(<ReviewForm initialProfile={initialProfile} onSaved={onSaved} />);
+
+    confirm();
+
+    await waitFor(() => expect(screen.getByText("Invalid profile")).toBeInTheDocument());
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("shows an error when the confirm request itself fails (network error)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    const onSaved = vi.fn();
+    render(<ReviewForm initialProfile={initialProfile} onSaved={onSaved} />);
+
+    confirm();
+
+    await waitFor(() => expect(screen.getByText(/could not reach the server/i)).toBeInTheDocument());
+    expect(onSaved).not.toHaveBeenCalled();
+  });
 });

@@ -42,6 +42,22 @@ export function toEditableProfile(draft: ResumeExtractionDraft): EditableProfile
   };
 }
 
+// Entry point for a user whose resume extraction failed (or who has no
+// resume to upload yet): every section starts empty, but the form is the
+// same one used for a fresh AI draft, so nothing about the confirm/save path
+// differs based on how the user got here.
+export function createBlankProfile(): EditableProfile {
+  return toEditableProfile({
+    contact: { fullName: "", email: "", phoneNumber: null, linkedinUrl: null, addressLine1: null },
+    education: [],
+    workExperiences: [],
+    skills: [],
+    projects: [],
+    certifications: [],
+    achievements: [],
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Value conversion helpers
 //
@@ -211,6 +227,7 @@ export function ReviewForm({
 }) {
   const [profile, setProfile] = useState<EditableProfile>(initialProfile);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   function setField<K extends keyof EditableProfile>(key: K, value: EditableProfile[K]) {
     setProfile((p) => ({ ...p, [key]: value }));
@@ -225,6 +242,7 @@ export function ReviewForm({
 
   async function handleConfirm() {
     setIsSaving(true);
+    setSaveError(null);
     try {
       const res = await fetch("/api/profile/confirm", {
         method: "POST",
@@ -234,7 +252,11 @@ export function ReviewForm({
       const body = await res.json();
       if (body.status === "saved") {
         onSaved();
+      } else {
+        setSaveError(body.error ?? "Save failed — please try again.");
       }
+    } catch {
+      setSaveError("Could not reach the server — check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
@@ -672,6 +694,7 @@ export function ReviewForm({
         />
       </Section>
 
+      {saveError && <p className="text-sm text-red-600">{saveError}</p>}
       <button
         type="button"
         onClick={handleConfirm}

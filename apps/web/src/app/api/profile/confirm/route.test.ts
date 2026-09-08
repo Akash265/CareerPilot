@@ -4,6 +4,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { embedTexts } from "@ai-career/ai";
 
 vi.mock("@ai-career/ai", () => ({
   embedTexts: vi.fn(async (_env: unknown, texts: string[]) => texts.map(() => new Array(1024).fill(0.01))),
@@ -79,5 +80,37 @@ describe("POST /api/profile/confirm", () => {
   it("rejects a malformed payload with 400", async () => {
     const res = await POST(makeRequest({ contact: { fullName: 123 } }));
     expect(res.status).toBe(400);
+  });
+
+  it("retries a fact whose previous embedding attempt failed, instead of leaving it null forever", async () => {
+    const embedMock = vi.mocked(embedTexts);
+    const profileWithNewSkill = {
+      ...validProfile,
+      workExperiences: [],
+      skills: [{ name: "Rust", category: null }],
+    };
+
+    embedMock.mockRejectedValueOnce(new Error("Voyage down"));
+    const firstRes = await POST(makeRequest(profileWithNewSkill));
+    expect(firstRes.status).toBe(200);
+    expect((await firstRes.json()).factsGenerated).toBe(1);
+
+    const [rowAfterFailure] = await adminSql`
+      SELECT embedding, embedding_model FROM profile_facts
+      WHERE user_id = '00000000-0000-0000-0000-00000000000c' AND source_type = 'skill'
+    `;
+    expect(rowAfterFailure.embedding).toBeNull();
+    expect(rowAfterFailure.embedding_model).toBeNull();
+
+    // Same profile again (identical content hash) -- Voyage succeeds this time.
+    const secondRes = await POST(makeRequest(profileWithNewSkill));
+    expect(secondRes.status).toBe(200);
+
+    const [rowAfterRetry] = await adminSql`
+      SELECT embedding, embedding_model FROM profile_facts
+      WHERE user_id = '00000000-0000-0000-0000-00000000000c' AND source_type = 'skill'
+    `;
+    expect(rowAfterRetry.embedding).not.toBeNull();
+    expect(rowAfterRetry.embedding_model).toBe("voyage-3.5");
   });
 });

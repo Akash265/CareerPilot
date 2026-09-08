@@ -173,9 +173,15 @@ export async function saveConfirmedProfile(
     );
 
     // --- Outside any transaction: embed only the new/changed fact text ---
-    // D16's content-hash cache: a fact whose text is unchanged reuses its
-    // stored embedding and never hits Voyage again.
-    const factsNeedingEmbedding = facts.filter((f) => !existingByHash.has(f.contentHash));
+    // D16's content-hash cache: a fact whose text is unchanged AND already
+    // has a real embedding reuses it and never hits Voyage again. A fact
+    // whose hash matches but whose *stored* embedding is null (a previous
+    // save's Voyage call failed) is deliberately NOT treated as cached --
+    // otherwise a transient Voyage outage would leave that fact permanently
+    // unembedded, since its hash would look "already handled" forever.
+    const factsNeedingEmbedding = facts.filter(
+      (f) => existingByHash.get(f.contentHash)?.embedding == null
+    );
     let newEmbeddings: (number[] | null)[];
     try {
       newEmbeddings = await embedTexts(
@@ -199,13 +205,24 @@ export async function saveConfirmedProfile(
       await tx.delete(schema.profileFacts);
       for (const fact of facts) {
         const reused = existingByHash.get(fact.contentHash);
-        const embedding = reused?.embedding ?? embeddingByHash.get(fact.contentHash) ?? null;
+        const hasReusableEmbedding = reused?.embedding != null;
+        const embedding = hasReusableEmbedding
+          ? reused!.embedding
+          : (embeddingByHash.get(fact.contentHash) ?? null);
+        // Never stamp a model onto a row that has no embedding -- otherwise a
+        // failed-then-retried fact would look "embedded with voyage-3.5" to
+        // any future query, indistinguishable from a real success.
+        const embeddingModel = hasReusableEmbedding
+          ? reused!.embeddingModel
+          : embedding != null
+            ? env.VOYAGE_EMBEDDING_MODEL
+            : null;
         await tx.insert(schema.profileFacts).values({
           sourceType: fact.sourceType,
           sourceId: fact.sourceId,
           factText: fact.factText,
           embedding,
-          embeddingModel: reused?.embeddingModel ?? env.VOYAGE_EMBEDDING_MODEL,
+          embeddingModel,
           contentHash: fact.contentHash,
         });
       }
