@@ -1,5 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
+import type Anthropic from "@anthropic-ai/sdk";
 import { extractProfileFromResume, ExtractionValidationError } from "./extractProfile";
+
+// The real Anthropic client is a class with many fields this test doesn't
+// need; a fake `{ messages: { create } }` object is structurally compatible
+// with `Pick<Anthropic, "messages">` in spirit but not in TypeScript's eyes
+// (the real `create` returns the full `Message` type). `unknown` first,
+// rather than `any`, keeps the assertion honest about being an intentional
+// type-widening for a test double, not an accidental loss of type-checking.
+type FakeAnthropicClient = Pick<Anthropic, "messages">;
 
 const validDraftInput = {
   contact: { fullName: "Ada Lovelace", email: "ada@example.com", phoneNumber: null, linkedinUrl: null, addressLine1: null },
@@ -11,7 +20,7 @@ const validDraftInput = {
   achievements: [],
 };
 
-function fakeAnthropicClient(toolUseInput: unknown, hasToolUse = true) {
+function fakeAnthropicClient(toolUseInput: unknown, hasToolUse = true): FakeAnthropicClient {
   return {
     messages: {
       create: async () => ({
@@ -19,8 +28,8 @@ function fakeAnthropicClient(toolUseInput: unknown, hasToolUse = true) {
           ? [{ type: "tool_use", id: "t1", name: "record_resume_extraction", input: toolUseInput }]
           : [{ type: "text", text: "no tool use" }],
       }),
-    },
-  } as any;
+    } as unknown as Anthropic["messages"],
+  };
 }
 
 describe("extractProfileFromResume", () => {
@@ -48,7 +57,7 @@ describe("extractProfileFromResume", () => {
     const create = vi.fn().mockResolvedValue({
       content: [{ type: "tool_use", id: "t1", name: "record_resume_extraction", input: validDraftInput }],
     });
-    const client = { messages: { create } } as any;
+    const client: FakeAnthropicClient = { messages: { create } as unknown as Anthropic["messages"] };
 
     await extractProfileFromResume(
       client,

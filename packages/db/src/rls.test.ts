@@ -132,19 +132,19 @@ describe("withUserContext RLS isolation (real users table + shipped migration)",
     const rowsForA = await withUserContext(db, USER_A, async (tx) =>
       tx.execute(dsql`SELECT full_name FROM users`)
     );
-    expect(rowsForA.map((r: any) => r.full_name)).toEqual(["Alice"]);
+    expect(rowsForA.map((r) => (r as { full_name: string }).full_name)).toEqual(["Alice"]);
 
     const rowsForB = await withUserContext(db, USER_B, async (tx) =>
       tx.execute(dsql`SELECT full_name FROM users`)
     );
-    expect(rowsForB.map((r: any) => r.full_name)).toEqual(["Bob"]);
+    expect(rowsForB.map((r) => (r as { full_name: string }).full_name)).toEqual(["Bob"]);
   });
 
   it("defaults a plain INSERT's id to the active session's user, not a random UUID", async () => {
     const rows = await withUserContext(db, USER_A, async (tx) =>
       tx.execute(dsql`SELECT id FROM users`)
     );
-    expect(rows.map((r: any) => r.id)).toEqual([USER_A]);
+    expect(rows.map((r) => (r as { id: string }).id)).toEqual([USER_A]);
   });
 
   it("rejects a non-UUID user id before touching the database", async () => {

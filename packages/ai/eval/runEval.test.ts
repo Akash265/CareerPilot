@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type Anthropic from "@anthropic-ai/sdk";
 import { extractProfileFromResume } from "../src/extractProfile";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,14 +15,14 @@ const EXPECTED_DIR = path.join(__dirname, "expected");
 // a real (paid) Anthropic call. Field-level accuracy against imperfect real
 // model output is evaluated manually when ANTHROPIC_MODEL_FAST changes —
 // this automated check guards the pipeline shape, not model quality.
-function fakeClientReturning(input: unknown) {
+function fakeClientReturning(input: unknown): Pick<Anthropic, "messages"> {
   return {
     messages: {
       create: async () => ({
         content: [{ type: "tool_use", id: "t1", name: "record_resume_extraction", input }],
       }),
-    },
-  } as any;
+    } as unknown as Anthropic["messages"],
+  };
 }
 
 describe("resume extraction eval fixtures", () => {

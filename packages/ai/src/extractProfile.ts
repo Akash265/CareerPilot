@@ -113,7 +113,7 @@ export async function extractProfileFromResume(
       {
         name: EXTRACTION_TOOL_NAME,
         description: "Record the structured candidate profile extracted from a resume.",
-        input_schema: EXTRACTION_TOOL_INPUT_SCHEMA as any,
+        input_schema: EXTRACTION_TOOL_INPUT_SCHEMA,
       },
     ],
     tool_choice: { type: "tool", name: EXTRACTION_TOOL_NAME },
@@ -123,9 +123,11 @@ export async function extractProfileFromResume(
         content: `<resume_text>\n${resumeText}\n</resume_text>`,
       },
     ],
-  } as any);
+  });
 
-  const toolUse = (message.content as any[]).find((block) => block.type === "tool_use");
+  const toolUse = message.content.find(
+    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+  );
   if (!toolUse) {
     throw new ExtractionValidationError("Anthropic response did not include the expected tool_use block");
   }

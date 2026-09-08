@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import type { FileTypeResult } from "file-type";
 
 vi.mock("file-type", () => ({ fileTypeFromBuffer: vi.fn() }));
 
@@ -7,7 +8,10 @@ import { detectResumeFileType, UnsupportedFileTypeError } from "./fileDetection"
 
 describe("detectResumeFileType", () => {
   it("maps a detected PDF mime type to 'pdf'", async () => {
-    vi.mocked(fileTypeFromBuffer).mockResolvedValue({ mime: "application/pdf", ext: "pdf" } as any);
+    vi.mocked(fileTypeFromBuffer).mockResolvedValue({
+      mime: "application/pdf",
+      ext: "pdf",
+    } as FileTypeResult);
     expect(await detectResumeFileType(Buffer.from("x"), "resume.pdf")).toBe("pdf");
   });
 
@@ -15,7 +19,7 @@ describe("detectResumeFileType", () => {
     vi.mocked(fileTypeFromBuffer).mockResolvedValue({
       mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       ext: "docx",
-    } as any);
+    } as FileTypeResult);
     expect(await detectResumeFileType(Buffer.from("x"), "resume.docx")).toBe("docx");
   });
 

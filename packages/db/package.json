@@ -8,6 +8,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
     "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
     "db:generate:custom": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=candidate_profile_rls",
     "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate"
@@ -21,6 +22,8 @@
     "drizzle-kit": "^0.28.0",
     "dotenv-cli": "^7.4.0",
     "vitest": "^2.1.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "eslint": "^9.0.0",
+    "typescript-eslint": "^8.0.0"
   }
 }
