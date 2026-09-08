@@ -14,7 +14,10 @@ export async function serializeProfile(tx: DbClient) {
     .from(schema.workExperiences)
     .orderBy(asc(schema.workExperiences.displayOrder));
   const bullets = await tx.select().from(schema.workExperienceBullets);
-  const companyPreferences = await tx.select().from(schema.companyPreferences);
+  const companyPreferences = await tx
+    .select()
+    .from(schema.companyPreferences)
+    .orderBy(asc(schema.companyPreferences.displayOrder));
 
   return {
     contact: {

@@ -36,6 +36,13 @@
       "when": 1788851064358,
       "tag": "0004_fine_freak",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788852240668,
+      "tag": "0005_natural_polaris",
+      "breakpoints": true
     }
   ]
 }

@@ -77,9 +77,16 @@ describe("POST /api/profile/confirm", () => {
     expect(body.factsGenerated).toBe(2);
   });
 
-  it("rejects a malformed payload with 400", async () => {
+  it("rejects a malformed payload with 400 and a human-readable error, not a raw Zod dump", async () => {
     const res = await POST(makeRequest({ contact: { fullName: 123 } }));
+    const body = await res.json();
+
     expect(res.status).toBe(400);
+    // Zod's default ZodError.message is a JSON-stringified issue array --
+    // asserting the response is NOT that (no literal "[" opening the
+    // string) guards against silently reverting to the raw dump.
+    expect(body.error).not.toMatch(/^\[/);
+    expect(body.error).toContain("contact.fullName");
   });
 
   it("retries a fact whose previous embedding attempt failed, instead of leaving it null forever", async () => {

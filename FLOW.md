@@ -134,10 +134,15 @@ Notes:
 Entry point (browser): `apps/web/src/app/profile/page.tsx` renders
 `ProfileClient` (`apps/web/src/app/profile/ProfileClient.tsx`), a client
 component that owns a `Stage` state machine (`loading` → `upload` |
-`dashboard` → `reviewing`) and drives which of `UploadForm`, `ReviewForm`,
-or `ProfileDashboard` is on screen. On mount it calls `GET /api/profile`
-(see §4c) to decide whether to start at `upload` (no profile yet) or
-`dashboard` (profile exists).
+`dashboard` | `error` → `reviewing`) and drives which of `UploadForm`,
+`ReviewForm`, or `ProfileDashboard` is on screen. On mount it calls
+`GET /api/profile` (see §4c) to decide whether to start at `upload` (no
+profile yet) or `dashboard` (profile exists); a non-2xx response or a
+network failure goes to `error` (a message + Retry button) rather than
+being misread as "no profile yet". From `upload`, `UploadForm` offers a
+"Start with a blank profile instead" button (`createBlankProfile()` in
+`ReviewForm.tsx`) alongside the file upload, so a failed/skipped extraction
+is never a dead end.
 
 ### 4a. Upload + AI extraction
 
@@ -146,7 +151,12 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
 └─ fetch POST /api/profile/resume  (multipart FormData, field "file")
    └─ route.ts: POST()                       [apps/web/src/app/api/profile/resume/route.ts]
       ├─ loadEnv()                           [@ai-career/config]
-      ├─ validate: file present, size ≤ 10MB (else 400, before any I/O)
+      ├─ validate: file present; declared Content-Length ≤ 10MB + 64KB slack
+      │  (rejected BEFORE request.formData() buffers the body — the slack
+      │  accounts for multipart envelope overhead, which is real bytes on
+      │  top of the file itself, so a file at exactly the 10MB cap doesn't
+      │  get incorrectly rejected); then file.size ≤ 10MB exactly (the real,
+      │  authoritative limit, checked after formData() parses it)
       ├─ detectResumeFileType(buffer, file.name)   [@ai-career/ai]
       │  └─ content-sniffs magic bytes (not just the extension/MIME header,
       │     per DECISIONS.md D15's security note) → "pdf" | "docx" | "tex"
@@ -163,7 +173,9 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
       │  │  (deactivates any prior resume — D18: single active resume)
       │  └─ tx.insert(resumeDocuments).values({objectKey, originalFilename,
       │        mimeType, fileSizeBytes, extractionStatus:"pending", isActive:true})
-      │     .returning id
+      │     .returning id  (mimeType = the SNIFFED type from fileType, never
+      │        the client-supplied file.type, per D15's don't-trust-the-
+      │        client-header rule)
       ├─ [inside the handled try/catch below — a corrupt-but-well-sniffed
       │   file must produce the status:"failed" response, not a 500]
       ├─ extractText(buffer, fileType)       [@ai-career/ai]
@@ -172,6 +184,11 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
       ├─ createAnthropicClient(env)          [@ai-career/ai]
       ├─ extractWithRetry(anthropic, env, text)   [route.ts local helper]
       │  └─ extractProfileFromResume(anthropic, env, text)   [@ai-career/ai]
+      │     ├─ generates a per-call random delimiter tag
+      │     │  (`resume_text_<16 hex chars>`) and wraps resumeText in it,
+      │     │  with a system prompt framing that tag's content as untrusted
+      │     │  data — a FIXED tag name would let a resume containing the
+      │     │  literal closing tag escape the block early (D20)
       │     ├─ calls Anthropic (fast/cheap tier per D7) with a structured
       │     │  extraction prompt → parses/validates response against the
       │     │  ResumeExtractionDraft schema (Zod)
@@ -190,15 +207,13 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
       └─ on extraction failure: withUserContext(... set extractionStatus:
          "failed", extractionError) → 200 response with status:"failed"
          (resume stays uploaded/active). UploadForm surfaces `body.error`
-         and leaves the user on the upload stage to retry with a different
-         file. There is currently NO manual-entry entry point: ProfileClient
-         only advances to `reviewing` on a successful extraction or on an
-         already-saved profile fetched by GET /api/profile, so a user with
-         neither cannot reach ReviewForm at all. (The design spec's
-         "manual-entry fallback" — POST /api/profile/confirm accepting a
-         hand-built profile — is supported by the API and by ReviewForm's
-         now-complete field coverage, but no UI affordance starts a blank
-         profile without an upload. Not implemented in this phase.)
+         and leaves the user on the upload stage, where they can retry with
+         a different file OR click "Start with a blank profile instead"
+         (`createBlankProfile()` → `ProfileClient` sets `editableProfile`
+         and jumps straight to `reviewing`, same as a successful extraction
+         would) — the design spec's "manual-entry fallback" (POST
+         /api/profile/confirm accepting a hand-built profile) now has a real
+         UI entry point, not just API support.
 UploadForm receives { status:"extracted", draft } → calls onExtracted(draft)
 └─ ProfileClient: toEditableProfile(draft)   [apps/web/src/app/profile/ReviewForm.tsx]
    └─ merges the draft with zero-valued defaults for review-only fields
@@ -242,29 +257,36 @@ ReviewForm (user edits EditableProfile fields, then clicks confirm)
                │     reuse key)
                └─ tx.select().from(profileFacts)  → existing rows, indexed
                      by contentHash, to detect which facts are unchanged
+                     AND already have a real (non-null) embedding — see the
+                     next step; a hash match alone is not enough (D20)
                }) ← TRANSACTION 1 COMMITS HERE. The confirmed profile is now
                     durable regardless of what the embedding provider does
                     next (design spec §7: "Voyage embedding failure during
                     confirm → the profile data still commits").
             ├─ OUTSIDE any transaction:
-            │  embedTexts(env, [unmatched facts' text])   [@ai-career/ai,
-            │     Voyage AI per D7] → embeddings only for NEW/changed fact
-            │     text (D16's embedding-cache reuse — unchanged facts reuse
-            │     their existing embedding + embeddingModel, never re-call
-            │     Voyage for identical text). Wrapped in try/catch: a Voyage
-            │     failure degrades to an all-null embedding list instead of
-            │     throwing, so the save still completes. Deliberately NOT
-            │     logged — the error text can contain fact text (PII), which
-            │     the spec §6 / CLAUDE.md §9 forbid logging.
+            │  embedTexts(env, [facts needing embedding])   [@ai-career/ai,
+            │     Voyage AI per D7] → a fact needs embedding if its hash is
+            │     unmatched OR the matched existing row's embedding is null
+            │     (D20 — a fact that failed to embed on a previous save is
+            │     retried here, not treated as permanently "already
+            │     handled"). Unchanged facts with a REAL cached embedding
+            │     reuse their existing embedding + embeddingModel, never
+            │     re-calling Voyage for identical text. Wrapped in try/catch:
+            │     a Voyage failure degrades to an all-null embedding list
+            │     instead of throwing, so the save still completes.
+            │     Deliberately NOT logged — the error text can contain fact
+            │     text (PII), which the spec §6 / CLAUDE.md §9 forbid logging.
             └─ TRANSACTION 2 — withUserContext(db, DEFAULT_USER_ID, async tx => {
                ├─ tx.delete(profileFacts)  (full-replace, mirrors the
                │     normalized-table strategy above)
                └─ tx.insert(profileFacts).values({sourceType, sourceId,
                      factText, embedding, embeddingModel, contentHash})
-                  per fact — embedding = the reused cached vector when the
-                  content hash matched, else the freshly computed one, else
-                  null when the Voyage call failed (the column is nullable
-                  precisely so these rows can be back-filled later)
+                  per fact — embedding = the reused cached vector when a
+                  real one existed, else the freshly computed one, else null
+                  when the Voyage call failed (the column is nullable
+                  precisely so these rows can be back-filled/retried on a
+                  later save — D20). embeddingModel is only ever set
+                  alongside a real embedding, never stamped onto a null one.
                })
                → returns { factsGenerated: facts.length }
          └─ NextResponse.json({ status:"saved", factsGenerated })
@@ -293,8 +315,11 @@ ProfileClient (on mount, and again after onSaved())
          │  shape can round-trip straight into ConfirmedProfileSchema on a
          │  later PATCH/confirm without a validation failure
          └─ reshapes every section into the same ID-free plain-object shape
-            ConfirmedProfileSchema accepts (bullets flattened to string[]
-            sorted by displayOrder, achievements flattened to string[], etc.)
+            ConfirmedProfileSchema accepts, each list ordered by its own
+            `displayOrder` column (D20) — education, workExperiences,
+            skills, projects, certifications, achievements, and
+            preferred/excludedCompanies all get an explicit `ORDER BY`;
+            workExperienceBullets already did (pre-dates D20)
       → NextResponse.json({ profile })
 ProfileClient: body.profile truthy → setStage("dashboard")
 └─ renders <ProfileDashboard profile={editableProfile} onEdit={...} />
@@ -333,19 +358,20 @@ mirrors the same field set read-only.
 ```
 createDbClient(env)                        [packages/db/src/client.ts]
 └─ postgres(env.DATABASE_URL) → a NEW connection pool on every call
+closeDbClient(db)                          [packages/db/src/client.ts]
+└─ db.$client?.end(), wrapped in try/catch so a failing close can never
+   mask the caller's own result/error
 ```
 
-Every caller therefore owns the pool it creates and closes it once the
-request's DB work is done, via `db.$client?.end()` inside a `finally`,
-wrapped in its own try/catch so a failing close can never change the
-response. Callers doing this today:
+Every caller that creates a client owns closing it once the request's DB
+work is done, via the shared `closeDbClient` (D20 — this replaced four
+near-identical inline `try { await db.$client?.end() } catch {}` copies).
+Callers doing this today:
 
 - `GET /api/health`               [.../api/health/route.ts] — original site of
-  the pattern
-- `GET /api/profile`              [.../api/profile/route.ts] (local
-  `closePool` helper)
+  the pattern, now using `closeDbClient` too
+- `GET /api/profile`              [.../api/profile/route.ts]
 - `POST` / `DELETE /api/profile/resume` [.../api/profile/resume/route.ts]
-  (local `closePool` helper)
 - `saveConfirmedProfile`          [.../lib/profile/saveProfile.ts] — closes
   its own pool, which is why `POST /api/profile/confirm` and
   `PATCH /api/profile` create none of their own

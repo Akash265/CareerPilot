@@ -1,0 +1,1 @@
+ALTER TABLE "company_preferences" ADD COLUMN "display_order" integer DEFAULT 0 NOT NULL;

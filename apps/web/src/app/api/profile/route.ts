@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadEnv } from "@ai-career/config";
 import { createDbClient, closeDbClient, withUserContext } from "@ai-career/db";
-import { ConfirmedProfileSchema } from "../../../lib/profile/confirmedProfileSchema";
+import { ConfirmedProfileSchema, formatValidationError } from "../../../lib/profile/confirmedProfileSchema";
 import { saveConfirmedProfile } from "../../../lib/profile/saveProfile";
 import { serializeProfile } from "../../../lib/profile/serializeProfile";
 
@@ -21,7 +21,7 @@ export async function PATCH(request: Request) {
   const body = await request.json();
   const parsed = ConfirmedProfileSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.message }, { status: 400 });
+    return NextResponse.json({ error: formatValidationError(parsed.error) }, { status: 400 });
   }
   // saveConfirmedProfile creates and closes its own pool.
   const result = await saveConfirmedProfile(env, parsed.data);

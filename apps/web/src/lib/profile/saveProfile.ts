@@ -160,11 +160,17 @@ export async function saveConfirmedProfile(
           derived.push(deriveFact("achievement", row.id as string, achievement));
         }
 
-        for (const companyName of profile.preferredCompanies) {
-          await tx.insert(schema.companyPreferences).values({ companyName, listType: "preferred" });
+        // preferred/excluded are ordered independently of each other (each
+        // list's own displayOrder starts back at 0).
+        for (const [index, companyName] of profile.preferredCompanies.entries()) {
+          await tx
+            .insert(schema.companyPreferences)
+            .values({ companyName, listType: "preferred", displayOrder: index });
         }
-        for (const companyName of profile.excludedCompanies) {
-          await tx.insert(schema.companyPreferences).values({ companyName, listType: "excluded" });
+        for (const [index, companyName] of profile.excludedCompanies.entries()) {
+          await tx
+            .insert(schema.companyPreferences)
+            .values({ companyName, listType: "excluded", displayOrder: index });
         }
 
         const existingFacts = await tx.select().from(schema.profileFacts);

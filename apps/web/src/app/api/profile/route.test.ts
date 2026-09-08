@@ -131,4 +131,39 @@ describe("GET/PATCH /api/profile", () => {
       "First University",
     ]);
   });
+
+  it("orders skills by display_order, not by physical/insertion order", async () => {
+    // The previous test alone doesn't prove serializeProfile's ORDER BY
+    // matters: rows freshly inserted (dead tuples not yet reclaimed) tend
+    // to come back from an unordered `SELECT *` in insertion order anyway,
+    // so that test would still pass even if `.orderBy(...)` were deleted.
+    // Scrambling display_order directly via SQL -- independent of insertion
+    // order -- means this test can only pass if the ORDER BY is real.
+    await PATCH(
+      new Request("http://localhost/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...baseProfile,
+          skills: [
+            { name: "Skill A", category: null },
+            { name: "Skill B", category: null },
+            { name: "Skill C", category: null },
+          ],
+        }),
+      })
+    );
+
+    // Inserted in physical order A, B, C -- rewrite display_order so the
+    // intended logical order is C, A, B, the opposite of physical order.
+    await adminSql`UPDATE skills SET display_order = 1 WHERE user_id = ${TEST_USER_ID} AND name = 'Skill A'`;
+    await adminSql`UPDATE skills SET display_order = 2 WHERE user_id = ${TEST_USER_ID} AND name = 'Skill B'`;
+    await adminSql`UPDATE skills SET display_order = 0 WHERE user_id = ${TEST_USER_ID} AND name = 'Skill C'`;
+
+    const body = await (await GET()).json();
+    expect(body.profile.skills.map((s: { name: string }) => s.name)).toEqual([
+      "Skill C",
+      "Skill A",
+      "Skill B",
+    ]);
+  });
 });

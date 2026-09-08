@@ -12,7 +12,7 @@ describe("ProfileClient", () => {
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new Error("network down"))
-      .mockResolvedValueOnce({ json: async () => ({ profile: null }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ profile: null }) });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ProfileClient />);
@@ -25,8 +25,19 @@ describe("ProfileClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("shows an error (not a blank/loading state) when GET /api/profile returns a non-2xx status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
+    );
+
+    render(<ProfileClient />);
+
+    await waitFor(() => expect(screen.getByText(/could not load your profile/i)).toBeInTheDocument());
+  });
+
   it("goes straight to the review form when the user starts a blank profile", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ profile: null }) }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ profile: null }) }));
 
     render(<ProfileClient />);
 

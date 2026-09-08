@@ -13,7 +13,14 @@ export function ProfileClient() {
 
   function loadProfile() {
     return fetch("/api/profile")
-      .then((res) => res.json())
+      .then((res) => {
+        // A non-2xx response (e.g. a 500) must not be read as "no profile
+        // yet" just because its body happens to parse as JSON with no
+        // `profile` field -- that would silently drop the user onto the
+        // upload form instead of surfacing the real failure.
+        if (!res.ok) throw new Error(`GET /api/profile failed: ${res.status}`);
+        return res.json();
+      })
       .then((body) => {
         setEditableProfile(body.profile);
         setStage(body.profile ? "dashboard" : "upload");

@@ -15,6 +15,15 @@ import {
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
+// Content-Length measures the whole multipart envelope (boundary markers,
+// Content-Disposition/Content-Type headers, filename), not just the file
+// bytes -- a file at exactly MAX_FILE_SIZE_BYTES still produces a slightly
+// larger Content-Length. 64KB is far more than any realistic single-file
+// form's overhead, so this stays a coarse, early rejection for uploads that
+// are genuinely, unambiguously oversized; file.size below (checked against
+// MAX_FILE_SIZE_BYTES with no slack) remains the real, authoritative limit.
+const CONTENT_LENGTH_SLACK_BYTES = 64 * 1024;
+
 const MIME_BY_FILE_TYPE: Record<Awaited<ReturnType<typeof detectResumeFileType>>, string> = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -47,7 +56,7 @@ export async function POST(request: Request) {
   // stops the common case of an oversized upload without extra parsing
   // machinery, and file.size below remains the authoritative check.
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_FILE_SIZE_BYTES) {
+  if (contentLength > MAX_FILE_SIZE_BYTES + CONTENT_LENGTH_SLACK_BYTES) {
     return NextResponse.json({ error: "File exceeds 10MB limit" }, { status: 400 });
   }
 

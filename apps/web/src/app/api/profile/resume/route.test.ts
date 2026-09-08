@@ -158,6 +158,26 @@ describe("POST /api/profile/resume", () => {
     expect(dbInsertMock).not.toHaveBeenCalled();
   });
 
+  it("does not reject a Content-Length just over 10MB (multipart envelope overhead, not real file bytes)", async () => {
+    extractProfileFromResumeMock.mockResolvedValue({ contact: { fullName: "Ada" } });
+    const formData = new FormData();
+    formData.append("file", new File([Buffer.from("%PDF-1.4")], "resume.pdf", { type: "application/pdf" }));
+    // A real file at exactly the 10MB cap still produces a Content-Length
+    // slightly ABOVE 10MB once multipart boundary/header overhead is
+    // included -- this must not be rejected by the early Content-Length
+    // check (file.size, checked later, is the real, authoritative limit).
+    const req = new Request("http://localhost/api/profile/resume", {
+      method: "POST",
+      body: formData,
+      headers: { "content-length": String(10 * 1024 * 1024 + 200) },
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(dbInsertMock).toHaveBeenCalled();
+  });
+
   it("rejects with 400 when content-sniffing the file type fails", async () => {
     const { detectResumeFileType, UnsupportedFileTypeError } = await import("@ai-career/ai");
     vi.mocked(detectResumeFileType).mockRejectedValueOnce(new UnsupportedFileTypeError("looks like a PNG"));
