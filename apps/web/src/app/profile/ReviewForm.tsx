@@ -5,17 +5,7 @@ import type { ResumeExtractionDraft } from "@ai-career/ai";
 
 export type EditableProfile = ResumeExtractionDraft & {
   yearsOfExperience: number | null;
-  workModePreference: "remote" | "hybrid" | "onsite" | "any";
-  salaryExpectationMin: number | null;
-  salaryExpectationMax: number | null;
-  salaryCurrency: string | null;
-  visaSponsorshipRequired: boolean;
   workAuthorizationNotes: string | null;
-  preferredRoleTitles: string[];
-  preferredIndustries: string[];
-  excludedIndustries: string[];
-  preferredCompanies: string[];
-  excludedCompanies: string[];
 };
 
 type EducationEntry = EditableProfile["education"][number];
@@ -28,17 +18,7 @@ export function toEditableProfile(draft: ResumeExtractionDraft): EditableProfile
   return {
     ...draft,
     yearsOfExperience: null,
-    workModePreference: "any",
-    salaryExpectationMin: null,
-    salaryExpectationMax: null,
-    salaryCurrency: null,
-    visaSponsorshipRequired: false,
     workAuthorizationNotes: null,
-    preferredRoleTitles: [],
-    preferredIndustries: [],
-    excludedIndustries: [],
-    preferredCompanies: [],
-    excludedCompanies: [],
   };
 }
 
@@ -83,9 +63,6 @@ const orNullNumber = (value: string): number | null => {
   const parsed = Number(trimmed);
   return Number.isNaN(parsed) ? null : parsed;
 };
-
-const fromCommaList = (value: string): string[] => value.split(",").map((part) => part.trim());
-const toCommaList = (values: string[]): string => values.join(", ");
 
 const fromLines = (value: string): string[] => value.split("\n");
 const toLines = (values: string[]): string => values.join("\n");
@@ -132,11 +109,6 @@ const EMPTY_CERTIFICATION: CertificationEntry = {
 export function toPayload(profile: EditableProfile): EditableProfile {
   return {
     ...profile,
-    preferredRoleTitles: nonEmpty(profile.preferredRoleTitles),
-    preferredIndustries: nonEmpty(profile.preferredIndustries),
-    excludedIndustries: nonEmpty(profile.excludedIndustries),
-    preferredCompanies: nonEmpty(profile.preferredCompanies),
-    excludedCompanies: nonEmpty(profile.excludedCompanies),
     achievements: nonEmpty(profile.achievements),
     workExperiences: profile.workExperiences.map((exp) => ({
       ...exp,
@@ -306,56 +278,6 @@ export function ReviewForm({
           onChange={(v) => setField("yearsOfExperience", orNullNumber(v))}
         />
         <div>
-          <label htmlFor="work-mode-preference" className="text-sm font-medium">
-            Work mode preference
-          </label>
-          <select
-            id="work-mode-preference"
-            value={profile.workModePreference}
-            onChange={(e) =>
-              setField("workModePreference", e.target.value as EditableProfile["workModePreference"])
-            }
-            className="block w-full rounded border px-2 py-1"
-          >
-            <option value="remote">remote</option>
-            <option value="hybrid">hybrid</option>
-            <option value="onsite">onsite</option>
-            <option value="any">any</option>
-          </select>
-        </div>
-        <TextField
-          id="salary-min"
-          label="Minimum salary expectation"
-          type="number"
-          value={profile.salaryExpectationMin === null ? "" : String(profile.salaryExpectationMin)}
-          onChange={(v) => setField("salaryExpectationMin", orNullNumber(v))}
-        />
-        <TextField
-          id="salary-max"
-          label="Maximum salary expectation"
-          type="number"
-          value={profile.salaryExpectationMax === null ? "" : String(profile.salaryExpectationMax)}
-          onChange={(v) => setField("salaryExpectationMax", orNullNumber(v))}
-        />
-        <TextField
-          id="salary-currency"
-          label="Salary currency"
-          value={profile.salaryCurrency ?? ""}
-          onChange={(v) => setField("salaryCurrency", orNull(v))}
-        />
-        <div className="flex items-center gap-2">
-          <input
-            id="visa-sponsorship-required"
-            type="checkbox"
-            checked={profile.visaSponsorshipRequired}
-            onChange={(e) => setField("visaSponsorshipRequired", e.target.checked)}
-            className="rounded border"
-          />
-          <label htmlFor="visa-sponsorship-required" className="text-sm font-medium">
-            Visa sponsorship required
-          </label>
-        </div>
-        <div>
           <label htmlFor="work-authorization-notes" className="text-sm font-medium">
             Work authorization notes
           </label>
@@ -367,36 +289,6 @@ export function ReviewForm({
             rows={2}
           />
         </div>
-        <TextField
-          id="preferred-role-titles"
-          label="Preferred role titles (comma separated)"
-          value={toCommaList(profile.preferredRoleTitles)}
-          onChange={(v) => setField("preferredRoleTitles", fromCommaList(v))}
-        />
-        <TextField
-          id="preferred-industries"
-          label="Preferred industries (comma separated)"
-          value={toCommaList(profile.preferredIndustries)}
-          onChange={(v) => setField("preferredIndustries", fromCommaList(v))}
-        />
-        <TextField
-          id="excluded-industries"
-          label="Excluded industries (comma separated)"
-          value={toCommaList(profile.excludedIndustries)}
-          onChange={(v) => setField("excludedIndustries", fromCommaList(v))}
-        />
-        <TextField
-          id="preferred-companies"
-          label="Preferred companies (comma separated)"
-          value={toCommaList(profile.preferredCompanies)}
-          onChange={(v) => setField("preferredCompanies", fromCommaList(v))}
-        />
-        <TextField
-          id="excluded-companies"
-          label="Excluded companies (comma separated)"
-          value={toCommaList(profile.excludedCompanies)}
-          onChange={(v) => setField("excludedCompanies", fromCommaList(v))}
-        />
       </Section>
 
       <Section title="Education">

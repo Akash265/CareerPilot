@@ -6,17 +6,7 @@ import { ReviewForm, type EditableProfile } from "./ReviewForm";
 const initialProfile: EditableProfile = {
   contact: { fullName: "Ada Lovelace", email: "ada@example.com", phoneNumber: null, linkedinUrl: null, addressLine1: null },
   yearsOfExperience: null,
-  workModePreference: "any",
-  salaryExpectationMin: null,
-  salaryExpectationMax: null,
-  salaryCurrency: null,
-  visaSponsorshipRequired: false,
   workAuthorizationNotes: null,
-  preferredRoleTitles: [],
-  preferredIndustries: [],
-  excludedIndustries: [],
-  preferredCompanies: [],
-  excludedCompanies: [],
   education: [],
   workExperiences: [],
   skills: [{ name: "Analytical Engines", category: null }],
@@ -50,17 +40,6 @@ describe("ReviewForm", () => {
     expect(sentBody().contact.fullName).toBe("Grace Hopper");
   });
 
-  it("edits the work mode preference through the select", async () => {
-    const onSaved = vi.fn();
-    render(<ReviewForm initialProfile={initialProfile} onSaved={onSaved} />);
-
-    fireEvent.change(screen.getByLabelText(/work mode preference/i), { target: { value: "hybrid" } });
-    confirm();
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
-    expect(sentBody().workModePreference).toBe("hybrid");
-  });
-
   it("converts blank nullable text inputs to null and numeric inputs to numbers", async () => {
     const onSaved = vi.fn();
     render(
@@ -75,14 +54,12 @@ describe("ReviewForm", () => {
 
     fireEvent.change(screen.getByLabelText(/phone number/i), { target: { value: "   " } });
     fireEvent.change(screen.getByLabelText(/years of experience/i), { target: { value: "7" } });
-    fireEvent.click(screen.getByLabelText(/visa sponsorship required/i));
     confirm();
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const body = sentBody();
     expect(body.contact.phoneNumber).toBeNull();
     expect(body.yearsOfExperience).toBe(7);
-    expect(body.visaSponsorshipRequired).toBe(true);
   });
 
   it("adds an education entry and sends its edited fields", async () => {
@@ -116,19 +93,6 @@ describe("ReviewForm", () => {
     const [experience] = sentBody().workExperiences;
     expect(experience.company).toBe("Acme");
     expect(experience.bullets).toEqual(["Shipped the thing", "Measured the thing"]);
-  });
-
-  it("parses comma-separated preference lists and drops empty entries", async () => {
-    const onSaved = vi.fn();
-    render(<ReviewForm initialProfile={initialProfile} onSaved={onSaved} />);
-
-    fireEvent.change(screen.getByLabelText(/preferred role titles/i), {
-      target: { value: "Data Engineer, Analytics Engineer, " },
-    });
-    confirm();
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
-    expect(sentBody().preferredRoleTitles).toEqual(["Data Engineer", "Analytics Engineer"]);
   });
 
   it("removes a skill row", async () => {

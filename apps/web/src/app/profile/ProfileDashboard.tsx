@@ -74,26 +74,7 @@ export function ProfileDashboard({
           label="Years of experience"
           value={profile.yearsOfExperience === null ? null : String(profile.yearsOfExperience)}
         />
-        <Field label="Work mode preference" value={profile.workModePreference} />
-        <Field
-          label="Minimum salary expectation"
-          value={profile.salaryExpectationMin === null ? null : String(profile.salaryExpectationMin)}
-        />
-        <Field
-          label="Maximum salary expectation"
-          value={profile.salaryExpectationMax === null ? null : String(profile.salaryExpectationMax)}
-        />
-        <Field label="Salary currency" value={profile.salaryCurrency} />
-        <Field
-          label="Visa sponsorship required"
-          value={profile.visaSponsorshipRequired ? "Yes" : "No"}
-        />
         <Field label="Work authorization notes" value={profile.workAuthorizationNotes} />
-        <List label="Preferred role titles" values={profile.preferredRoleTitles} />
-        <List label="Preferred industries" values={profile.preferredIndustries} />
-        <List label="Excluded industries" values={profile.excludedIndustries} />
-        <List label="Preferred companies" values={profile.preferredCompanies} />
-        <List label="Excluded companies" values={profile.excludedCompanies} />
       </Section>
 
       <Section title="Education">

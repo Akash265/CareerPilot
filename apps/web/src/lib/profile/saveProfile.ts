@@ -46,17 +46,7 @@ export async function saveConfirmedProfile(
             linkedinUrl: profile.contact.linkedinUrl,
             addressLine1: profile.contact.addressLine1,
             yearsOfExperience: profile.yearsOfExperience,
-            workModePreference: profile.workModePreference,
-            salaryExpectationMin:
-              profile.salaryExpectationMin === null ? null : String(profile.salaryExpectationMin),
-            salaryExpectationMax:
-              profile.salaryExpectationMax === null ? null : String(profile.salaryExpectationMax),
-            salaryCurrency: profile.salaryCurrency,
-            visaSponsorshipRequired: profile.visaSponsorshipRequired,
             workAuthorizationNotes: profile.workAuthorizationNotes,
-            preferredRoleTitles: profile.preferredRoleTitles,
-            preferredIndustries: profile.preferredIndustries,
-            excludedIndustries: profile.excludedIndustries,
           })
           .onConflictDoUpdate({
             target: schema.candidateProfiles.userId,
@@ -67,17 +57,7 @@ export async function saveConfirmedProfile(
               linkedinUrl: profile.contact.linkedinUrl,
               addressLine1: profile.contact.addressLine1,
               yearsOfExperience: profile.yearsOfExperience,
-              workModePreference: profile.workModePreference,
-              salaryExpectationMin:
-                profile.salaryExpectationMin === null ? null : String(profile.salaryExpectationMin),
-              salaryExpectationMax:
-                profile.salaryExpectationMax === null ? null : String(profile.salaryExpectationMax),
-              salaryCurrency: profile.salaryCurrency,
-              visaSponsorshipRequired: profile.visaSponsorshipRequired,
               workAuthorizationNotes: profile.workAuthorizationNotes,
-              preferredRoleTitles: profile.preferredRoleTitles,
-              preferredIndustries: profile.preferredIndustries,
-              excludedIndustries: profile.excludedIndustries,
               updatedAt: new Date(),
             },
           });
@@ -89,7 +69,6 @@ export async function saveConfirmedProfile(
         await tx.delete(schema.projects);
         await tx.delete(schema.certifications);
         await tx.delete(schema.achievements);
-        await tx.delete(schema.companyPreferences);
 
         const derived: DerivedFact[] = [];
 
@@ -158,19 +137,6 @@ export async function saveConfirmedProfile(
             .values({ description: achievement, displayOrder: index })
             .returning({ id: schema.achievements.id });
           derived.push(deriveFact("achievement", row.id as string, achievement));
-        }
-
-        // preferred/excluded are ordered independently of each other (each
-        // list's own displayOrder starts back at 0).
-        for (const [index, companyName] of profile.preferredCompanies.entries()) {
-          await tx
-            .insert(schema.companyPreferences)
-            .values({ companyName, listType: "preferred", displayOrder: index });
-        }
-        for (const [index, companyName] of profile.excludedCompanies.entries()) {
-          await tx
-            .insert(schema.companyPreferences)
-            .values({ companyName, listType: "excluded", displayOrder: index });
         }
 
         const existingFacts = await tx.select().from(schema.profileFacts);

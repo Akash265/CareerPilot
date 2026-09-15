@@ -13,17 +13,7 @@ const profile: EditableProfile = {
     addressLine1: null,
   },
   yearsOfExperience: 7,
-  workModePreference: "remote",
-  salaryExpectationMin: null,
-  salaryExpectationMax: null,
-  salaryCurrency: null,
-  visaSponsorshipRequired: true,
   workAuthorizationNotes: null,
-  preferredRoleTitles: ["Data Engineer"],
-  preferredIndustries: [],
-  excludedIndustries: [],
-  preferredCompanies: [],
-  excludedCompanies: [],
   education: [
     {
       institution: "Cambridge",
@@ -70,15 +60,11 @@ describe("ProfileDashboard", () => {
     expect(screen.getByText("First published algorithm")).toBeInTheDocument();
   });
 
-  it("renders contact and preference details, including nullable and boolean fields", () => {
+  it("renders contact details", () => {
     render(<ProfileDashboard profile={profile} onEdit={vi.fn()} />);
 
     expect(screen.getByText("555-0100")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
-    expect(screen.getByText("remote")).toBeInTheDocument();
-    // visaSponsorshipRequired: true renders as a human-readable "Yes".
-    expect(screen.getByText("Yes")).toBeInTheDocument();
-    expect(screen.getByText("Data Engineer")).toBeInTheDocument();
   });
 
   it("calls onEdit when the Edit button is clicked", () => {

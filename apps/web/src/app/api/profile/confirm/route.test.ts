@@ -46,15 +46,7 @@ function makeRequest(body: unknown): Request {
 const validProfile = {
   contact: { fullName: "Ada Lovelace", email: "ada@example.com", phoneNumber: null, linkedinUrl: null, addressLine1: null },
   yearsOfExperience: 5,
-  workModePreference: "remote",
-  salaryExpectationMin: null,
-  salaryExpectationMax: null,
-  salaryCurrency: null,
-  visaSponsorshipRequired: false,
   workAuthorizationNotes: null,
-  preferredRoleTitles: [],
-  preferredIndustries: [],
-  excludedIndustries: [],
   education: [],
   workExperiences: [
     { company: "Acme", title: "Engineer", location: null, employmentType: null, startDate: null, endDate: null, bullets: ["Built the analytical engine"] },
@@ -63,8 +55,6 @@ const validProfile = {
   projects: [],
   certifications: [],
   achievements: [],
-  preferredCompanies: [],
-  excludedCompanies: [],
 };
 
 describe("POST /api/profile/confirm", () => {

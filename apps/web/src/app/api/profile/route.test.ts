@@ -47,7 +47,6 @@ beforeAll(async () => {
   await adminSql`DELETE FROM projects WHERE user_id = ${TEST_USER_ID}`;
   await adminSql`DELETE FROM certifications WHERE user_id = ${TEST_USER_ID}`;
   await adminSql`DELETE FROM achievements WHERE user_id = ${TEST_USER_ID}`;
-  await adminSql`DELETE FROM company_preferences WHERE user_id = ${TEST_USER_ID}`;
   await adminSql`DELETE FROM profile_facts WHERE user_id = ${TEST_USER_ID}`;
   await adminSql`DELETE FROM candidate_profiles WHERE user_id = ${TEST_USER_ID}`;
 });
@@ -61,23 +60,13 @@ const { GET, PATCH } = await import("./route");
 const baseProfile = {
   contact: { fullName: "Grace Hopper", email: "grace@example.com", phoneNumber: null, linkedinUrl: null, addressLine1: null },
   yearsOfExperience: 10,
-  workModePreference: "remote",
-  salaryExpectationMin: null,
-  salaryExpectationMax: null,
-  salaryCurrency: null,
-  visaSponsorshipRequired: false,
   workAuthorizationNotes: null,
-  preferredRoleTitles: [],
-  preferredIndustries: [],
-  excludedIndustries: [],
   education: [],
   workExperiences: [],
   skills: [{ name: "COBOL", category: null }],
   projects: [],
   certifications: [],
   achievements: [],
-  preferredCompanies: [],
-  excludedCompanies: [],
 };
 
 describe("GET/PATCH /api/profile", () => {
@@ -111,12 +100,6 @@ describe("GET/PATCH /api/profile", () => {
         { institution: "Second University", degree: "MSc", fieldOfStudy: null, startDate: null, endDate: null, gpa: null },
         { institution: "First University", degree: "BSc", fieldOfStudy: null, startDate: null, endDate: null, gpa: null },
       ],
-      // company_preferences shares one table across both list types --
-      // exercising both here (rather than leaving them [] like every other
-      // fixture in this file) is what actually runs the displayOrder
-      // insert/order code path for this table at all.
-      preferredCompanies: ["Preferred B", "Preferred A"],
-      excludedCompanies: ["Excluded Y", "Excluded X"],
     };
 
     await PATCH(
@@ -136,8 +119,6 @@ describe("GET/PATCH /api/profile", () => {
       "Second University",
       "First University",
     ]);
-    expect(body.profile.preferredCompanies).toEqual(["Preferred B", "Preferred A"]);
-    expect(body.profile.excludedCompanies).toEqual(["Excluded Y", "Excluded X"]);
   });
 
   it("orders skills by display_order, not by physical/insertion order", async () => {
