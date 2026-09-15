@@ -7,3 +7,6 @@ export { extractProfileFromResume, createAnthropicClient, ExtractionValidationEr
 export { embedTexts, EmbeddingProviderNotImplementedError } from "./embeddings";
 export { parseSalaryFloor } from "./parseSalaryFloor";
 export type { ParsedSalaryFloor } from "./parseSalaryFloor";
+export { CareerGoalExtractionSchema } from "./careerGoalExtractionSchema";
+export type { CareerGoalExtractionDraft } from "./careerGoalExtractionSchema";
+export { extractCareerGoal, CareerGoalExtractionValidationError } from "./extractCareerGoal";
