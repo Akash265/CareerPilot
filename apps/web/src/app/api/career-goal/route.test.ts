@@ -19,9 +19,22 @@ const adminSql = postgres(
   process.env.TEST_MIGRATIONS_DATABASE_URL ??
     "postgres://career_intel:career_intel@localhost:5432/career_intel_test"
 );
+// Must match the DEFAULT_USER_ID in the @ai-career/config mock above.
+const TEST_USER_ID = "00000000-0000-0000-0000-000000000011";
 
 beforeAll(async () => {
   await migrate(drizzle(adminSql), { migrationsFolder: MIGRATIONS_FOLDER });
+  // Same pattern as packages/db/src/profileTables.rls.test.ts's beforeAll --
+  // this local Postgres container persists across runs (unlike CI's fresh
+  // service container), so tests asserting empty state (activeGoal: null,
+  // history: []) need a clean slate. Scoped to this file's own
+  // TEST_USER_ID (rather than a blanket DELETE) because vitest runs test
+  // files in parallel by default and parse/route.test.ts +
+  // confirm/route.test.ts share these same two tables under different
+  // user ids -- an unscoped DELETE here can race with and wipe rows those
+  // files' own tests just inserted. Delete the FK-child table first.
+  await adminSql`DELETE FROM career_goal_constraints WHERE user_id = ${TEST_USER_ID}`;
+  await adminSql`DELETE FROM career_goals WHERE user_id = ${TEST_USER_ID}`;
 });
 
 afterAll(async () => {
