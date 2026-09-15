@@ -1,0 +1,16 @@
+{
+  "targetRoles": ["customer support"],
+  "seniority": null,
+  "locations": [],
+  "workMode": "remote",
+  "minExperienceYears": null,
+  "employmentType": null,
+  "salaryFloorRaw": "3000 per month",
+  "visaSponsorshipRequired": null,
+  "skills": [],
+  "preferredIndustries": [],
+  "excludedIndustries": [],
+  "preferredCompanies": [],
+  "excludedCompanies": [],
+  "hardConstraints": []
+}

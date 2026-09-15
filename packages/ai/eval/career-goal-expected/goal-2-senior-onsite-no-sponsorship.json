@@ -1,0 +1,16 @@
+{
+  "targetRoles": ["backend engineer"],
+  "seniority": "senior",
+  "locations": ["San Francisco", "New York"],
+  "workMode": "onsite",
+  "minExperienceYears": 5,
+  "employmentType": null,
+  "salaryFloorRaw": null,
+  "visaSponsorshipRequired": false,
+  "skills": ["Python", "Go"],
+  "preferredIndustries": [],
+  "excludedIndustries": [],
+  "preferredCompanies": [],
+  "excludedCompanies": [],
+  "hardConstraints": []
+}

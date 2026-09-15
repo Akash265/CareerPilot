@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src eval",
-    "eval:accuracy": "dotenv -e ../../.env -- tsx eval/scoreAccuracy.ts"
+    "eval:accuracy": "dotenv -e ../../.env -- tsx eval/scoreAccuracy.ts",
+    "eval:career-goal-accuracy": "dotenv -e ../../.env -- tsx eval/scoreCareerGoalAccuracy.ts"
   },
   "dependencies": {
     "@ai-career/config": "workspace:*",

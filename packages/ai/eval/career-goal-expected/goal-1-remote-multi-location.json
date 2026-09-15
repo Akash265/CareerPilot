@@ -1,0 +1,16 @@
+{
+  "targetRoles": ["data professional"],
+  "seniority": null,
+  "locations": ["Germany", "UK"],
+  "workMode": "remote",
+  "minExperienceYears": 3,
+  "employmentType": null,
+  "salaryFloorRaw": "€60k",
+  "visaSponsorshipRequired": true,
+  "skills": [],
+  "preferredIndustries": [],
+  "excludedIndustries": ["consulting"],
+  "preferredCompanies": [],
+  "excludedCompanies": [],
+  "hardConstraints": []
+}

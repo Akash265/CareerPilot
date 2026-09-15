@@ -1,0 +1,16 @@
+{
+  "targetRoles": ["DevOps", "SRE"],
+  "seniority": null,
+  "locations": [],
+  "workMode": "any",
+  "minExperienceYears": null,
+  "employmentType": null,
+  "salaryFloorRaw": null,
+  "visaSponsorshipRequired": true,
+  "skills": ["Kubernetes", "Terraform"],
+  "preferredIndustries": [],
+  "excludedIndustries": ["gambling", "defense"],
+  "preferredCompanies": [],
+  "excludedCompanies": [],
+  "hardConstraints": []
+}

@@ -1,0 +1,16 @@
+{
+  "targetRoles": ["machine learning engineer"],
+  "seniority": null,
+  "locations": ["Canada"],
+  "workMode": "remote",
+  "minExperienceYears": null,
+  "employmentType": null,
+  "salaryFloorRaw": null,
+  "visaSponsorshipRequired": null,
+  "skills": ["PyTorch"],
+  "preferredIndustries": [],
+  "excludedIndustries": [],
+  "preferredCompanies": [],
+  "excludedCompanies": [],
+  "hardConstraints": ["must not require relocation"]
+}
