@@ -144,4 +144,32 @@ Accepted resume formats for Phase 2: PDF, DOCX, and LaTeX (`.tex`). LaTeX source
 
 ---
 
+## 2026-09-09 — Phase 3 (Career Goal Intelligence) design decisions
+
+### D21. `career_goal_constraints` is the single source of truth for search-relevant preferences — Phase 2's overlapping candidate_profiles fields and company_preferences are retired
+**Decision:** New `career_goals`/`career_goal_constraints` tables (spec §19) hold every search-relevant preference (roles, locations, work mode, salary floor, visa sponsorship, industries, preferred/excluded companies, priority terms). The Phase 2 fields covering the same ground — `candidate_profiles.work_mode_preference`, `salary_expectation_min/max/currency`, `visa_sponsorship_required`, `preferred_role_titles`, `preferred_industries`, `excluded_industries` — and the standalone `company_preferences` table are dropped in this phase's migration, along with their UI in `ReviewForm.tsx`/`ProfileDashboard.tsx` and handling in `confirmedProfileSchema.ts`/`saveProfile.ts`/`serializeProfile.ts`.
+**Alternatives considered:** (a) Keep both, accept drift — rejected: two mutable copies of "what salary floor does this user want" with no reconciliation is a data-quality bug waiting to happen (CLAUDE.md §8's own warning about inconsistent/conflicting data applies internally, not just to external job data). (b) Skip the new tables entirely and extend `candidate_profiles` in place — rejected: spec §19 and architecture.md §4's matching pipeline diagram treat "Career Goal" and "Candidate Profile" as two distinct pipeline inputs, and only a separate, versioned table supports the goal-history/explainability use case D23 below establishes.
+**Why:** Spec §6.2's Career Goal Statement is explicitly framed as *replacing* "the Rigid Preference UI" — Phase 2 built exactly that rigid UI for these fields before Phase 3's design existed to supersede it. Consolidating avoids two mutable sources of truth for the same matching input.
+**What it affects:** `packages/db/src/schema/candidateProfiles.ts` (columns dropped), `packages/db/src/schema/companyPreferences.ts` (file deleted), the migration generated from that schema diff, and every `apps/web` profile file listed above plus their tests.
+
+### D22. Career goal salary floor is deterministically parsed, extending D6 from job postings to this input
+**Decision:** The Anthropic extraction call for a career goal statement returns only a raw salary phrase (`salaryFloorRaw: string | null`, e.g. "minimum €60k") — never a number. A small deterministic function, `parseSalaryFloor`, converts that phrase to `{ amount, currency, isParsed }`, mirroring the `salary_raw`/`salary_normalized`/`salary_currency`/`is_parsed` shape architecture.md §8 already defines for `jobs.salary_*`.
+**Alternatives considered:** Letting the extraction tool call return a structured `{ amount, currency }` directly — simpler, but reintroduces on user-authored salary text exactly the hallucination/misread risk D6 was written to eliminate on job-posting salary text.
+**Why:** D6's rationale ("the LLM never extracts or estimates numeric salary data") is about the failure mode, not the source text — a short user-typed phrase is just as capable of being misread as a scraped job listing. Keeping the two salary representations symmetric (raw + normalized + currency + is_parsed) also gives Phase 4's job-salary parser a head start on shared shape, though not necessarily shared code.
+**What it affects:** `packages/ai/src/parseSalaryFloor.ts` (new), `career_goal_constraints.salary_floor_raw/normalized/currency/is_parsed` columns, the `GoalReviewForm` UI (always exposes plain amount+currency inputs so an unparsed phrase can be fixed by hand).
+
+### D23. Confirming an edited career goal always creates a new version; no in-place PATCH
+**Decision:** `career_goals`/`career_goal_constraints` rows are immutable once confirmed. Editing a confirmed goal re-enters the parse→review→confirm flow (UI prefills the textarea with the current `raw_text`), producing `version = previous + 1` and flipping `is_active` from the old row to the new one. There is no `PATCH /api/career-goal`.
+**Alternatives considered:** In-place edit, matching `PATCH /api/profile`'s pattern for the candidate profile.
+**Why:** Candidate-profile facts (Phase 2) and career-goal constraints (Phase 3) have different lifecycles — a profile is one evolving "who I am" record, while a goal is "what I'm searching for right now," which can legitimately change between searches and whose history matters for later explaining why a ranking changed between one search and the next (CLAUDE.md §6's explainability principle). In-place editing would destroy that history.
+**What it affects:** `career_goals.version`/`is_active` columns; `POST /api/career-goal/confirm`'s transaction (insert new rows, flip `is_active`, never update an existing `career_goal_constraints` row); `GoalDashboard`'s "Edit Goal" affordance re-enters `GoalForm` rather than opening an inline edit view.
+
+### D24. A `career_goals` row is created at parse time (`pending`/`parsed`/`failed`), not only on confirm
+**Decision:** `POST /api/career-goal/parse` inserts a `career_goals` row immediately (`parse_status='pending'`), updates it to `parsed` or `failed` once the Anthropic call and Zod validation resolve, and returns the draft without writing `career_goal_constraints` yet. Confirm updates that same row to `confirmation_status='confirmed'`.
+**Alternatives considered:** A stateless parse endpoint that writes nothing until confirm, with a failed parse only ever visible as a UI error.
+**Why:** CLAUDE.md §6 requires tracking model failures, not just handling them in the moment — a stateless parse would leave failed extraction attempts with no trace. This mirrors `resume_documents.extraction_status` (D15/D17), the closest existing precedent, even though (unlike a resume upload) there's no file that independently needs storing — the audit-trail motivation carries over on its own.
+**What it affects:** `career_goals.parse_status`/`parse_error` columns; `POST /api/career-goal/parse`'s transaction boundary (row insert happens before the Anthropic call, update happens after); version numbering (`version = max(version for user) + 1`, computed at parse time, before the row's own success/failure is known).
+
+---
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
