@@ -37,3 +37,9 @@ Phase 2 (Candidate Profile) complete: resume upload (PDF/DOCX/LaTeX) to
 MinIO, AI-assisted structured extraction with mandatory user review,
 normalized candidate-profile schema, and profile_facts generation +
 Voyage embeddings. Visit /profile after `pnpm dev` to use it.
+
+Phase 3 (Career Goal Intelligence) complete: natural-language Career Goal
+Statement parsing with mandatory user review, deterministic salary-floor
+parsing, and versioned career_goal_constraints — replacing the Phase 2
+rigid-preference fields it superseded. Visit /career-goal after `pnpm dev`
+to use it.

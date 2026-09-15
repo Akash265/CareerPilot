@@ -398,3 +398,89 @@ Notes:
   by deleting the active `resumeDocuments` row and its MinIO object; it does
   not touch `candidateProfiles` or any other profile table — resume-file
   deletion and confirmed-profile data are independent lifecycles.
+
+---
+
+## 5. Career Goal: enter → AI parse → review → confirm → dashboard (request-driven)
+
+Entry point (browser): `apps/web/src/app/career-goal/page.tsx` renders
+`CareerGoalClient` (`apps/web/src/app/career-goal/CareerGoalClient.tsx`), a
+client component that owns a `Stage` state machine (`loading` → `form` |
+`dashboard` | `error` → `reviewing`) and drives which of `GoalForm`,
+`GoalReviewForm`, or `GoalDashboard` is on screen. On mount it calls
+`GET /api/career-goal` to decide whether to start at `form` (no confirmed
+goal yet) or `dashboard`.
+
+### 5a. Enter + AI parse
+
+```
+GoalForm.handleSubmit()                          [apps/web/src/app/career-goal/GoalForm.tsx]
+└─ fetch POST /api/career-goal/parse  { rawText }
+   └─ route.ts: POST()                            [apps/web/src/app/api/career-goal/parse/route.ts]
+      ├─ loadEnv()                                [@ai-career/config]
+      ├─ validate: rawText non-empty, ≤ 4000 chars — 400 before any DB/AI work
+      ├─ withUserContext(db, ..., tx => ...)       [@ai-career/db]
+      │  ├─ select max(version) for this user, compute nextVersion
+      │  └─ insert career_goals {rawText, version: nextVersion,
+      │        parseStatus: "pending"} .returning id, version   (D24)
+      ├─ createAnthropicClient(env)                [@ai-career/ai]
+      ├─ extractWithRetry(anthropic, env, rawText)  [route.ts local helper]
+      │  └─ extractCareerGoal(anthropic, env, rawText)   [@ai-career/ai]
+      │     ├─ per-call random delimiter tag (`career_goal_text_<16 hex>`),
+      │     │  system prompt frames it as untrusted data (same D20 pattern
+      │     │  extractProfile.ts uses for resume text)
+      │     ├─ forced tool_choice → Zod-validated CareerGoalExtractionDraft
+      │     │  (targetRoles, seniority, locations, workMode,
+      │     │  minExperienceYears, employmentType, salaryFloorRaw [a raw
+      │     │  phrase, never a number — D22], visaSponsorshipRequired,
+      │     │  skills, preferred/excludedIndustries,
+      │     │  preferred/excludedCompanies, hardConstraints)
+      │     ├─ schema validation failure → CareerGoalExtractionValidationError
+      │     │  → extractWithRetry retries once, then propagates
+      │     └─ success → returns CareerGoalExtractionDraft
+      ├─ on extraction failure (after retry): update career_goals
+      │  {parseStatus: "failed", parseError} → respond 200
+      │  {goalId, version, status: "failed", error}  (handled outcome, D24)
+      ├─ on success: update career_goals {parseStatus: "parsed"}
+      ├─ parseSalaryFloor(extracted.salaryFloorRaw)   [@ai-career/ai]
+      │  └─ deterministic {amount, currency, isParsed} (D22) — merged into
+      │     the response draft as salaryFloorNormalized/salaryCurrency/
+      │     salaryIsParsed
+      └─ respond 200 {goalId, version, rawText, status: "parsed", draft}
+         (career_goal_constraints NOT written yet)
+```
+
+### 5b. Review + confirm
+
+```
+GoalReviewForm.handleConfirm()                   [apps/web/src/app/career-goal/GoalReviewForm.tsx]
+└─ fetch POST /api/career-goal/confirm  { goalId, constraints }
+   └─ route.ts: POST()                            [apps/web/src/app/api/career-goal/confirm/route.ts]
+      ├─ ConfirmCareerGoalSchema.safeParse(body)  [lib/career-goal/careerGoalConstraintsSchema.ts]
+      │  └─ fails → formatValidationError → 400   [lib/formatValidationError.ts]
+      └─ confirmCareerGoal(env, goalId, constraints)  [lib/career-goal/saveCareerGoal.ts]
+         └─ withUserContext(db, ..., tx => ...)
+            ├─ select career_goals by id → not found → CareerGoalNotFoundError → 404
+            ├─ update career_goals set is_active=false where is_active=true
+            │  (deactivates whichever goal was previously active)
+            ├─ insert career_goal_constraints {careerGoalId, ...all 17
+            │  structured fields} — a brand-new row every confirm (D23);
+            │  never an update to an existing career_goal_constraints row
+            └─ update career_goals set confirmationStatus="confirmed",
+               is_active=true, confirmedAt=now() where id=goalId
+```
+
+### 5c. Dashboard read
+
+```
+CareerGoalClient (on mount, and after onConfirmed())
+└─ fetch GET /api/career-goal
+   └─ route.ts: GET()                              [apps/web/src/app/api/career-goal/route.ts]
+      └─ getCareerGoalState(tx)                    [lib/career-goal/serializeCareerGoal.ts]
+         ├─ select career_goals where confirmationStatus="confirmed",
+         │  order by version desc
+         ├─ activeGoal = the row with is_active=true (its
+         │  career_goal_constraints row joined in and numeric-coerced)
+         └─ history = every confirmed goal's {id, version, rawText,
+            confirmedAt}, newest first
+```
