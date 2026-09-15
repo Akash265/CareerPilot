@@ -11,6 +11,7 @@
     "lint": "eslint src",
     "db:generate": "dotenv -e ../../.env -- drizzle-kit generate",
     "db:generate:custom": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=candidate_profile_rls",
+    "db:generate:custom:career-goal-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=career_goal_rls",
     "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate"
   },
   "dependencies": {

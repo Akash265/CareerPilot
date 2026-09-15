@@ -43,6 +43,20 @@
       "when": 1788852240668,
       "tag": "0005_natural_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789481169236,
+      "tag": "0006_free_franklin_richards",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789481215988,
+      "tag": "0007_career_goal_rls",
+      "breakpoints": true
     }
   ]
 }
