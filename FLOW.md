@@ -238,17 +238,21 @@ ReviewForm (user edits EditableProfile fields, then clicks confirm)
             └─ TRANSACTION 1 — withUserContext(db, DEFAULT_USER_ID, async tx => {
                ├─ tx.insert(candidateProfiles).values({...})
                │     .onConflictDoUpdate({target: userId, set: {...}})
-               │  (full upsert of the 1:1 scalar/preference row — D14)
+               │  (full upsert of the 1:1 scalar row — contact fields,
+               │  yearsOfExperience, workAuthorizationNotes; D14. The
+               │  preference/salary/company-list columns this table used to
+               │  carry were retired in Task 4 — superseded by
+               │  career_goal_constraints, see §5)
                ├─ tx.delete(...) on education, workExperienceBullets,
                │     workExperiences, skills, projects, certifications,
-               │     achievements, companyPreferences
+               │     achievements
                │  (full-replace strategy: every confirm/edit wipes and
                │  re-inserts these normalized child tables — same code path
                │  serves both first-time confirm and later edits, see §4d)
                ├─ re-insert loop per section (education, workExperiences
-               │     +bullets, skills, projects, certifications, achievements,
-               │     preferred/excluded companyPreferences) — each insert
-               │     .returning({id}) so the new row id can be referenced
+               │     +bullets, skills, projects, certifications, achievements)
+               │     — each insert .returning({id}) so the new row id can be
+               │     referenced
                ├─ deriveFact(sourceType, sourceId, factText)   [.../lib/
                │     profile/deriveFacts.ts] called once per atomic item
                │     (D16: facts derive from the CONFIRMED profile, not raw
@@ -305,21 +309,17 @@ ProfileClient (on mount, and again after onSaved())
       └─ withUserContext(db, DEFAULT_USER_ID, tx => serializeProfile(tx))
             [.../lib/profile/serializeProfile.ts]
          ├─ selects candidateProfiles, workExperiences,
-         │  workExperienceBullets, companyPreferences, education, skills,
-         │  projects, certifications, achievements (all scoped to the
-         │  RLS-filtered transaction)
+         │  workExperienceBullets, education, skills, projects,
+         │  certifications, achievements (all scoped to the RLS-filtered
+         │  transaction)
          ├─ returns null if no candidateProfiles row exists yet (drives
          │  ProfileClient's upload-vs-dashboard branch)
-         ├─ coerces `numeric` columns (salaryExpectationMin/Max) from the
-         │  string form postgres-js returns back to `number`, so the same
-         │  shape can round-trip straight into ConfirmedProfileSchema on a
-         │  later PATCH/confirm without a validation failure
          └─ reshapes every section into the same ID-free plain-object shape
             ConfirmedProfileSchema accepts, each list ordered by its own
             `displayOrder` column (D20) — education, workExperiences,
-            skills, projects, certifications, achievements, and
-            preferred/excludedCompanies all get an explicit `ORDER BY`;
-            workExperienceBullets already did (pre-dates D20)
+            skills, projects, certifications, and achievements all get an
+            explicit `ORDER BY`; workExperienceBullets already did (pre-dates
+            D20)
       → NextResponse.json({ profile })
 ProfileClient: body.profile truthy → setStage("dashboard")
 └─ renders <ProfileDashboard profile={editableProfile} onEdit={...} />
@@ -392,8 +392,12 @@ Notes:
   Zod-validated server-side before persistence). `serializeProfile`'s output
   is shaped to satisfy `ConfirmedProfileSchema` directly so the dashboard's
   fetched profile can be handed straight back into `ReviewForm` and then
-  `POST /api/profile/confirm` unchanged (see DECISIONS.md D19's note on the
-  `numeric`-to-`number` coercion needed for this round-trip).
+  `POST /api/profile/confirm` unchanged. (Note: `candidate_profiles` today
+  only carries `contact`, `yearsOfExperience`, and `workAuthorizationNotes`
+  as scalar fields — the salary/company-preference columns and the whole
+  `company_preferences` table referenced in earlier revisions of this doc
+  were retired in Task 4; see DECISIONS.md and §5 for their replacement,
+  `career_goal_constraints`.)
 - `DELETE /api/profile/resume` (same route file as §4a's `POST`) deactivates
   by deleting the active `resumeDocuments` row and its MinIO object; it does
   not touch `candidateProfiles` or any other profile table — resume-file
