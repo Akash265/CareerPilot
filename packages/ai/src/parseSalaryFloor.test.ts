@@ -45,4 +45,36 @@ describe("parseSalaryFloor", () => {
   it("returns unparsed for a bare per-month number with no currency", () => {
     expect(parseSalaryFloor("3000 per month")).toEqual({ amount: 3000, currency: null, isParsed: false });
   });
+
+  it("parses European dot-thousands notation", () => {
+    expect(parseSalaryFloor("€60.000")).toEqual({ amount: 60000, currency: "EUR", isParsed: true });
+  });
+
+  it("parses dot-thousands notation with German 'per year' phrasing (no per-month signal)", () => {
+    expect(parseSalaryFloor("minimum €60.000 pro Jahr")).toEqual({
+      amount: 60000,
+      currency: "EUR",
+      isParsed: true,
+    });
+  });
+
+  it("parses dot-thousands notation without a currency symbol", () => {
+    expect(parseSalaryFloor("at least 90.000 EUR")).toEqual({ amount: 90000, currency: "EUR", isParsed: true });
+  });
+
+  it("parses multi-group dot-thousands notation", () => {
+    expect(parseSalaryFloor("€1.234.000")).toEqual({ amount: 1234000, currency: "EUR", isParsed: true });
+  });
+
+  it("still treats a real decimal point as a decimal, not thousands notation", () => {
+    expect(parseSalaryFloor("€60.5k")).toEqual({ amount: 60500, currency: "EUR", isParsed: true });
+  });
+
+  it("returns unparsed for a genuinely ambiguous multi-dot number", () => {
+    expect(parseSalaryFloor("€1.23.456")).toEqual({ amount: null, currency: "EUR", isParsed: false });
+  });
+
+  it("returns unparsed for a dot followed by an unusual number of digits", () => {
+    expect(parseSalaryFloor("€60.1234")).toEqual({ amount: null, currency: "EUR", isParsed: false });
+  });
 });
