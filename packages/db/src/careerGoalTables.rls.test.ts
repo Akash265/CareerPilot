@@ -34,8 +34,14 @@ beforeAll(async () => {
   await adminSql.unsafe(
     `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`
   );
-  await adminSql`DELETE FROM career_goal_constraints`;
-  await adminSql`DELETE FROM career_goals`;
+  // Scoped to this file's own USER_A/USER_B (rather than a blanket DELETE)
+  // because turbo/vitest run packages/db and apps/web's test suites
+  // concurrently against the same shared local/CI test database -- an
+  // unscoped DELETE here can race with and wipe rows that apps/web's
+  // career-goal route tests just inserted under their own fixed user id.
+  // Delete the FK-child table first.
+  await adminSql`DELETE FROM career_goal_constraints WHERE user_id IN (${USER_A}, ${USER_B})`;
+  await adminSql`DELETE FROM career_goals WHERE user_id IN (${USER_A}, ${USER_B})`;
 });
 
 afterAll(async () => {
