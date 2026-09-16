@@ -96,17 +96,46 @@ describe("POST /api/career-goal/confirm", () => {
     expect(constraintsRow.target_roles).toEqual(["Data Engineer"]);
   });
 
-  it("deactivates the previously active goal when a new one is confirmed", async () => {
+  it("deactivates the previously active goal when a new one is confirmed, and preserves the old constraints row (D23)", async () => {
     const firstGoalId = await insertPendingGoal("First goal", 10);
-    await POST(makeRequest({ goalId: firstGoalId, constraints: validConstraints }));
+    await POST(
+      makeRequest({
+        goalId: firstGoalId,
+        constraints: { ...validConstraints, targetRoles: ["First Role"] },
+      })
+    );
 
     const secondGoalId = await insertPendingGoal("Second goal", 11);
-    await POST(makeRequest({ goalId: secondGoalId, constraints: validConstraints }));
+    await POST(
+      makeRequest({
+        goalId: secondGoalId,
+        constraints: { ...validConstraints, targetRoles: ["Second Role"] },
+      })
+    );
 
     const [firstRow] = await adminSql`SELECT is_active FROM career_goals WHERE id = ${firstGoalId}`;
     const [secondRow] = await adminSql`SELECT is_active FROM career_goals WHERE id = ${secondGoalId}`;
     expect(firstRow.is_active).toBe(false);
     expect(secondRow.is_active).toBe(true);
+
+    // D23: confirm always INSERTs a new career_goal_constraints row rather
+    // than updating an existing one, so the first goal's row must survive
+    // untouched (both by content and by row count) after the second confirm.
+    const [{ count }] = await adminSql`
+      SELECT count(*)::int AS count FROM career_goal_constraints
+      WHERE career_goal_id IN (${firstGoalId}, ${secondGoalId})
+    `;
+    expect(count).toBe(2);
+
+    const [firstConstraintsRow] = await adminSql`
+      SELECT target_roles FROM career_goal_constraints WHERE career_goal_id = ${firstGoalId}
+    `;
+    expect(firstConstraintsRow.target_roles).toEqual(["First Role"]);
+
+    const [secondConstraintsRow] = await adminSql`
+      SELECT target_roles FROM career_goal_constraints WHERE career_goal_id = ${secondGoalId}
+    `;
+    expect(secondConstraintsRow.target_roles).toEqual(["Second Role"]);
   });
 
   it("rejects a malformed payload with 400 and a human-readable error", async () => {
