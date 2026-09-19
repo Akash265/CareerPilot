@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { loadEnv } from "@ai-career/config";
+import { readJsonBody } from "../../../../lib/readJsonBody";
 import { createDbClient, closeDbClient, withUserContext, schema } from "@ai-career/db";
 import {
   extractCareerGoal,
@@ -29,8 +30,13 @@ async function extractWithRetry(
 
 export async function POST(request: Request) {
   const env = loadEnv();
-  const body = await request.json();
-  const rawText = typeof body?.rawText === "string" ? body.rawText.trim() : "";
+  const jsonBody = await readJsonBody(request);
+  if (!jsonBody.ok) return jsonBody.response;
+  const rawInput =
+    jsonBody.body !== null && typeof jsonBody.body === "object"
+      ? (jsonBody.body as { rawText?: unknown }).rawText
+      : undefined;
+  const rawText = typeof rawInput === "string" ? rawInput.trim() : "";
 
   if (rawText === "") {
     return NextResponse.json({ error: "Career goal statement cannot be empty" }, { status: 400 });

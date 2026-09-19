@@ -155,4 +155,12 @@ describe("GET/PATCH /api/profile", () => {
       "Skill B",
     ]);
   });
+
+  it("rejects a PATCH body that is not valid JSON with 400", async () => {
+    const res = await PATCH(new Request("http://localhost/api/profile", { method: "PATCH", body: "{not json" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/valid JSON/i);
+  });
 });

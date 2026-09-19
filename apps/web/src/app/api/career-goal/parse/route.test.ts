@@ -120,6 +120,36 @@ describe("POST /api/career-goal/parse", () => {
     expect(second.version).toBe(first.version + 1);
   });
 
+  it("rejects a request body that is not valid JSON with 400 before touching the database or Anthropic", async () => {
+    const [{ count: before }] = await adminSql`
+      SELECT count(*)::int AS count FROM career_goals WHERE user_id = ${TEST_USER_ID}
+    `;
+
+    const res = await POST(
+      new Request("http://localhost/api/career-goal/parse", { method: "POST", body: "{not json" })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/valid JSON/i);
+    expect(extractCareerGoal).not.toHaveBeenCalled();
+    const [{ count: after }] = await adminSql`
+      SELECT count(*)::int AS count FROM career_goals WHERE user_id = ${TEST_USER_ID}
+    `;
+    expect(after).toBe(before);
+  });
+
+  it.each(["null", "[]", '"just a string"', "42"])(
+    "rejects a JSON body of %s (no rawText) with 400",
+    async (rawBody) => {
+      const res = await POST(
+        new Request("http://localhost/api/career-goal/parse", { method: "POST", body: rawBody })
+      );
+      expect(res.status).toBe(400);
+      expect(extractCareerGoal).not.toHaveBeenCalled();
+    }
+  );
+
   it("rejects an empty rawText with 400 before touching the database or Anthropic", async () => {
     const res = await POST(makeRequest({ rawText: "   " }));
     const body = await res.json();

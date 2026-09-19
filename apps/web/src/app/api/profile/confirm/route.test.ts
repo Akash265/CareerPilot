@@ -110,4 +110,14 @@ describe("POST /api/profile/confirm", () => {
     expect(rowAfterRetry.embedding).not.toBeNull();
     expect(rowAfterRetry.embedding_model).toBe("voyage-3.5");
   });
+
+  it("rejects a body that is not valid JSON with 400", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/profile/confirm", { method: "POST", body: "{not json" })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/valid JSON/i);
+  });
 });

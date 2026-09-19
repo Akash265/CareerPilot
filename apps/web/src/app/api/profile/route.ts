@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadEnv } from "@ai-career/config";
 import { createDbClient, closeDbClient, withUserContext } from "@ai-career/db";
 import { ConfirmedProfileSchema, formatValidationError } from "../../../lib/profile/confirmedProfileSchema";
+import { readJsonBody } from "../../../lib/readJsonBody";
 import { saveConfirmedProfile } from "../../../lib/profile/saveProfile";
 import { serializeProfile } from "../../../lib/profile/serializeProfile";
 
@@ -18,8 +19,9 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   const env = loadEnv();
-  const body = await request.json();
-  const parsed = ConfirmedProfileSchema.safeParse(body);
+  const jsonBody = await readJsonBody(request);
+  if (!jsonBody.ok) return jsonBody.response;
+  const parsed = ConfirmedProfileSchema.safeParse(jsonBody.body);
   if (!parsed.success) {
     return NextResponse.json({ error: formatValidationError(parsed.error) }, { status: 400 });
   }

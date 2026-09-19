@@ -69,13 +69,26 @@ const validConstraints = {
   hardConstraints: [],
 };
 
-async function insertPendingGoal(rawText: string, version: number): Promise<string> {
+async function insertGoal(
+  rawText: string,
+  version: number,
+  parseStatus: "pending" | "parsed" | "failed"
+): Promise<string> {
   const [row] = await adminSql`
     INSERT INTO career_goals (user_id, raw_text, version, parse_status)
-    VALUES ('00000000-0000-0000-0000-000000000010', ${rawText}, ${version}, 'parsed')
+    VALUES (${TEST_USER_ID}, ${rawText}, ${version}, ${parseStatus})
     RETURNING id
   `;
   return row.id;
+}
+
+const insertPendingGoal = (rawText: string, version: number) => insertGoal(rawText, version, "parsed");
+
+async function constraintsCount(goalId: string): Promise<number> {
+  const [{ count }] = await adminSql`
+    SELECT count(*)::int AS count FROM career_goal_constraints WHERE career_goal_id = ${goalId}
+  `;
+  return count;
 }
 
 describe("POST /api/career-goal/confirm", () => {
@@ -151,5 +164,79 @@ describe("POST /api/career-goal/confirm", () => {
       makeRequest({ goalId: "00000000-0000-0000-0000-000000000099", constraints: validConstraints })
     );
     expect(res.status).toBe(404);
+  });
+
+  it("rejects a request body that is not valid JSON with 400", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/career-goal/confirm", { method: "POST", body: "{not json" })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/valid JSON/i);
+  });
+
+  it("rejects an empty request body with 400", async () => {
+    const res = await POST(new Request("http://localhost/api/career-goal/confirm", { method: "POST" }));
+    expect(res.status).toBe(400);
+  });
+
+  describe("goal state checks", () => {
+    it.each(["failed", "pending"] as const)(
+      "rejects a goal whose parse status is %s with 409 and changes nothing",
+      async (parseStatus) => {
+        const activeGoalId = await insertGoal("Currently active goal", 30, "parsed");
+        await POST(makeRequest({ goalId: activeGoalId, constraints: validConstraints }));
+        const goalId = await insertGoal("Unusable goal", 31, parseStatus);
+
+        const res = await POST(makeRequest({ goalId, constraints: validConstraints }));
+        const body = await res.json();
+
+        expect(res.status).toBe(409);
+        expect(body.error).toMatch(/not parsed successfully/i);
+
+        const [goalRow] = await adminSql`SELECT confirmation_status, is_active FROM career_goals WHERE id = ${goalId}`;
+        expect(goalRow.confirmation_status).toBe("draft");
+        expect(goalRow.is_active).toBe(false);
+        expect(await constraintsCount(goalId)).toBe(0);
+
+        const [activeRow] = await adminSql`SELECT is_active FROM career_goals WHERE id = ${activeGoalId}`;
+        expect(activeRow.is_active).toBe(true);
+      }
+    );
+
+    it("rejects re-confirming an already-confirmed goal with 409 and leaves it untouched", async () => {
+      const goalId = await insertPendingGoal("Confirm me once", 40);
+      const first = await POST(
+        makeRequest({ goalId, constraints: { ...validConstraints, targetRoles: ["Original Role"] } })
+      );
+      expect(first.status).toBe(200);
+
+      const second = await POST(
+        makeRequest({ goalId, constraints: { ...validConstraints, targetRoles: ["Overwrite Attempt"] } })
+      );
+      const body = await second.json();
+
+      expect(second.status).toBe(409);
+      expect(body.error).toMatch(/already confirmed/i);
+      expect(await constraintsCount(goalId)).toBe(1);
+      const [constraintsRow] = await adminSql`SELECT target_roles FROM career_goal_constraints WHERE career_goal_id = ${goalId}`;
+      expect(constraintsRow.target_roles).toEqual(["Original Role"]);
+      const [goalRow] = await adminSql`SELECT confirmation_status, is_active FROM career_goals WHERE id = ${goalId}`;
+      expect(goalRow.confirmation_status).toBe("confirmed");
+      expect(goalRow.is_active).toBe(true);
+    });
+
+    it("lets exactly one of two simultaneous confirms of the same goal succeed and answers the other with 409, never 500", async () => {
+      const goalId = await insertPendingGoal("Double click", 50);
+
+      const responses = await Promise.all([
+        POST(makeRequest({ goalId, constraints: validConstraints })),
+        POST(makeRequest({ goalId, constraints: validConstraints })),
+      ]);
+
+      expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+      expect(await constraintsCount(goalId)).toBe(1);
+    });
   });
 });
