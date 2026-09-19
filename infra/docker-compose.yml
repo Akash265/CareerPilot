@@ -29,7 +29,10 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # The minio/minio repository was removed from Docker Hub, so `docker pull`
+    # fails there (exit 125 in CI). Quay still serves it; pinned to the release
+    # this project was built and tested against rather than a moving `latest`.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
