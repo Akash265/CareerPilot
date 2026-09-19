@@ -197,9 +197,9 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
       │     │  propagates a second failure
       │     └─ success → returns ResumeExtractionDraft (contact, education,
       │        workExperiences[+bullets], skills, projects, certifications,
-      │        achievements — no preferences/salary/company lists; those are
-      │        review-only fields with no signal in resume text, defaulted
-      │        by ReviewForm's `toEditableProfile`)
+      │        achievements — no yearsOfExperience or workAuthorizationNotes;
+      │        those are review-only fields with no signal in resume text,
+      │        defaulted to null by ReviewForm's `toEditableProfile`)
       ├─ on success: withUserContext(... set extractionStatus:"extracted")
       │  → NextResponse.json({ resumeDocumentId, status:"extracted", draft })
       │  (draft is NOT persisted to any profile table here — D15's mandatory
@@ -216,8 +216,8 @@ UploadForm.handleUpload()                    [apps/web/src/app/profile/UploadFor
          UI entry point, not just API support.
 UploadForm receives { status:"extracted", draft } → calls onExtracted(draft)
 └─ ProfileClient: toEditableProfile(draft)   [apps/web/src/app/profile/ReviewForm.tsx]
-   └─ merges the draft with zero-valued defaults for review-only fields
-      (preferences, salary, visa, company lists) → EditableProfile
+   └─ merges the draft with null defaults for the review-only fields
+      (yearsOfExperience, workAuthorizationNotes) → EditableProfile
    └─ setStage("reviewing")  → renders <ReviewForm initialProfile=... />
 ```
 
@@ -229,6 +229,8 @@ ReviewForm (user edits EditableProfile fields, then clicks confirm)
    └─ fetch POST /api/profile/confirm  (JSON body = the full EditableProfile)
       └─ route.ts: POST()                    [.../api/profile/confirm/route.ts]
          ├─ loadEnv()
+         ├─ readJsonBody(request)   [.../lib/readJsonBody.ts] — a body that
+         │     is not valid JSON is a 400 (PATCH /api/profile does the same)
          ├─ ConfirmedProfileSchema.safeParse(body)   [.../lib/profile/
          │     confirmedProfileSchema.ts] — Zod validation; 400 on failure
          └─ saveConfirmedProfile(env, parsed.data)   [.../lib/profile/
@@ -342,15 +344,15 @@ User edits fields → handleConfirm() → toPayload(profile) → POST
 ```
 
 `ReviewForm` renders an editable control for every field of
-`EditableProfile` — contact (5 text inputs), preferences (number inputs, a
-work-mode `<select>`, a visa checkbox, a notes textarea, and 5
-comma-separated string-list inputs), plus add/remove repeating groups for
+`EditableProfile` — contact (5 text inputs), preferences (a
+years-of-experience number input and a work-authorization notes textarea),
+plus add/remove repeating groups for
 education, work experience (with a one-bullet-per-line textarea), skills,
 projects, certifications and achievements. Conversion happens at the edges:
 `orNull`/`orNullNumber` on each change (blank input ⇒ `null`), and a single
 `toPayload()` pass immediately before `fetch` that strips the placeholder
-empty entries the comma-list and bullet editors keep around so typing a
-separator isn't swallowed by the controlled input. `ProfileDashboard`
+empty entries the bullet and achievement editors keep around so a newline
+the user just typed isn't swallowed by the controlled input. `ProfileDashboard`
 mirrors the same field set read-only.
 
 ### 4e. Postgres connection-pool lifecycle (cross-cutting)
@@ -409,11 +411,14 @@ Notes:
 
 Entry point (browser): `apps/web/src/app/career-goal/page.tsx` renders
 `CareerGoalClient` (`apps/web/src/app/career-goal/CareerGoalClient.tsx`), a
-client component that owns a `Stage` state machine (`loading` → `form` |
-`dashboard` | `error` → `reviewing`) and drives which of `GoalForm`,
-`GoalReviewForm`, or `GoalDashboard` is on screen. On mount it calls
-`GET /api/career-goal` to decide whether to start at `form` (no confirmed
-goal yet) or `dashboard`.
+client component that owns a `Stage` state machine and drives which of
+`GoalForm`, `GoalReviewForm`, or `GoalDashboard` is on screen. On mount it
+calls `GET /api/career-goal` and moves `loading` → `form` (no confirmed goal
+yet), `dashboard`, or `error` (whose Retry button returns to `loading`).
+A successful parse moves `form` → `reviewing`; after a confirm the client
+re-fetches the goal state and lands on `dashboard`; "Edit Goal" moves
+`dashboard` → `form` with the current raw text prefilled (D23 — an edit is a
+new parse, never an in-place change).
 
 ### 5a. Enter + AI parse
 
@@ -422,7 +427,10 @@ GoalForm.handleSubmit()                          [apps/web/src/app/career-goal/G
 └─ fetch POST /api/career-goal/parse  { rawText }
    └─ route.ts: POST()                            [apps/web/src/app/api/career-goal/parse/route.ts]
       ├─ loadEnv()                                [@ai-career/config]
-      ├─ validate: rawText non-empty, ≤ 4000 chars — 400 before any DB/AI work
+      ├─ readJsonBody(request)                     [lib/readJsonBody.ts]
+      │  └─ body not parseable as JSON → 400 (never a bare 500)
+      ├─ validate: rawText a non-empty string, ≤ 4000 chars — 400 before any
+      │  DB/AI work (a JSON body with no string rawText counts as empty)
       ├─ withUserContext(db, ..., tx => ...)       [@ai-career/db]
       │  ├─ select max(version) for this user, compute nextVersion
       │  └─ insert career_goals {rawText, version: nextVersion,
@@ -447,9 +455,14 @@ GoalForm.handleSubmit()                          [apps/web/src/app/career-goal/G
       │  {goalId, version, status: "failed", error}  (handled outcome, D24)
       ├─ on success: update career_goals {parseStatus: "parsed"}
       ├─ parseSalaryFloor(extracted.salaryFloorRaw)   [@ai-career/ai]
-      │  └─ deterministic {amount, currency, isParsed} (D22) — merged into
-      │     the response draft as salaryFloorNormalized/salaryCurrency/
-      │     salaryIsParsed
+      │  └─ deterministic {amount, currency, isParsed} (D22, D25) — merged
+      │     into the response draft as salaryFloorNormalized/salaryCurrency/
+      │     salaryIsParsed. isParsed is true only when exactly one currency
+      │     is named, the number's grouping/decimal format is unambiguous,
+      │     no scale word (million, lakh, ...) or non-annual period (hour,
+      │     day, week, month) contradicts it, and the amount is ≥ 1000;
+      │     anything else keeps the pieces it found but isParsed: false, so
+      │     GoalReviewForm shows its "please confirm" warning
       └─ respond 200 {goalId, version, rawText, status: "parsed", draft}
          (career_goal_constraints NOT written yet)
 ```
@@ -460,11 +473,18 @@ GoalForm.handleSubmit()                          [apps/web/src/app/career-goal/G
 GoalReviewForm.handleConfirm()                   [apps/web/src/app/career-goal/GoalReviewForm.tsx]
 └─ fetch POST /api/career-goal/confirm  { goalId, constraints }
    └─ route.ts: POST()                            [apps/web/src/app/api/career-goal/confirm/route.ts]
+      ├─ readJsonBody(request) → not valid JSON → 400   [lib/readJsonBody.ts]
       ├─ ConfirmCareerGoalSchema.safeParse(body)  [lib/career-goal/careerGoalConstraintsSchema.ts]
       │  └─ fails → formatValidationError → 400   [lib/formatValidationError.ts]
       └─ confirmCareerGoal(env, goalId, constraints)  [lib/career-goal/saveCareerGoal.ts]
          └─ withUserContext(db, ..., tx => ...)
-            ├─ select career_goals by id → not found → CareerGoalNotFoundError → 404
+            ├─ select career_goals by id FOR UPDATE (row lock: two
+            │  simultaneous confirms of one goal serialize)
+            │  ├─ not found → CareerGoalNotFoundError → 404
+            │  ├─ confirmationStatus already "confirmed" →
+            │  │  CareerGoalStateError("already-confirmed") → 409
+            │  └─ parseStatus not "parsed" (failed/pending) →
+            │     CareerGoalStateError("not-parsed") → 409  (D26)
             ├─ update career_goals set is_active=false where is_active=true
             │  (deactivates whichever goal was previously active)
             ├─ insert career_goal_constraints {careerGoalId, ...all 17
@@ -484,7 +504,8 @@ CareerGoalClient (on mount, and after onConfirmed())
          ├─ select career_goals where confirmationStatus="confirmed",
          │  order by version desc
          ├─ activeGoal = the row with is_active=true (its
-         │  career_goal_constraints row joined in and numeric-coerced)
+         │  career_goal_constraints row fetched by a second select and
+         │  numeric-coerced)
          └─ history = every confirmed goal's {id, version, rawText,
             confirmedAt}, newest first
 ```
