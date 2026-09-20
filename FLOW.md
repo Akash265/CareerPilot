@@ -415,10 +415,13 @@ client component that owns a `Stage` state machine and drives which of
 `GoalForm`, `GoalReviewForm`, or `GoalDashboard` is on screen. On mount it
 calls `GET /api/career-goal` and moves `loading` → `form` (no confirmed goal
 yet), `dashboard`, or `error` (whose Retry button returns to `loading`).
-A successful parse moves `form` → `reviewing`; after a confirm the client
-re-fetches the goal state and lands on `dashboard`; "Edit Goal" moves
-`dashboard` → `form` with the current raw text prefilled (D23 — an edit is a
-new parse, never an in-place change).
+A successful parse moves `form` → `reviewing`; "Edit my statement" on the
+review screen moves `reviewing` → `form` with the statement prefilled and
+nothing saved; after a confirm the client re-fetches the goal state and lands
+on `dashboard`; "Edit Goal" moves `dashboard` → `form` with the current raw
+text prefilled (D23 — an edit is a new parse, never an in-place change).
+The home page (`apps/web/src/app/page.tsx`) links to `/profile` and
+`/career-goal`, the two steps of the user journey.
 
 ### 5a. Enter + AI parse
 
@@ -432,6 +435,9 @@ GoalForm.handleSubmit()                          [apps/web/src/app/career-goal/G
       ├─ validate: rawText a non-empty string, ≤ 4000 chars — 400 before any
       │  DB/AI work (a JSON body with no string rawText counts as empty)
       ├─ withUserContext(db, ..., tx => ...)       [@ai-career/db]
+      │  ├─ lockUserCareerGoals(tx, userId)        [lib/career-goal/lockUserCareerGoals.ts]
+      │  │  └─ pg_advisory_xact_lock, held to commit: simultaneous parses
+      │  │     cannot read the same max(version) and share a version (D29)
       │  ├─ select max(version) for this user, compute nextVersion
       │  └─ insert career_goals {rawText, version: nextVersion,
       │        parseStatus: "pending"} .returning id, version   (D24)
@@ -443,8 +449,9 @@ GoalForm.handleSubmit()                          [apps/web/src/app/career-goal/G
       │     │  extractProfile.ts uses for resume text)
       │     ├─ forced tool_choice → Zod-validated CareerGoalExtractionDraft
       │     │  (targetRoles, seniority, locations, workMode,
-      │     │  minExperienceYears, employmentType, salaryFloorRaw [a raw
-      │     │  phrase, never a number — D22], visaSponsorshipRequired,
+      │     │  minExperienceYears, employmentType, salaryFloorRaw and
+      │     │  salaryTargetRaw [raw phrases, never numbers — D22; the
+      │     │  minimum vs the preferred/ideal pay, D28], visaSponsorshipRequired,
       │     │  skills, preferred/excludedIndustries,
       │     │  preferred/excludedCompanies, hardConstraints)
       │     ├─ schema validation failure → CareerGoalExtractionValidationError
@@ -452,12 +459,19 @@ GoalForm.handleSubmit()                          [apps/web/src/app/career-goal/G
       │     └─ success → returns CareerGoalExtractionDraft
       ├─ on extraction failure (after retry): update career_goals
       │  {parseStatus: "failed", parseError} → respond 200
-      │  {goalId, version, status: "failed", error}  (handled outcome, D24)
+      │  {goalId, version, status: "failed", error}  (handled outcome, D24).
+      │  parseError is the validation message for a schema failure, but only
+      │  the error CLASS name (e.g. "APIConnectionError") for anything else —
+      │  an SDK/network message can echo the user's goal text (D29)
       ├─ on success: update career_goals {parseStatus: "parsed"}
-      ├─ parseSalaryFloor(extracted.salaryFloorRaw)   [@ai-career/ai]
-      │  └─ deterministic {amount, currency, isParsed} (D22, D25) — merged
-      │     into the response draft as salaryFloorNormalized/salaryCurrency/
-      │     salaryIsParsed. isParsed is true only when exactly one currency
+      ├─ parseSalaryFloor(extracted.salaryFloorRaw) and
+      │  parseSalaryFloor(extracted.salaryTargetRaw)   [@ai-career/ai]
+      │  └─ deterministic {amount, currency, isParsed} for each (D22, D25) —
+      │     merged into the response draft as salaryFloorNormalized/
+      │     salaryCurrency/salaryIsParsed and salaryTargetNormalized/
+      │     salaryTargetCurrency/salaryTargetIsParsed. The draft is typed as
+      │     CareerGoalConstraintsInput, so it cannot drift from what confirm
+      │     accepts. isParsed is true only when exactly one currency
       │     is named, the number's grouping/decimal format is unambiguous,
       │     no scale word (million, lakh, ...) or non-annual period (hour,
       │     day, week, month) contradicts it, and the amount is ≥ 1000;
@@ -476,8 +490,13 @@ GoalReviewForm.handleConfirm()                   [apps/web/src/app/career-goal/G
       ├─ readJsonBody(request) → not valid JSON → 400   [lib/readJsonBody.ts]
       ├─ ConfirmCareerGoalSchema.safeParse(body)  [lib/career-goal/careerGoalConstraintsSchema.ts]
       │  └─ fails → formatValidationError → 400   [lib/formatValidationError.ts]
+      │     (includes: a preferred salary lower than the minimum salary in
+      │     the same currency is rejected, D28)
       └─ confirmCareerGoal(env, goalId, constraints)  [lib/career-goal/saveCareerGoal.ts]
          └─ withUserContext(db, ..., tx => ...)
+            ├─ lockUserCareerGoals(tx, userId) — simultaneous confirms of
+            │  ANY of this user's goals serialize, so two goals can never
+            │  both end up active (D29)
             ├─ select career_goals by id FOR UPDATE (row lock: two
             │  simultaneous confirms of one goal serialize)
             │  ├─ not found → CareerGoalNotFoundError → 404
@@ -487,8 +506,8 @@ GoalReviewForm.handleConfirm()                   [apps/web/src/app/career-goal/G
             │     CareerGoalStateError("not-parsed") → 409  (D26)
             ├─ update career_goals set is_active=false where is_active=true
             │  (deactivates whichever goal was previously active)
-            ├─ insert career_goal_constraints {careerGoalId, ...all 17
-            │  structured fields} — a brand-new row every confirm (D23);
+            ├─ insert career_goal_constraints {careerGoalId, ...all 21
+            │  structured fields, incl. the preferred salary} — a brand-new row every confirm (D23);
             │  never an update to an existing career_goal_constraints row
             └─ update career_goals set confirmationStatus="confirmed",
                is_active=true, confirmedAt=now() where id=goalId
@@ -505,7 +524,9 @@ CareerGoalClient (on mount, and after onConfirmed())
          │  order by version desc
          ├─ activeGoal = the row with is_active=true (its
          │  career_goal_constraints row fetched by a second select and
-         │  numeric-coerced)
+         │  numeric-coerced; an active goal with no constraints row throws —
+         │  it cannot occur short of tampering, and "no goal" would look
+         │  like data loss)
          └─ history = every confirmed goal's {id, version, rawText,
             confirmedAt}, newest first
 ```

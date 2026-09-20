@@ -194,4 +194,28 @@ Accepted resume formats for Phase 2: PDF, DOCX, and LaTeX (`.tex`). LaTeX source
 
 ---
 
+## 2026-09-20 — Phase 3 completeness audit
+
+An audit of Phase 3 against the original spec (§6.2, §19, §21), the approved design doc and `CLAUDE.md` found that the phase had been declared complete while it was not. The decisions below close those gaps; the design doc's section 12 lists them alongside the smaller fixes.
+
+### D28. Preferred compensation is captured next to the salary floor, and may not be below it
+**Decision:** Spec §6.2 lists "salary floor and preferred compensation", but the design and the first build captured only the floor, so a statement like "minimum €60k, ideally €80k" silently lost the €80k. `career_goal_constraints` gains `salary_target_raw` / `salary_target_normalized` / `salary_target_currency` / `salary_target_is_parsed` (migration 0008, additive), the extraction tool gains `salaryTargetRaw`, and the prompt tells the model the minimum ("minimum", "at least", a single unqualified figure) goes in `salaryFloorRaw` and only pay described as preferred/ideal/target goes in `salaryTargetRaw`, never the same phrase in both. Both phrases go through the same deterministic `parseSalaryFloor` (D22, D25). The confirm schema rejects a preferred salary lower than the minimum when both are known and in the same currency.
+**Alternatives considered:** (1) Store a min/max range on one salary object — rejected: "floor" and "preferred" are different intents, and a range would blur them into the lower-bound semantics `parseSalaryFloor` already uses for ranges. (2) A single shared currency column — rejected: the two phrases can name different currencies and each must stay independently verifiable in review. (3) Leave the gap and treat "preferred compensation" as a note in `hardConstraints` — rejected: it is a named §6.2 field and the matching engine (Phase 5) needs it as data, not prose.
+**Why:** The spec is the authority; the design omitted a listed field. The below-minimum rule stops a swapped or mistyped pair — the kind of mistake the review step exists to catch — from becoming the matching contract.
+**What it affects:** `packages/db/src/schema/careerGoalConstraints.ts` and migration 0008; `careerGoalExtractionSchema.ts`, `extractCareerGoal.ts` (schema, tool JSON schema, prompt); the parse/confirm/GET routes and their lib; `GoalReviewForm`/`GoalDashboard`; eval fixtures (two new, including the spec's own §6.2 and "Exclude: Accenture, Deloitte, Amazon" examples). `parseSalaryFloor` keeps its name although it now also parses the preferred salary; renaming it would touch every caller for no behavior change.
+
+### D29. Goal versions and the active flag are serialized by a per-user advisory lock; failures record the error class, not the message
+**Decision:** Every transaction that allocates a goal version (parse) or changes which goal is active (confirm) first takes `pg_advisory_xact_lock(hashtext('career_goals'), hashtext(<user id>))`. Separately, `parse_error` stores the validation message for a schema failure but only `error.constructor.name` for any other failure, and `getCareerGoalState` throws when an active goal has no constraints row rather than returning "no goal".
+**Alternatives considered:** (1) A unique index on `(user_id, version)` and a partial unique index on `(user_id) WHERE is_active` — rejected as the mechanism because a violation would surface as a 500 the routes would then have to catch and retry, and creating the indexes would fail on any database holding duplicate rows; the lock removes the race outright and the indexes remain a possible later backstop. (2) Retrying on a unique violation — rejected as more code than the lock for the same guarantee.
+**Why:** The lock is needed because nothing in the schema enforces either invariant: six parallel parses produced only two distinct versions, and two parallel confirms of different goals left two active. Recording only the class name matters because an SDK or network error message can echo the request, which is the user's career goal text (design §8: "error class only").
+**What it affects:** `apps/web/src/lib/career-goal/lockUserCareerGoals.ts` (new), `saveCareerGoal.ts`, `serializeCareerGoal.ts`, the parse route; tests that fail without the lock (parallel parses, parallel confirms of different goals).
+
+### D30. The user journey is reachable and recoverable from the UI
+**Decision:** The home page links to `/profile` and `/career-goal`; the review screen has an "Edit my statement" button that returns to the form with the text intact and saves nothing; the dashboard shows the confirmed date and dated history (the design's §7 required it; only the type existed).
+**Alternatives considered:** Treating these as later polish — rejected: without the links neither step of spec §5's journey could be found, and without a way back a bad parse meant editing about fifteen fields or losing the draft by reloading.
+**Why:** Found by driving the built app in a real browser against a fake Anthropic endpoint (the SDK reads `ANTHROPIC_BASE_URL`), the first end-to-end check of the UI; component tests had never exercised the cross-component flow.
+**What it affects:** `apps/web/src/app/page.tsx`, `career-goal/GoalReviewForm.tsx`, `CareerGoalClient.tsx`, `GoalDashboard.tsx`, and a component-level lifecycle test.
+
+---
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

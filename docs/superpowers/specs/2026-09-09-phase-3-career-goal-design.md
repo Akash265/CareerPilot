@@ -1,6 +1,6 @@
 # Phase 3 Design — Career Goal Intelligence
 
-Status: **design approved, not yet implemented.** See `docs/superpowers/plans/` for the implementation plan once written. See `DECISIONS.md` (D21–D24) for the rationale behind each choice below.
+Status: **implemented** (Phase 3 complete). The design below is kept as approved; section 12 lists where the built system differs from it or goes beyond it. Plan: `docs/superpowers/plans/2026-09-15-phase-3-career-goal-intelligence.md`. Rationale for each choice: `DECISIONS.md` D21–D30.
 
 ## 1. Scope
 
@@ -54,6 +54,10 @@ All tables are `packages/db/src/schema/*.ts` Drizzle definitions, RLS-enabled pe
 | salary_floor_normalized | numeric, nullable | deterministically parsed (§4 below) |
 | salary_currency | text, nullable | ISO 4217 code where determinable |
 | salary_is_parsed | boolean | false when the deterministic parser couldn't confidently resolve `salary_floor_raw` |
+| salary_target_raw | text, nullable | the preferred/ideal-pay phrase, when the user gives one (spec §6.2 "preferred compensation", D28) |
+| salary_target_normalized | numeric, nullable | deterministically parsed, same rules as the floor |
+| salary_target_currency | text, nullable | |
+| salary_target_is_parsed | boolean | |
 | visa_sponsorship_required | boolean, nullable | tri-state: `null` = not mentioned in the goal statement, distinct from an explicit `false` |
 | skills | text[] | priority skills called out in the goal statement |
 | preferred_industries | text[] | |
@@ -82,7 +86,8 @@ a per-request random delimiter tag wraps rawText, and the system prompt frames
 it as untrusted data to extract-from, never instructions to follow (CLAUDE.md
 §9) -- the user's own goal text can still contain pasted third-party content.
 Extracts: target_roles, seniority, locations, work_mode, min_experience_years,
-employment_type, salary_floor_raw (string, NOT a number), visa_sponsorship_
+employment_type, salary_floor_raw and salary_target_raw (strings, NOT numbers;
+the target was added later, see section 12), visa_sponsorship_
 required, skills, preferred/excluded industries, preferred/excluded
 companies, hard_constraints.
   │
@@ -176,3 +181,33 @@ Mirrors the `/profile` structure (`page.tsx` → a client orchestrator component
 - Exact `parseSalaryFloor` currency/format coverage (which symbols and phrasings are in v1 vs. deferred) — will be nailed down during TDD.
 - Whether the migration drops `company_preferences` outright or the table is renamed/repurposed at the SQL level — either achieves the same end state; a clean drop is simpler given Phase 2 is not yet in production use.
 - Exact max length / basic content validation for `rawText` beyond non-empty.
+
+## 12. Post-implementation amendments
+
+Recorded after a completeness audit against the original spec (§6.2, §19, §21) and this document. The design above is kept as approved; this section lists where the built system differs or goes beyond it.
+
+**Added because the original spec required it and this design omitted it**
+- **Preferred compensation.** Spec §6.2 lists "salary floor **and preferred compensation**"; §3 only had the floor. Four `salary_target_*` columns, a `salaryTargetRaw` extraction field, parallel deterministic parsing, a second amount/currency block in the review form, and a confirm-time rule that a preferred salary below the minimum (same currency) is rejected — D28. The constraints row therefore has 21 structured fields, not 17.
+
+**Added because §7 and the user journey called for it**
+- The dashboard renders the confirmed date and dated history (§7 promised it; the first build only typed the field).
+- The home page links to `/profile` and `/career-goal`; without it neither step of the journey was reachable except by typing the URL.
+- "Edit my statement" on the review screen returns to the form with the text intact and saves nothing.
+
+**Integrity and error handling beyond §3/§4/§9**
+- A per-user transaction-scoped advisory lock serializes version allocation and activation, since the schema has no unique index for either (D29). Without it, parallel parses shared a version and parallel confirms left two goals active.
+- Confirm requires a goal that parsed successfully and is not yet confirmed; otherwise `409` (D26). A malformed JSON body is `400`, never a bare `500` (D27).
+- `parse_error` stores the validation message for a schema failure but only the error class for anything else (§8 asked for "error class on failure"); a network/SDK message can echo the goal text.
+- `GET /api/career-goal` throws if an active goal has no constraints row instead of reporting "no goal".
+
+**Differences from the text above, kept deliberately**
+- `POST /confirm` returns `{ status: "confirmed" }`, not the persisted goal; the client re-fetches `GET /api/career-goal`.
+- Confirm's statement order is lock → check → deactivate the old active goal → insert constraints → activate, not the order listed in §4.
+- Version numbers can skip: a parse that fails or is abandoned before confirm still consumes one (D24), so the history can read 1, 3.
+- `salaryFloorRaw`/`salaryTargetRaw` are the phrase the user wrote, possibly with its qualifier ("minimum €60k"); scoring compares what the parser makes of them, not the strings.
+
+**Interpretations of spec §6.2 worth stating**
+- "Minimum/target experience" is captured as `min_experience_years` plus the free-text `seniority`; there is no separate "target years" field.
+- "Remote/hybrid/onsite preference" is a single value. A statement such as "remote or hybrid" has to pick one (or `any`); a multi-select is a possible later change.
+- "Role families" are free text in `target_roles`; no taxonomy exists yet (out of scope, §1).
+

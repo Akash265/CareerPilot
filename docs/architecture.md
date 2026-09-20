@@ -1,6 +1,6 @@
 # Architecture — AI Career Intelligence & Application Platform
 
-Status: **design finalized, no application code written yet.** This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
+Status: **Phases 0–3 are implemented** (foundation, candidate profile, career goal); job intelligence onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
 
 ## 1. Product framing
 
@@ -144,7 +144,7 @@ Caching: embedding cache (permanent, content-hash keyed), match-reason cache (7-
 - All tables carry `user_id UUID` with RLS policies ([D2](../DECISIONS.md)), defaulting to a fixed local UUID via `DEFAULT_USER_ID`.
 - `jobs` salary fields: `salary_raw`, `salary_normalized_min`, `salary_normalized_max`, `salary_currency`, `is_parsed` ([D6](../DECISIONS.md)).
 - `automation_sessions` stores the generated payload and per-field mapped/unmapped state rather than raw DOM-automation logs ([D4](../DECISIONS.md)).
-- `career_goals` / `career_goal_constraints` (implemented in Phase 3) deviate from spec §19's one-line description: a goal is versioned and never edited in place (`version`, `is_active`, [D23](../DECISIONS.md)), a row is created when the goal is parsed with its own `parse_status`/`parse_error` ([D24](../DECISIONS.md)), and the constraints row holds 17 structured fields including the salary floor as `salary_floor_raw` / `salary_floor_normalized` / `salary_currency` / `salary_is_parsed` ([D22](../DECISIONS.md), [D25](../DECISIONS.md)).
+- `career_goals` / `career_goal_constraints` (implemented in Phase 3) deviate from spec §19's one-line description: a goal is versioned and never edited in place (`version`, `is_active`, [D23](../DECISIONS.md)), a row is created when the goal is parsed with its own `parse_status`/`parse_error` ([D24](../DECISIONS.md)), and the constraints row holds 21 structured fields including the minimum salary as `salary_floor_raw` / `salary_floor_normalized` / `salary_currency` / `salary_is_parsed` and the preferred salary as the parallel `salary_target_*` columns ([D22](../DECISIONS.md), [D25](../DECISIONS.md), [D28](../DECISIONS.md)).
 - `career_goal_constraints` is the single source of truth for search-relevant preferences. `candidate_profiles` therefore keeps only contact fields, `years_of_experience` and `work_authorization_notes`; its earlier work-mode, salary-expectation, visa, preferred-role and industry columns and the `company_preferences` table were dropped ([D21](../DECISIONS.md)).
 
 Everything else (job_requirements, resume_optimizations, ats_evaluations, application_pitches, application_outcomes, learning_features, plus the original core tables) follows spec §19 as written.
