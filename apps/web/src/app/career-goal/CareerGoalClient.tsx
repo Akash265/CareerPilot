@@ -72,6 +72,10 @@ export function CareerGoalClient() {
         rawText={reviewing.rawText}
         initialDraft={reviewing.draft}
         onConfirmed={() => loadState()}
+        onBack={() => {
+          setPrefillRawText(reviewing.rawText);
+          setStage("form");
+        }}
       />
     );
   }

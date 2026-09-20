@@ -60,6 +60,10 @@ const validConstraints = {
   salaryFloorNormalized: 60000,
   salaryCurrency: "EUR",
   salaryIsParsed: true,
+  salaryTargetRaw: "ideally €80k",
+  salaryTargetNormalized: 80000,
+  salaryTargetCurrency: "EUR",
+  salaryTargetIsParsed: true,
   visaSponsorshipRequired: true,
   skills: [],
   preferredIndustries: [],
@@ -107,6 +111,39 @@ describe("POST /api/career-goal/confirm", () => {
 
     const [constraintsRow] = await adminSql`SELECT target_roles FROM career_goal_constraints WHERE career_goal_id = ${goalId}`;
     expect(constraintsRow.target_roles).toEqual(["Data Engineer"]);
+  });
+
+  it("persists the preferred salary next to the minimum salary", async () => {
+    const goalId = await insertPendingGoal("min 60k, ideally 80k", 3);
+
+    const res = await POST(makeRequest({ goalId, constraints: validConstraints }));
+    expect(res.status).toBe(200);
+
+    const [row] = await adminSql`
+      SELECT salary_floor_normalized::float AS floor, salary_target_raw, salary_target_normalized::float AS target,
+             salary_target_currency, salary_target_is_parsed
+      FROM career_goal_constraints WHERE career_goal_id = ${goalId}
+    `;
+    expect(row.floor).toBe(60000);
+    expect(row.salary_target_raw).toBe("ideally €80k");
+    expect(row.target).toBe(80000);
+    expect(row.salary_target_currency).toBe("EUR");
+    expect(row.salary_target_is_parsed).toBe(true);
+  });
+
+  it("rejects a preferred salary below the minimum with 400 and writes nothing", async () => {
+    const goalId = await insertPendingGoal("contradictory salaries", 4);
+
+    const res = await POST(
+      makeRequest({ goalId, constraints: { ...validConstraints, salaryTargetNormalized: 50000 } })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toMatch(/preferred salary cannot be lower than the minimum/i);
+    expect(await constraintsCount(goalId)).toBe(0);
+    const [row] = await adminSql`SELECT confirmation_status FROM career_goals WHERE id = ${goalId}`;
+    expect(row.confirmation_status).toBe("draft");
   });
 
   it("deactivates the previously active goal when a new one is confirmed, and preserves the old constraints row (D23)", async () => {
@@ -225,6 +262,24 @@ describe("POST /api/career-goal/confirm", () => {
       const [goalRow] = await adminSql`SELECT confirmation_status, is_active FROM career_goals WHERE id = ${goalId}`;
       expect(goalRow.confirmation_status).toBe("confirmed");
       expect(goalRow.is_active).toBe(true);
+    });
+
+    it("leaves exactly one active goal when two different goals are confirmed at the same time", async () => {
+      const firstGoalId = await insertPendingGoal("Race one", 60);
+      const secondGoalId = await insertPendingGoal("Race two", 61);
+
+      const responses = await Promise.all([
+        POST(makeRequest({ goalId: firstGoalId, constraints: validConstraints })),
+        POST(makeRequest({ goalId: secondGoalId, constraints: validConstraints })),
+      ]);
+
+      expect(responses.map((r) => r.status)).toEqual([200, 200]);
+      const [{ active }] = await adminSql`
+        SELECT count(*) FILTER (WHERE is_active)::int AS active FROM career_goals WHERE user_id = ${TEST_USER_ID}
+      `;
+      expect(active).toBe(1);
+      expect(await constraintsCount(firstGoalId)).toBe(1);
+      expect(await constraintsCount(secondGoalId)).toBe(1);
     });
 
     it("lets exactly one of two simultaneous confirms of the same goal succeed and answers the other with 409, never 500", async () => {

@@ -1,18 +1,23 @@
 {
   "targetRoles": [
-    "customer support"
+    "data professional"
   ],
   "seniority": null,
-  "locations": [],
+  "locations": [
+    "Germany",
+    "UK"
+  ],
   "workMode": "remote",
-  "minExperienceYears": null,
+  "minExperienceYears": 3,
   "employmentType": null,
-  "salaryFloorRaw": "3000 per month",
+  "salaryFloorRaw": "minimum €60k",
   "salaryTargetRaw": null,
-  "visaSponsorshipRequired": null,
+  "visaSponsorshipRequired": true,
   "skills": [],
   "preferredIndustries": [],
-  "excludedIndustries": [],
+  "excludedIndustries": [
+    "consulting"
+  ],
   "preferredCompanies": [],
   "excludedCompanies": [],
   "hardConstraints": []

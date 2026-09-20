@@ -1,11 +1,14 @@
 {
-  "targetRoles": ["graphic design"],
+  "targetRoles": [
+    "graphic design"
+  ],
   "seniority": null,
   "locations": [],
   "workMode": "remote",
   "minExperienceYears": null,
   "employmentType": "part-time contract",
   "salaryFloorRaw": null,
+  "salaryTargetRaw": null,
   "visaSponsorshipRequired": null,
   "skills": [],
   "preferredIndustries": [],

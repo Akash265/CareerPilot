@@ -73,6 +73,7 @@ const validExtraction: CareerGoalExtractionDraft = {
   minExperienceYears: 3,
   employmentType: null,
   salaryFloorRaw: "minimum €60k",
+  salaryTargetRaw: null,
   visaSponsorshipRequired: true,
   skills: [],
   preferredIndustries: [],
@@ -105,10 +106,72 @@ describe("POST /api/career-goal/parse", () => {
     expect(body.draft.salaryFloorNormalized).toBe(60000);
     expect(body.draft.salaryCurrency).toBe("EUR");
     expect(body.draft.salaryIsParsed).toBe(true);
+    expect(body.draft.salaryTargetNormalized).toBeNull();
+    expect(body.draft.salaryTargetCurrency).toBeNull();
+    expect(body.draft.salaryTargetIsParsed).toBe(false);
 
     const [row] = await adminSql`SELECT parse_status, version FROM career_goals WHERE id = ${body.goalId}`;
     expect(row.parse_status).toBe("parsed");
     expect(row.version).toBe(1);
+  });
+
+  it("parses the preferred salary separately from the minimum, with the same deterministic rules", async () => {
+    vi.mocked(extractCareerGoal).mockResolvedValue({
+      ...validExtraction,
+      salaryFloorRaw: "minimum 60.000 EUR",
+      salaryTargetRaw: "ideally 80 000 EUR",
+    });
+
+    const body = await (await POST(makeRequest({ rawText: "min 60.000, ideally 80 000 EUR" }))).json();
+
+    expect(body.draft).toMatchObject({
+      salaryFloorNormalized: 60000,
+      salaryCurrency: "EUR",
+      salaryIsParsed: true,
+      salaryTargetRaw: "ideally 80 000 EUR",
+      salaryTargetNormalized: 80000,
+      salaryTargetCurrency: "EUR",
+      salaryTargetIsParsed: true,
+    });
+  });
+
+  it("flags an ambiguous preferred salary as unparsed instead of guessing", async () => {
+    vi.mocked(extractCareerGoal).mockResolvedValue({ ...validExtraction, salaryTargetRaw: "€5000 pm" });
+
+    const body = await (await POST(makeRequest({ rawText: "aiming for 5000 a month" }))).json();
+
+    expect(body.draft).toMatchObject({
+      salaryTargetNormalized: 5000,
+      salaryTargetCurrency: "EUR",
+      salaryTargetIsParsed: false,
+    });
+  });
+
+  it("gives simultaneous parses distinct, consecutive versions", async () => {
+    vi.mocked(extractCareerGoal).mockResolvedValue(validExtraction);
+
+    const bodies = await Promise.all(
+      Array.from({ length: 6 }, (_, i) => POST(makeRequest({ rawText: `parallel goal ${i}` })).then((r) => r.json()))
+    );
+
+    const versions = bodies.map((b) => b.version).sort((a: number, b: number) => a - b);
+    expect(new Set(versions).size).toBe(6);
+    expect(versions[5] - versions[0]).toBe(5);
+  });
+
+  it("records only the error class, never the message, when extraction fails for a non-validation reason", async () => {
+    class APIConnectionError extends Error {}
+    vi.mocked(extractCareerGoal).mockRejectedValue(
+      new APIConnectionError("connect ECONNREFUSED while sending: I want to earn 200k as a CEO")
+    );
+
+    const res = await POST(makeRequest({ rawText: "I want to earn 200k as a CEO" }));
+    const body = await res.json();
+
+    expect(body.status).toBe("failed");
+    expect(body.error).toBe("Extraction failed");
+    const [row] = await adminSql`SELECT parse_error FROM career_goals WHERE id = ${body.goalId}`;
+    expect(row.parse_error).toBe("APIConnectionError");
   });
 
   it("increments version on a second goal for the same user", async () => {

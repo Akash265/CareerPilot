@@ -19,6 +19,10 @@ const activeGoal: ActiveGoal = {
     salaryFloorNormalized: 60000,
     salaryCurrency: "EUR",
     salaryIsParsed: true,
+    salaryTargetRaw: "ideally €80k",
+    salaryTargetNormalized: 80000,
+    salaryTargetCurrency: "EUR",
+    salaryTargetIsParsed: true,
     visaSponsorshipRequired: true,
     skills: [],
     preferredIndustries: [],
@@ -41,6 +45,55 @@ describe("GoalDashboard", () => {
     expect(screen.getByText("Germany")).toBeInTheDocument();
     expect(screen.getByText("remote")).toBeInTheDocument();
     expect(screen.getByText(/60000 eur/i)).toBeInTheDocument();
+  });
+
+  it("shows when the active goal was confirmed", () => {
+    render(<GoalDashboard activeGoal={activeGoal} history={history} onEdit={vi.fn()} />);
+    expect(screen.getByText("Confirmed 2026-09-10")).toBeInTheDocument();
+  });
+
+  it("shows when each version in the history was confirmed", () => {
+    render(<GoalDashboard activeGoal={activeGoal} history={history} onEdit={vi.fn()} />);
+    expect(screen.getByText(/version 1 — data jobs anywhere \(confirmed 2026-09-01\)/i)).toBeInTheDocument();
+  });
+
+  it("shows the minimum and the preferred salary, each with the phrase it came from", () => {
+    render(<GoalDashboard activeGoal={activeGoal} history={history} onEdit={vi.fn()} />);
+    expect(screen.getByText(/60000 EUR — from "minimum €60k"/)).toBeInTheDocument();
+    expect(screen.getByText(/80000 EUR — from "ideally €80k"/)).toBeInTheDocument();
+  });
+
+  it("marks a salary the parser could not fully resolve as unconfirmed", () => {
+    const unresolved: ActiveGoal = {
+      ...activeGoal,
+      constraints: { ...activeGoal.constraints, salaryFloorNormalized: 5000, salaryIsParsed: false, salaryFloorRaw: "5000 per month" },
+    };
+    render(<GoalDashboard activeGoal={unresolved} history={[]} onEdit={vi.fn()} />);
+    expect(screen.getByText(/5000 EUR \(unconfirmed\) — from "5000 per month"/)).toBeInTheDocument();
+  });
+
+  it("shows the phrase, and says no number was recognised, when a salary was never converted", () => {
+    const noNumber: ActiveGoal = {
+      ...activeGoal,
+      constraints: { ...activeGoal.constraints, salaryTargetNormalized: null, salaryTargetCurrency: null, salaryTargetIsParsed: false, salaryTargetRaw: "competitive" },
+    };
+    render(<GoalDashboard activeGoal={noNumber} history={[]} onEdit={vi.fn()} />);
+    expect(screen.getByText(/"competitive" — no number recognised/)).toBeInTheDocument();
+  });
+
+  it("shows a dash for a salary that was never mentioned", () => {
+    const none: ActiveGoal = {
+      ...activeGoal,
+      constraints: { ...activeGoal.constraints, salaryTargetRaw: null, salaryTargetNormalized: null, salaryTargetCurrency: null, salaryTargetIsParsed: false },
+    };
+    render(<GoalDashboard activeGoal={none} history={[]} onEdit={vi.fn()} />);
+    const preferred = screen.getByText("Preferred salary:").parentElement as HTMLElement;
+    expect(preferred).toHaveTextContent("Preferred salary: —");
+  });
+
+  it("says the date is unknown rather than printing nothing when a confirmation date is missing", () => {
+    render(<GoalDashboard activeGoal={{ ...activeGoal, confirmedAt: null }} history={[]} onEdit={vi.fn()} />);
+    expect(screen.getByText("Confirmed (date unknown)")).toBeInTheDocument();
   });
 
   it("renders version history when more than one version exists", () => {

@@ -1,16 +1,24 @@
 {
-  "targetRoles": ["frontend developer"],
+  "targetRoles": [
+    "frontend developer"
+  ],
   "seniority": "junior",
-  "locations": ["Europe"],
+  "locations": [
+    "Europe"
+  ],
   "workMode": "any",
   "minExperienceYears": null,
   "employmentType": null,
   "salaryFloorRaw": "45k-55k EUR",
+  "salaryTargetRaw": null,
   "visaSponsorshipRequired": null,
   "skills": [],
   "preferredIndustries": [],
   "excludedIndustries": [],
-  "preferredCompanies": ["Spotify", "Netflix"],
+  "preferredCompanies": [
+    "Spotify",
+    "Netflix"
+  ],
   "excludedCompanies": [],
   "hardConstraints": []
 }

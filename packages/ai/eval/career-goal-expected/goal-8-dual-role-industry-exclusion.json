@@ -1,15 +1,25 @@
 {
-  "targetRoles": ["DevOps", "SRE"],
+  "targetRoles": [
+    "DevOps",
+    "SRE"
+  ],
   "seniority": null,
   "locations": [],
   "workMode": "any",
   "minExperienceYears": null,
   "employmentType": null,
   "salaryFloorRaw": null,
+  "salaryTargetRaw": null,
   "visaSponsorshipRequired": true,
-  "skills": ["Kubernetes", "Terraform"],
+  "skills": [
+    "Kubernetes",
+    "Terraform"
+  ],
   "preferredIndustries": [],
-  "excludedIndustries": ["gambling", "defense"],
+  "excludedIndustries": [
+    "gambling",
+    "defense"
+  ],
   "preferredCompanies": [],
   "excludedCompanies": [],
   "hardConstraints": []

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { createDbClient, closeDbClient, withUserContext, schema } from "@ai-career/db";
 import type { Env } from "@ai-career/config";
 import type { CareerGoalConstraintsInput } from "./careerGoalConstraintsSchema";
+import { lockUserCareerGoals } from "./lockUserCareerGoals";
 
 export class CareerGoalNotFoundError extends Error {}
 
@@ -26,10 +27,11 @@ export class CareerGoalStateError extends Error {
  * untouched, preserving full version history.
  *
  * Only a goal that parsed successfully and is not yet confirmed can be
- * confirmed. The row is locked FOR UPDATE while that is checked so two
- * simultaneous confirms of the same goal serialize: the second one sees the
- * goal already confirmed and gets a CareerGoalStateError, rather than tripping
- * the unique constraint on career_goal_constraints.career_goal_id.
+ * confirmed. The user's goals are locked for the whole transaction
+ * (lockUserCareerGoals) so simultaneous confirms serialize: two different goals
+ * cannot both end up active, and the second confirm of the same goal sees it
+ * already confirmed and gets a CareerGoalStateError rather than tripping the
+ * unique constraint on career_goal_constraints.career_goal_id.
  */
 export async function confirmCareerGoal(
   env: Env,
@@ -39,6 +41,7 @@ export async function confirmCareerGoal(
   const db = createDbClient(env);
   try {
     await withUserContext(db, env.DEFAULT_USER_ID, async (tx) => {
+      await lockUserCareerGoals(tx, env.DEFAULT_USER_ID);
       const [goal] = await tx
         .select({
           parseStatus: schema.careerGoals.parseStatus,
@@ -75,6 +78,11 @@ export async function confirmCareerGoal(
           constraints.salaryFloorNormalized === null ? null : String(constraints.salaryFloorNormalized),
         salaryCurrency: constraints.salaryCurrency,
         salaryIsParsed: constraints.salaryIsParsed,
+        salaryTargetRaw: constraints.salaryTargetRaw,
+        salaryTargetNormalized:
+          constraints.salaryTargetNormalized === null ? null : String(constraints.salaryTargetNormalized),
+        salaryTargetCurrency: constraints.salaryTargetCurrency,
+        salaryTargetIsParsed: constraints.salaryTargetIsParsed,
         visaSponsorshipRequired: constraints.visaSponsorshipRequired,
         skills: constraints.skills,
         preferredIndustries: constraints.preferredIndustries,

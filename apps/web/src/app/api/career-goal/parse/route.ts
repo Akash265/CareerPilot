@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { loadEnv } from "@ai-career/config";
 import { readJsonBody } from "../../../../lib/readJsonBody";
+import type { CareerGoalConstraintsInput } from "../../../../lib/career-goal/careerGoalConstraintsSchema";
+import { lockUserCareerGoals } from "../../../../lib/career-goal/lockUserCareerGoals";
 import { createDbClient, closeDbClient, withUserContext, schema } from "@ai-career/db";
 import {
   extractCareerGoal,
@@ -51,6 +53,7 @@ export async function POST(request: Request) {
   const db = createDbClient(env);
   try {
     const goal = await withUserContext(db, env.DEFAULT_USER_ID, async (tx) => {
+      await lockUserCareerGoals(tx, env.DEFAULT_USER_ID);
       const existing = await tx
         .select({ version: schema.careerGoals.version })
         .from(schema.careerGoals)
@@ -70,12 +73,20 @@ export async function POST(request: Request) {
     try {
       extracted = await extractWithRetry(anthropic, env, rawText);
     } catch (error) {
-      const message =
-        error instanceof CareerGoalExtractionValidationError ? error.message : "Extraction failed";
+      // The audit trail (parse_error) keeps a validation failure's message but
+      // only the class name of anything else: an SDK/network error message can
+      // echo the request, i.e. the user's goal text.
+      const isValidationFailure = error instanceof CareerGoalExtractionValidationError;
+      const message = isValidationFailure ? error.message : "Extraction failed";
+      const parseError = isValidationFailure
+        ? error.message
+        : error instanceof Error
+          ? error.constructor.name
+          : "UnknownError";
       await withUserContext(db, env.DEFAULT_USER_ID, (tx) =>
         tx
           .update(schema.careerGoals)
-          .set({ parseStatus: "failed", parseError: message })
+          .set({ parseStatus: "failed", parseError })
           .where(eq(schema.careerGoals.id, goal.id))
       );
       return NextResponse.json(
@@ -91,12 +102,18 @@ export async function POST(request: Request) {
         .where(eq(schema.careerGoals.id, goal.id))
     );
 
-    const salary = parseSalaryFloor(extracted.salaryFloorRaw);
-    const draft = {
+    const floor = parseSalaryFloor(extracted.salaryFloorRaw);
+    const target = parseSalaryFloor(extracted.salaryTargetRaw);
+    // Typed as the confirm payload so the draft this route hands the review form
+    // can never drift from what the confirm route accepts.
+    const draft: CareerGoalConstraintsInput = {
       ...extracted,
-      salaryFloorNormalized: salary.amount,
-      salaryCurrency: salary.currency,
-      salaryIsParsed: salary.isParsed,
+      salaryFloorNormalized: floor.amount,
+      salaryCurrency: floor.currency,
+      salaryIsParsed: floor.isParsed,
+      salaryTargetNormalized: target.amount,
+      salaryTargetCurrency: target.currency,
+      salaryTargetIsParsed: target.isParsed,
     };
 
     return NextResponse.json({

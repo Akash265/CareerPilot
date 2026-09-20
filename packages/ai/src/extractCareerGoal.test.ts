@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import { extractCareerGoal, CareerGoalExtractionValidationError } from "./extractCareerGoal";
+import { CareerGoalExtractionSchema } from "./careerGoalExtractionSchema";
 
 type FakeAnthropicClient = Pick<Anthropic, "messages">;
 
@@ -12,6 +13,7 @@ const validDraftInput = {
   minExperienceYears: 3,
   employmentType: null,
   salaryFloorRaw: "minimum €60k",
+  salaryTargetRaw: "ideally €80k",
   visaSponsorshipRequired: true,
   skills: [],
   preferredIndustries: [],
@@ -39,6 +41,7 @@ describe("extractCareerGoal", () => {
     const draft = await extractCareerGoal(client, { ANTHROPIC_MODEL_FAST: "test-model" }, "goal text");
     expect(draft.targetRoles).toEqual(["Data Engineer"]);
     expect(draft.salaryFloorRaw).toBe("minimum €60k");
+    expect(draft.salaryTargetRaw).toBe("ideally €80k");
   });
 
   it("throws CareerGoalExtractionValidationError when there is no tool_use block", async () => {
@@ -106,5 +109,37 @@ describe("extractCareerGoal", () => {
 
     const call = create.mock.calls[0][0];
     expect(call.system.toLowerCase()).toContain("never convert it to a number");
+  });
+
+  it("separates the minimum salary from the preferred salary in the prompt", async () => {
+    const create = vi.fn().mockResolvedValue({
+      content: [{ type: "tool_use", id: "t1", name: "record_career_goal_extraction", input: validDraftInput }],
+    });
+    const client: FakeAnthropicClient = { messages: { create } as unknown as Anthropic["messages"] };
+
+    await extractCareerGoal(client, { ANTHROPIC_MODEL_FAST: "test-model" }, "goal text");
+
+    const system = create.mock.calls[0][0].system as string;
+    expect(system).toContain("salaryFloorRaw");
+    expect(system).toContain("salaryTargetRaw");
+    expect(system.toLowerCase()).toContain("minimum");
+    expect(system.toLowerCase()).toMatch(/preferred|ideal/);
+  });
+
+  it("keeps the tool's JSON schema in lockstep with the Zod schema", async () => {
+    const create = vi.fn().mockResolvedValue({
+      content: [{ type: "tool_use", id: "t1", name: "record_career_goal_extraction", input: validDraftInput }],
+    });
+    const client: FakeAnthropicClient = { messages: { create } as unknown as Anthropic["messages"] };
+
+    await extractCareerGoal(client, { ANTHROPIC_MODEL_FAST: "test-model" }, "goal text");
+
+    const inputSchema = create.mock.calls[0][0].tools[0].input_schema as {
+      properties: Record<string, unknown>;
+      required: string[];
+    };
+    const zodFields = Object.keys(CareerGoalExtractionSchema.shape).sort();
+    expect(Object.keys(inputSchema.properties).sort()).toEqual(zodFields);
+    expect([...inputSchema.required].sort()).toEqual(zodFields);
   });
 });

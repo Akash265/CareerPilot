@@ -1,26 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import type { CareerGoalConstraintsInput } from "../../lib/career-goal/careerGoalConstraintsSchema";
 
-export type CareerGoalConstraintsDraft = {
-  targetRoles: string[];
-  seniority: string | null;
-  locations: string[];
-  workMode: "remote" | "hybrid" | "onsite" | "any";
-  minExperienceYears: number | null;
-  employmentType: string | null;
-  salaryFloorRaw: string | null;
-  salaryFloorNormalized: number | null;
-  salaryCurrency: string | null;
-  salaryIsParsed: boolean;
-  visaSponsorshipRequired: boolean | null;
-  skills: string[];
-  preferredIndustries: string[];
-  excludedIndustries: string[];
-  preferredCompanies: string[];
-  excludedCompanies: string[];
-  hardConstraints: string[];
-};
+// The same shape the parse route returns and the confirm route validates: an
+// alias of the Zod-inferred type (import type, so no server code reaches the
+// client bundle), which makes any drift between the three a compile error.
+export type CareerGoalConstraintsDraft = CareerGoalConstraintsInput;
 
 const orNull = (value: string): string | null => (value.trim() === "" ? null : value);
 const orNullNumber = (value: string): number | null => {
@@ -80,18 +66,74 @@ function TristateSelect({
   );
 }
 
+type SalaryValue = { amount: number | null; currency: string | null; isParsed: boolean };
+
+// Amount and currency are plain inputs so a phrase the parser could not resolve
+// can always be fixed by hand; `isParsed` becomes true once both are present.
+function SalaryFields({
+  idPrefix,
+  label,
+  raw,
+  value,
+  onChange,
+}: {
+  idPrefix: string;
+  label: string;
+  raw: string | null;
+  value: SalaryValue;
+  onChange: (next: SalaryValue) => void;
+}) {
+  return (
+    <div className="rounded border p-3">
+      <p className="text-sm font-medium">{label}</p>
+      {!value.isParsed && raw && (
+        <p className="text-sm text-amber-700">
+          Could not confidently read a number from &quot;{raw}&quot; — please confirm it below.
+        </p>
+      )}
+      <label htmlFor={`${idPrefix}-amount`} className="text-sm font-medium">
+        {label} amount
+      </label>
+      <input
+        id={`${idPrefix}-amount`}
+        type="number"
+        value={value.amount === null ? "" : String(value.amount)}
+        onChange={(e) => {
+          const amount = orNullNumber(e.target.value);
+          onChange({ amount, currency: value.currency, isParsed: amount !== null && value.currency !== null });
+        }}
+        className="block w-full rounded border px-2 py-1"
+      />
+      <label htmlFor={`${idPrefix}-currency`} className="text-sm font-medium">
+        {label} currency
+      </label>
+      <input
+        id={`${idPrefix}-currency`}
+        value={value.currency ?? ""}
+        onChange={(e) => {
+          const currency = orNull(e.target.value);
+          onChange({ amount: value.amount, currency, isParsed: currency !== null && value.amount !== null });
+        }}
+        className="block w-full rounded border px-2 py-1"
+      />
+    </div>
+  );
+}
+
 export function GoalReviewForm({
   goalId,
   version,
   rawText,
   initialDraft,
   onConfirmed,
+  onBack,
 }: {
   goalId: string;
   version: number;
   rawText: string;
   initialDraft: CareerGoalConstraintsDraft;
   onConfirmed: () => void;
+  onBack: () => void;
 }) {
   const [draft, setDraft] = useState<CareerGoalConstraintsDraft>(initialDraft);
   const [isSaving, setIsSaving] = useState(false);
@@ -211,47 +253,30 @@ export function GoalReviewForm({
         />
       </div>
 
-      <div className="rounded border p-3">
-        <p className="text-sm font-medium">Salary floor</p>
-        {!draft.salaryIsParsed && draft.salaryFloorRaw && (
-          <p className="text-sm text-amber-700">
-            Could not confidently read a number from &quot;{draft.salaryFloorRaw}&quot; — please confirm it below.
-          </p>
-        )}
-        <label htmlFor="salary-floor-amount" className="text-sm font-medium">
-          Amount
-        </label>
-        <input
-          id="salary-floor-amount"
-          type="number"
-          value={draft.salaryFloorNormalized === null ? "" : String(draft.salaryFloorNormalized)}
-          onChange={(e) => {
-            const amount = orNullNumber(e.target.value);
-            setDraft((d) => ({
-              ...d,
-              salaryFloorNormalized: amount,
-              salaryIsParsed: amount !== null && d.salaryCurrency !== null,
-            }));
-          }}
-          className="block w-full rounded border px-2 py-1"
-        />
-        <label htmlFor="salary-currency" className="text-sm font-medium">
-          Currency
-        </label>
-        <input
-          id="salary-currency"
-          value={draft.salaryCurrency ?? ""}
-          onChange={(e) => {
-            const currency = orNull(e.target.value);
-            setDraft((d) => ({
-              ...d,
-              salaryCurrency: currency,
-              salaryIsParsed: currency !== null && d.salaryFloorNormalized !== null,
-            }));
-          }}
-          className="block w-full rounded border px-2 py-1"
-        />
-      </div>
+      <SalaryFields
+        idPrefix="salary-floor"
+        label="Minimum salary"
+        raw={draft.salaryFloorRaw}
+        value={{ amount: draft.salaryFloorNormalized, currency: draft.salaryCurrency, isParsed: draft.salaryIsParsed }}
+        onChange={(v) =>
+          setDraft((d) => ({ ...d, salaryFloorNormalized: v.amount, salaryCurrency: v.currency, salaryIsParsed: v.isParsed }))
+        }
+      />
+
+      <SalaryFields
+        idPrefix="salary-target"
+        label="Preferred salary"
+        raw={draft.salaryTargetRaw}
+        value={{ amount: draft.salaryTargetNormalized, currency: draft.salaryTargetCurrency, isParsed: draft.salaryTargetIsParsed }}
+        onChange={(v) =>
+          setDraft((d) => ({
+            ...d,
+            salaryTargetNormalized: v.amount,
+            salaryTargetCurrency: v.currency,
+            salaryTargetIsParsed: v.isParsed,
+          }))
+        }
+      />
 
       <TristateSelect
         id="visa-sponsorship-required"
@@ -333,14 +358,19 @@ export function GoalReviewForm({
       </div>
 
       {saveError && <p className="text-sm text-red-600">{saveError}</p>}
-      <button
-        type="button"
-        onClick={handleConfirm}
-        disabled={isSaving}
-        className="w-fit rounded bg-black px-4 py-2 text-white disabled:opacity-50"
-      >
-        {isSaving ? "Saving..." : "Confirm & Save"}
-      </button>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={isSaving}
+          className="w-fit rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+        >
+          {isSaving ? "Saving..." : "Confirm & Save"}
+        </button>
+        <button type="button" onClick={onBack} disabled={isSaving} className="w-fit rounded border px-4 py-2 text-sm disabled:opacity-50">
+          Edit my statement
+        </button>
+      </div>
     </div>
   );
 }

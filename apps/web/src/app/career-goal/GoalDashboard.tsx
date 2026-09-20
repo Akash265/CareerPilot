@@ -45,6 +45,24 @@ function List({ label, values }: { label: string; values: string[] }) {
   );
 }
 
+// The API returns an ISO timestamp; the UTC calendar date is enough here.
+function formatDate(iso: string | null): string {
+  return iso === null ? "date unknown" : iso.slice(0, 10);
+}
+
+// Shows the number the system will actually use next to the phrase it was read
+// from, so a wrong conversion is visible on the dashboard, not only in review.
+function salaryText(
+  raw: string | null,
+  amount: number | null,
+  currency: string | null,
+  isParsed: boolean
+): string | null {
+  if (amount === null) return raw === null ? null : `"${raw}" — no number recognised`;
+  const figure = `${amount} ${currency ?? ""}`.trim() + (isParsed ? "" : " (unconfirmed)");
+  return raw === null ? figure : `${figure} — from "${raw}"`;
+}
+
 function tristateLabel(value: boolean | null): string {
   if (value === null) return "Not specified";
   return value ? "Required" : "Not required";
@@ -64,6 +82,9 @@ export function GoalDashboard({
     <div className="flex flex-col gap-6">
       <div className="rounded border bg-gray-50 p-3">
         <h2 className="text-lg font-semibold">Version {activeGoal.version}</h2>
+        <p className="text-xs text-gray-500">
+          Confirmed {activeGoal.confirmedAt === null ? "(date unknown)" : formatDate(activeGoal.confirmedAt)}
+        </p>
         <p className="text-sm text-gray-700">{activeGoal.rawText}</p>
       </div>
 
@@ -78,12 +99,12 @@ export function GoalDashboard({
         />
         <Field label="Employment type" value={c.employmentType} />
         <Field
-          label="Salary floor"
-          value={
-            c.salaryFloorNormalized === null
-              ? null
-              : `${c.salaryFloorNormalized} ${c.salaryCurrency ?? ""}${c.salaryIsParsed ? "" : " (unconfirmed)"}`
-          }
+          label="Minimum salary"
+          value={salaryText(c.salaryFloorRaw, c.salaryFloorNormalized, c.salaryCurrency, c.salaryIsParsed)}
+        />
+        <Field
+          label="Preferred salary"
+          value={salaryText(c.salaryTargetRaw, c.salaryTargetNormalized, c.salaryTargetCurrency, c.salaryTargetIsParsed)}
         />
         <Field label="Visa sponsorship" value={tristateLabel(c.visaSponsorshipRequired)} />
         <List label="Priority skills" values={c.skills} />
@@ -100,7 +121,7 @@ export function GoalDashboard({
           <ul className="list-disc pl-5 text-sm">
             {history.map((entry) => (
               <li key={entry.id}>
-                Version {entry.version} — {entry.rawText}
+                Version {entry.version} — {entry.rawText} (confirmed {formatDate(entry.confirmedAt)})
               </li>
             ))}
           </ul>

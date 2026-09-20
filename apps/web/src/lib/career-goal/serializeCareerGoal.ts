@@ -16,6 +16,10 @@ function toConstraintsPayload(row: typeof schema.careerGoalConstraints.$inferSel
     salaryFloorNormalized: row.salaryFloorNormalized === null ? null : Number(row.salaryFloorNormalized),
     salaryCurrency: row.salaryCurrency,
     salaryIsParsed: row.salaryIsParsed,
+    salaryTargetRaw: row.salaryTargetRaw,
+    salaryTargetNormalized: row.salaryTargetNormalized === null ? null : Number(row.salaryTargetNormalized),
+    salaryTargetCurrency: row.salaryTargetCurrency,
+    salaryTargetIsParsed: row.salaryTargetIsParsed,
     visaSponsorshipRequired: row.visaSponsorshipRequired,
     skills: row.skills,
     preferredIndustries: row.preferredIndustries,
@@ -40,12 +44,18 @@ export async function getCareerGoalState(tx: DbClient) {
       .select()
       .from(schema.careerGoalConstraints)
       .where(eq(schema.careerGoalConstraints.careerGoalId, activeGoalRow.id));
+    // confirmCareerGoal writes the constraints row and activates the goal in one
+    // transaction, so this cannot happen short of manual tampering. Failing loudly
+    // is deliberate: silently returning "no goal" would look like data loss.
+    if (!constraintsRow) {
+      throw new Error(`Active career goal ${activeGoalRow.id} has no constraints row`);
+    }
     activeGoal = {
       id: activeGoalRow.id,
       version: activeGoalRow.version,
       rawText: activeGoalRow.rawText,
       confirmedAt: activeGoalRow.confirmedAt,
-      constraints: constraintsRow ? toConstraintsPayload(constraintsRow) : null,
+      constraints: toConstraintsPayload(constraintsRow),
     };
   }
 

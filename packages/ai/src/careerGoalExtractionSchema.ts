@@ -9,6 +9,8 @@ export const CareerGoalExtractionSchema = z.object({
   employmentType: z.string().nullable(),
   // Deliberately a raw phrase, never a number -- see parseSalaryFloor.ts (D22).
   salaryFloorRaw: z.string().nullable(),
+  // Preferred / target pay, only when the user calls it that -- never the minimum.
+  salaryTargetRaw: z.string().nullable(),
   visaSponsorshipRequired: z.boolean().nullable(),
   skills: z.array(z.string()),
   preferredIndustries: z.array(z.string()),

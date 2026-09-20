@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-export { formatValidationError } from "../formatValidationError";
-
 export const ConfirmedProfileSchema = z.object({
   contact: z.object({
     fullName: z.string().min(1),

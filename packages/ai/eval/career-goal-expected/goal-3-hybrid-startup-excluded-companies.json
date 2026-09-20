@@ -1,16 +1,24 @@
 {
-  "targetRoles": ["product management"],
+  "targetRoles": [
+    "product management"
+  ],
   "seniority": null,
   "locations": [],
   "workMode": "hybrid",
   "minExperienceYears": null,
   "employmentType": null,
   "salaryFloorRaw": "$140,000 per year",
+  "salaryTargetRaw": null,
   "visaSponsorshipRequired": null,
   "skills": [],
-  "preferredIndustries": ["startup"],
+  "preferredIndustries": [
+    "startup"
+  ],
   "excludedIndustries": [],
   "preferredCompanies": [],
-  "excludedCompanies": ["Google", "Amazon"],
+  "excludedCompanies": [
+    "Google",
+    "Amazon"
+  ],
   "hardConstraints": []
 }

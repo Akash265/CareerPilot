@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadEnv } from "@ai-career/config";
-import { ConfirmedProfileSchema, formatValidationError } from "../../../../lib/profile/confirmedProfileSchema";
+import { ConfirmedProfileSchema } from "../../../../lib/profile/confirmedProfileSchema";
+import { formatValidationError } from "../../../../lib/formatValidationError";
 import { readJsonBody } from "../../../../lib/readJsonBody";
 import { saveConfirmedProfile } from "../../../../lib/profile/saveProfile";
 

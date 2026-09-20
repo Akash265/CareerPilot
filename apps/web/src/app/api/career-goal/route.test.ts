@@ -71,4 +71,30 @@ describe("GET /api/career-goal", () => {
     expect(body.activeGoal.constraints.targetRoles).toEqual(["Data Engineer"]);
     expect(body.history).toHaveLength(1);
   });
+
+  it("returns the preferred salary alongside the minimum, coerced from numeric to number", async () => {
+    await adminSql`
+      UPDATE career_goal_constraints SET
+        salary_floor_normalized = 60000, salary_currency = 'EUR', salary_is_parsed = true,
+        salary_target_raw = 'ideally 80k EUR', salary_target_normalized = 80000,
+        salary_target_currency = 'EUR', salary_target_is_parsed = true
+      WHERE user_id = ${TEST_USER_ID}
+    `;
+
+    const body = await (await GET()).json();
+
+    expect(body.activeGoal.constraints).toMatchObject({
+      salaryFloorNormalized: 60000,
+      salaryTargetRaw: "ideally 80k EUR",
+      salaryTargetNormalized: 80000,
+      salaryTargetCurrency: "EUR",
+      salaryTargetIsParsed: true,
+    });
+  });
+
+  it("fails loudly, rather than showing 'no goal', when the active goal has lost its constraints row", async () => {
+    await adminSql`DELETE FROM career_goal_constraints WHERE user_id = ${TEST_USER_ID}`;
+
+    await expect(GET()).rejects.toThrow(/has no constraints/i);
+  });
 });

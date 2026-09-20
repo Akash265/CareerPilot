@@ -84,6 +84,53 @@ describe("career goal tables RLS isolation", () => {
     });
   });
 
+  it("stores a preferred-compensation phrase and its normalized value separately from the salary floor (spec 6.2)", async () => {
+    await withUserContext(db, USER_A, async (tx) => {
+      const [goal] = await tx
+        .insert(careerGoals)
+        .values({ rawText: "min 60k, ideally 80k", version: 2, parseStatus: "parsed" })
+        .returning({ id: careerGoals.id });
+      await tx.insert(careerGoalConstraints).values({
+        careerGoalId: goal.id as string,
+        salaryFloorRaw: "60k EUR",
+        salaryFloorNormalized: "60000",
+        salaryCurrency: "EUR",
+        salaryIsParsed: true,
+        salaryTargetRaw: "ideally 80k EUR",
+        salaryTargetNormalized: "80000",
+        salaryTargetCurrency: "EUR",
+        salaryTargetIsParsed: true,
+      });
+      const [row] = await tx
+        .select()
+        .from(careerGoalConstraints)
+        .where(eq(careerGoalConstraints.careerGoalId, goal.id as string));
+      expect(row.salaryFloorNormalized).toBe("60000");
+      expect(row.salaryTargetRaw).toBe("ideally 80k EUR");
+      expect(row.salaryTargetNormalized).toBe("80000");
+      expect(row.salaryTargetCurrency).toBe("EUR");
+      expect(row.salaryTargetIsParsed).toBe(true);
+    });
+  });
+
+  it("defaults the preferred-compensation columns to absent", async () => {
+    await withUserContext(db, USER_B, async (tx) => {
+      const [goal] = await tx
+        .insert(careerGoals)
+        .values({ rawText: "no salary mentioned", version: 1, parseStatus: "parsed" })
+        .returning({ id: careerGoals.id });
+      await tx.insert(careerGoalConstraints).values({ careerGoalId: goal.id as string });
+      const [row] = await tx
+        .select()
+        .from(careerGoalConstraints)
+        .where(eq(careerGoalConstraints.careerGoalId, goal.id as string));
+      expect(row.salaryTargetRaw).toBeNull();
+      expect(row.salaryTargetNormalized).toBeNull();
+      expect(row.salaryTargetCurrency).toBeNull();
+      expect(row.salaryTargetIsParsed).toBe(false);
+    });
+  });
+
   it("confirms the retired candidate_profiles preference columns and company_preferences table are gone", async () => {
     const columnCheck = await adminSql`
       SELECT column_name FROM information_schema.columns

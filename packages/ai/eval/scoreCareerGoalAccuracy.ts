@@ -12,7 +12,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv } from "@ai-career/config";
-import { createAnthropicClient, extractCareerGoal, type CareerGoalExtractionDraft } from "../src";
+import { createAnthropicClient, extractCareerGoal, parseSalaryFloor, type CareerGoalExtractionDraft } from "../src";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, "career-goal-fixtures");
@@ -32,10 +32,26 @@ function recall(expected: string[], actual: string[]): number {
   return matched.length / expected.length;
 }
 
+// Salary phrases are compared by what the deterministic parser makes of them,
+// not as strings: a model that answers "minimum €60k" where the label says
+// "€60k" extracted the right thing, and both phrases yield the same number.
+function sameSalary(expected: string | null, actual: string | null): boolean {
+  const e = parseSalaryFloor(expected);
+  const a = parseSalaryFloor(actual);
+  return e.amount === a.amount && e.currency === a.currency && e.isParsed === a.isParsed;
+}
+
+function scoreSalaries(expected: CareerGoalExtractionDraft, actual: CareerGoalExtractionDraft): number {
+  const matches = [
+    sameSalary(expected.salaryFloorRaw, actual.salaryFloorRaw),
+    sameSalary(expected.salaryTargetRaw, actual.salaryTargetRaw),
+  ].filter(Boolean);
+  return matches.length / 2;
+}
+
 function scoreScalars(expected: CareerGoalExtractionDraft, actual: CareerGoalExtractionDraft): number {
   const fields: (keyof CareerGoalExtractionDraft)[] = [
-    "seniority", "workMode", "minExperienceYears", "employmentType",
-    "salaryFloorRaw", "visaSponsorshipRequired",
+    "seniority", "workMode", "minExperienceYears", "employmentType", "visaSponsorshipRequired",
   ];
   const matches = fields.filter((field) => normalize(String(expected[field])) === normalize(String(actual[field])));
   return matches.length / fields.length;
@@ -73,6 +89,7 @@ async function main() {
       excludedCompanies: recall(expected.excludedCompanies, actual.excludedCompanies),
       hardConstraints: recall(expected.hardConstraints, actual.hardConstraints),
       scalars: scoreScalars(expected, actual),
+      salaries: scoreSalaries(expected, actual),
     };
     const overall =
       Object.values(sectionScores).reduce((sum, s) => sum + s, 0) / Object.keys(sectionScores).length;

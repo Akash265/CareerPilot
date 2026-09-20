@@ -1,19 +1,23 @@
 {
   "targetRoles": [
-    "customer support"
+    "analytics engineer"
   ],
   "seniority": null,
   "locations": [],
-  "workMode": "remote",
+  "workMode": "any",
   "minExperienceYears": null,
   "employmentType": null,
-  "salaryFloorRaw": "3000 per month",
-  "salaryTargetRaw": null,
+  "salaryFloorRaw": "minimum €60k",
+  "salaryTargetRaw": "ideally around €80k",
   "visaSponsorshipRequired": null,
   "skills": [],
   "preferredIndustries": [],
   "excludedIndustries": [],
   "preferredCompanies": [],
-  "excludedCompanies": [],
+  "excludedCompanies": [
+    "Accenture",
+    "Deloitte",
+    "Amazon"
+  ],
   "hardConstraints": []
 }

@@ -29,6 +29,14 @@ export const careerGoalConstraints = pgTable("career_goal_constraints", {
   salaryFloorNormalized: numeric("salary_floor_normalized"),
   salaryCurrency: text("salary_currency"),
   salaryIsParsed: boolean("salary_is_parsed").notNull().default(false),
+  // Preferred / target compensation (spec 6.2 "salary floor and preferred
+  // compensation"): same raw + normalized + currency + is_parsed shape as the
+  // floor above, kept separate because it may differ and must never be
+  // mistaken for the minimum.
+  salaryTargetRaw: text("salary_target_raw"),
+  salaryTargetNormalized: numeric("salary_target_normalized"),
+  salaryTargetCurrency: text("salary_target_currency"),
+  salaryTargetIsParsed: boolean("salary_target_is_parsed").notNull().default(false),
   visaSponsorshipRequired: boolean("visa_sponsorship_required"),
   skills: text("skills").array().notNull().default(sql`ARRAY[]::text[]`),
   preferredIndustries: text("preferred_industries").array().notNull().default(sql`ARRAY[]::text[]`),
