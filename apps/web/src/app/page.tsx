@@ -16,6 +16,12 @@ export default function Home() {
         <Link href="/career-goal" className="underline">
           2. Career goal — describe the roles you want
         </Link>
+        <Link href="/sources" className="underline">
+          3. Job sources — add the company boards you want to follow
+        </Link>
+        <Link href="/jobs" className="underline">
+          4. Jobs — browse what was ingested
+        </Link>
       </nav>
     </main>
   );

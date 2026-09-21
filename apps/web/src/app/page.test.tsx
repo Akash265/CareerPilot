@@ -11,9 +11,11 @@ describe("Home", () => {
     render(<Home />);
 
     const links = screen.getAllByRole("link");
-    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/profile", "/career-goal"]);
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/profile", "/career-goal", "/sources", "/jobs"]);
     expect(screen.getByRole("link", { name: /candidate profile/i })).toHaveAttribute("href", "/profile");
     expect(screen.getByRole("link", { name: /career goal/i })).toHaveAttribute("href", "/career-goal");
+    expect(screen.getByRole("link", { name: /job sources/i })).toHaveAttribute("href", "/sources");
+    expect(screen.getByRole("link", { name: /browse what was ingested/i })).toHaveAttribute("href", "/jobs");
   });
 
   it("no longer describes the app as a foundation-phase shell", () => {
