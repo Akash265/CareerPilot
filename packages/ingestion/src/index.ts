@@ -11,3 +11,4 @@ export * from "./adapters/slug";
 export * from "./adapters/http";
 export * from "./adapters/greenhouse";
 export * from "./adapters/lever";
+export * from "./adapters/upload";
