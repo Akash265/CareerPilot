@@ -8,6 +8,7 @@ import { greenhouseJobFixture } from "../fixtures";
 import { IngestError, type RawRecord, type SourceAdapter } from "../types";
 
 const USER = "00000000-0000-0000-0000-0000000000a2";
+const OTHER_USER = "00000000-0000-0000-0000-0000000000e2";
 const TITLES: Record<number, string> = { 1: "Data Engineer", 2: "Product Designer", 3: "Security Analyst" };
 let t: TestDb;
 let tick = 0;
@@ -19,9 +20,11 @@ beforeAll(async () => {
 beforeEach(async () => {
   tick = 0;
   await wipeUser(t.adminSql, USER);
+  await wipeUser(t.adminSql, OTHER_USER);
 });
 afterAll(async () => {
   await wipeUser(t.adminSql, USER);
+  await wipeUser(t.adminSql, OTHER_USER);
   await t.close();
 });
 
@@ -136,10 +139,141 @@ describe("runIngestion — the consent gate (D3) is enforced in worker code", ()
     expect(await statuses()).toEqual({});
   });
 
-  it("refuses a disabled source, and reports an unknown source id as not_found", async () => {
+  it("refuses a disabled source without calling the adapter, and records why", async () => {
     const disabled = await insertSource(t.adminSql, USER, { enabled: false });
-    expect(await failureOf(ok(disabled, 1))).toMatchObject({ errorClass: "source_disabled", retryable: false });
+    const factory = adapterFor(() => yielding([rec(1)]));
+    expect(await failureOf(run(disabled, factory))).toMatchObject({ errorClass: "source_disabled", retryable: false });
+    expect(factory).not.toHaveBeenCalled();
+    expect(await lastRun(disabled)).toMatchObject({ status: "failed", error_class: "source_disabled" });
+    expect(await statuses()).toEqual({});
+  });
+
+  it("reports an unknown source id as not_found", async () => {
     expect(await failureOf(ok("00000000-0000-0000-0000-00000000ffff", 1))).toMatchObject({ errorClass: "not_found" });
+  });
+
+  it("reports a source owned by another user as not_found (RLS scoping) and never calls the adapter", async () => {
+    const foreign = await insertSource(t.adminSql, OTHER_USER);
+    const factory = adapterFor(() => yielding([rec(1)]));
+    const error = await failureOf(run(foreign, factory));
+    expect(error).toMatchObject({ errorClass: "not_found", retryable: false });
+    expect(factory).not.toHaveBeenCalled();
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM ingestion_runs WHERE source_id = ${foreign}`)[0].n).toBe(0);
+    expect(await sourceRow(foreign)).toMatchObject({ last_run_status: null });
+  });
+
+  it("reports a source id that is not a UUID as not_found, without a database error", async () => {
+    const factory = adapterFor(() => yielding([rec(1)]));
+    const error = await failureOf(run("not-a-uuid", factory));
+    expect(error).toBeInstanceOf(IngestError);
+    expect(error).toMatchObject({ errorClass: "not_found", retryable: false });
+    expect(error.message).toBe("not_found");
+    expect(factory).not.toHaveBeenCalled();
+  });
+});
+
+// The clock is the fault-injection point: `now()` is called once at the start (startedAt), once per
+// record, once for the closing step and once inside every finish(), so making call N throw a raw
+// error simulates a database failure at that exact step. The raw message must never surface.
+describe("runIngestion — failures after or around the fetch never escape as raw errors", () => {
+  const SECRET = "secret posting content";
+  const faultyClock = (failOnCall: number) => {
+    let calls = 0;
+    return () => {
+      calls++;
+      if (calls === failOnCall) throw new Error(SECRET);
+      return new Date(Date.UTC(2026, 8, 21, 11, 0, calls));
+    };
+  };
+  const runWith = (sourceId: string, factory: ReturnType<typeof adapterFor>, now: () => Date) =>
+    runIngestion(t.db, { userId: USER, sourceId, adapterFor: factory, now });
+  const storedText = async (sourceId: string) =>
+    JSON.stringify([
+      await t.adminSql`SELECT * FROM ingestion_runs WHERE source_id = ${sourceId}`,
+      await t.adminSql`SELECT * FROM job_sources WHERE id = ${sourceId}`,
+      await t.adminSql`SELECT * FROM jobs WHERE user_id = ${USER}`,
+    ]);
+  const expectSanitized = (error: IngestError) => {
+    expect(error).toBeInstanceOf(IngestError);
+    expect(error.message).toBe(error.errorClass);
+    expect(`${error.stack}${JSON.stringify(error)}${String(error.cause)}`).not.toContain("secret");
+  };
+
+  it("(a) a failure while closing is recorded as a failed, incomplete run and closes nothing", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    await ok(source, 1, 2, 3);
+    // Second run sees one record, so a close WOULD run: calls are startedAt(1), record(2), close(3).
+    const error = await failureOf(runWith(source, adapterFor(() => yielding([rec(1)])), faultyClock(3)));
+    expect(error).toMatchObject({ errorClass: "unknown", retryable: true });
+    expect(error.message).toBe("unknown");
+    expectSanitized(error);
+
+    expect(await lastRun(source)).toMatchObject({ status: "failed", complete: false, error_class: "unknown", fetched_count: 1, closed_count: 0 });
+    expect(await sourceRow(source)).toMatchObject({ last_run_status: "failed", last_error_class: "unknown" });
+    expect(await statuses()).toEqual({ "Data Engineer": "open", "Product Designer": "open", "Security Analyst": "open" });
+    expect(await storedText(source)).not.toContain("secret");
+  });
+
+  it("(b) if recording the failure also fails, the caller still sees the original error class", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    async function* dies(): AsyncIterable<RawRecord> {
+      throw new IngestError("server_error");
+    }
+    // Calls: startedAt(1), then the catch-path finish(2) blows up.
+    const error = await failureOf(runWith(source, adapterFor(dies), faultyClock(2)));
+    expect(error).toMatchObject({ errorClass: "server_error", retryable: true });
+    expectSanitized(error);
+    // The fault really fired: the failure could not be recorded, so the run row is still 'running'.
+    expect(await lastRun(source)).toMatchObject({ status: "running" });
+    expect(await storedText(source)).not.toContain("secret");
+  });
+
+  it("(b2) an unexpected adapter error whose recording also fails still surfaces as class 'unknown'", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    async function* leaks(): AsyncIterable<RawRecord> {
+      throw new Error(SECRET);
+    }
+    const error = await failureOf(runWith(source, adapterFor(leaks), faultyClock(2)));
+    expect(error).toMatchObject({ errorClass: "unknown", retryable: true });
+    expectSanitized(error);
+    expect(await lastRun(source)).toMatchObject({ status: "running" });
+    expect(await storedText(source)).not.toContain("secret");
+  });
+
+  it("(c) if recording a consent refusal fails, the caller still sees consent_missing", async () => {
+    const source = await insertSource(t.adminSql, USER, { consent: false });
+    const factory = adapterFor(() => yielding([rec(1)]));
+    // Calls: startedAt(1), then the guard-path finish(2) blows up.
+    const error = await failureOf(runWith(source, factory, faultyClock(2)));
+    expect(error).toMatchObject({ errorClass: "consent_missing", retryable: false });
+    expectSanitized(error);
+    expect(factory).not.toHaveBeenCalled();
+    expect(await lastRun(source)).toMatchObject({ status: "running" });
+    expect(await storedText(source)).not.toContain("secret");
+  });
+
+  it("(d) if recording success fails, the caller sees IngestError('unknown') and the run is marked failed", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    // Calls: startedAt(1), record(2), close(3), success finish(4) blows up; the fallback finish(5) works.
+    const error = await failureOf(runWith(source, adapterFor(() => yielding([rec(1)])), faultyClock(4)));
+    expect(error).toMatchObject({ errorClass: "unknown", retryable: true });
+    expect(error.message).toBe("unknown");
+    expectSanitized(error);
+    expect(await lastRun(source)).toMatchObject({ status: "failed", complete: false, error_class: "unknown" });
+    expect(await sourceRow(source)).toMatchObject({ last_run_status: "failed", last_error_class: "unknown" });
+    expect(await storedText(source)).not.toContain("secret");
+  });
+
+  it("(e) a raw error from the closing step never appears in the thrown error or in any stored row", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    await ok(source, 1, 2, 3);
+    const error = await failureOf(runWith(source, adapterFor(() => yielding([rec(1), rec(2)])), faultyClock(4)));
+    // Calls: startedAt(1), record(2), record(3), close(4).
+    expectSanitized(error);
+    expect(error).toMatchObject({ errorClass: "unknown" });
+    expect(await lastRun(source)).toMatchObject({ status: "failed", error_class: "unknown", fetched_count: 2 });
+    expect(await storedText(source)).not.toContain("secret");
+    expect(await statuses()).toEqual({ "Data Engineer": "open", "Product Designer": "open", "Security Analyst": "open" });
   });
 });
 

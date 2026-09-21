@@ -8,6 +8,8 @@ import { persistPosting } from "./persistPosting";
 
 const { jobSources, ingestionRuns, rawJobPostings, jobPostings } = schema;
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface RunIngestionOptions {
   userId: string;
   sourceId: string;
@@ -37,6 +39,9 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
   const { userId, sourceId } = opts;
   const now = opts.now ?? (() => new Date());
   const inUserContext = <T>(fn: (tx: DbClient) => Promise<T>) => withUserContext(db, userId, fn);
+
+  // A malformed id can never name a source; say so instead of letting Postgres reject the cast.
+  if (!UUID.test(sourceId)) throw new IngestError("not_found");
 
   const [source] = await inUserContext((tx) => tx.select().from(jobSources).where(eq(jobSources.id, sourceId)).limit(1));
   if (!source) throw new IngestError("not_found");
@@ -70,6 +75,15 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
         .set({ lastRunAt: finishedAt, lastRunStatus: status, lastErrorClass: errorClass })
         .where(eq(jobSources.id, sourceId));
     });
+  // Recording a failure is best-effort: if it fails too, the caller must still see the ORIGINAL error
+  // class, never the (possibly value-carrying) database error from the recording attempt.
+  const finishQuietly = async (errorClass: IngestErrorClass) => {
+    try {
+      await finish("failed", false, errorClass);
+    } catch {
+      // swallowed on purpose; see above
+    }
+  };
   const summary = (status: RunSummary["status"], complete: boolean, errorClass: RunSummary["errorClass"]): RunSummary => ({
     runId: run.id, status, complete, errorClass, ...counters,
   });
@@ -81,12 +95,18 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
       ? "consent_missing"
       : null;
   if (guard) {
-    await finish("failed", false, guard);
+    await finishQuietly(guard);
     throw new IngestError(guard);
   }
 
   const ref: SourceRef = { id: source.id, kind: source.kind, label: source.label, config: source.config };
 
+  // A fetch that returned nothing is more likely an API glitch than an emptied board: treat it as
+  // incomplete so it can never mass-close a source's jobs.
+  let complete = false;
+
+  // The fetch loop AND the closing step share one catch, so any failure in either is recorded as a
+  // failed, incomplete run and surfaces as an IngestError (class only), never a raw error.
   try {
     for await (const record of opts.adapterFor(ref).fetch(ref)) {
       counters.fetched++;
@@ -125,19 +145,24 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
         else counters.unchanged++;
       });
     }
+
+    complete = counters.fetched > 0;
+    if (complete && source.kind !== "upload") {
+      counters.closed = await inUserContext((tx) => closeMissingPostings(tx, sourceId, startedAt, now()));
+    }
   } catch (error) {
-    const errorClass: IngestErrorClass = error instanceof IngestError ? error.errorClass : "unknown";
-    await finish("failed", false, errorClass);
-    throw error instanceof IngestError ? error : new IngestError("unknown");
+    const failure = error instanceof IngestError ? error : new IngestError("unknown");
+    await finishQuietly(failure.errorClass);
+    throw failure;
   }
 
-  // A fetch that returned nothing is more likely an API glitch than an emptied board: treat it as
-  // incomplete so it can never mass-close a source's jobs.
-  const complete = counters.fetched > 0;
-  if (complete && source.kind !== "upload") {
-    counters.closed = await inUserContext((tx) => closeMissingPostings(tx, sourceId, startedAt, now()));
-  }
   const errorClass = complete ? null : "empty_result";
-  await finish("succeeded", complete, errorClass);
+  try {
+    await finish("succeeded", complete, errorClass);
+  } catch {
+    // The work is done but could not be recorded as such: mark the run failed if we still can.
+    await finishQuietly("unknown");
+    throw new IngestError("unknown");
+  }
   return summary("succeeded", complete, errorClass);
 }
