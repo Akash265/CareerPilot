@@ -14,3 +14,6 @@ export * from "./adapters/lever";
 export * from "./adapters/upload";
 export * from "./identity/serialize";
 export * from "./identity/merge";
+export * from "./pipeline/persistPosting";
+export * from "./pipeline/recomputeJob";
+export * from "./pipeline/closeMissing";
