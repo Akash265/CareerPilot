@@ -17,11 +17,18 @@ const OPTIONAL_WHEN_BEFORE = /(preferred|preferably|ideally)/i;
 // Descriptions are untrusted third-party text; real ones are ~15KB.
 const MAX_TEXT_CHARS = 200_000;
 
+// Real bullets are short; this bounds the optional-line check to matches x 800 chars on pathological single-line input.
+const OPTIONAL_WINDOW = 400;
+
 function isOptional(text: string, index: number): boolean {
-  const lineStart = text.lastIndexOf("\n", index) + 1;
-  const lineEnd = text.indexOf("\n", index);
-  const line = text.slice(lineStart, lineEnd === -1 ? text.length : lineEnd);
-  return OPTIONAL_ANYWHERE.test(line) || OPTIONAL_WHEN_BEFORE.test(text.slice(lineStart, index));
+  // Take the window first and find the line boundaries inside it, so nothing scans the whole text per match.
+  const base = Math.max(0, index - OPTIONAL_WINDOW);
+  const windowText = text.slice(base, index + OPTIONAL_WINDOW);
+  const rel = index - base;
+  const lineStart = windowText.lastIndexOf("\n", rel) + 1;
+  const lineEnd = windowText.indexOf("\n", rel);
+  const line = windowText.slice(lineStart, lineEnd === -1 ? windowText.length : lineEnd);
+  return OPTIONAL_ANYWHERE.test(line) || OPTIONAL_WHEN_BEFORE.test(windowText.slice(lineStart, rel));
 }
 
 export function extractMinExperience(text: string): { years: number | null; evidence: string | null } {

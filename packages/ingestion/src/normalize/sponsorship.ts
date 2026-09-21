@@ -41,13 +41,13 @@ export function extractSponsorship(text: string): {
   let negatedEvidence: string | null = null;
   let remaining = text;
   for (const pattern of NOT_OFFERED) {
-    const m = pattern.exec(text);
-    if (m) {
-      negatedEvidence = snippet(text, m.index, m[0].length);
-      // Remove the negated clause so "cannot sponsor work visas" is not also read as an offer.
-      remaining = text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
-      break;
+    if (negatedEvidence === null) {
+      const m = pattern.exec(text);
+      if (m) negatedEvidence = snippet(text, m.index, m[0].length);
     }
+    // Remove EVERY negated clause so none of them ("cannot sponsor work visas", said twice) is also read as an offer.
+    // A fresh global copy per call: a shared /g regex would leak lastIndex between calls.
+    remaining = remaining.replace(new RegExp(pattern.source, pattern.flags + "g"), " ");
   }
 
   let offeredEvidence: string | null = null;

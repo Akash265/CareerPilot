@@ -62,4 +62,38 @@ describe("extractMinExperience — adversarial input (posting text is untrusted)
     expect(elapsed).toBeLessThan(1000);
     expect(result).toEqual({ years: null, evidence: null });
   });
+
+  // Every repetition is a real match, on one 200k-char line: the optional-line check must not scan the whole line per match.
+  it("match-dense single line ('N+ years of experience' x8,700) finishes in under a second", () => {
+    const started = performance.now();
+    const result = extractMinExperience("5+ years of experience ".repeat(8_700));
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeLessThan(1000);
+    expect(result.years).toBe(5);
+    expect(result.evidence).toMatch(/^5\+ years of experience 5\+ years of experience/);
+    expect(result.evidence!.length).toBeLessThan(200);
+  });
+
+  it("match-dense single line ('experience: 5 years' x10,000) finishes in under a second", () => {
+    const started = performance.now();
+    const result = extractMinExperience("experience: 5 years ".repeat(10_000));
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeLessThan(1000);
+    expect(result.years).toBe(5);
+    expect(result.evidence).toMatch(/^experience: 5 years experience: 5 years/);
+    expect(result.evidence!.length).toBeLessThan(200);
+  });
+});
+
+describe("extractMinExperience — optional-marker window", () => {
+  const filler = "and other duties ".repeat(60); // ~1000 chars, no newline
+
+  it("a '(nice to have)' marker within the window still makes the line optional", () => {
+    expect(extractMinExperience("- 5+ years of experience in sales (nice to have)").years).toBeNull();
+  });
+
+  it("a marker ~1000 chars away on the same line no longer does (cost is bounded to a window)", () => {
+    expect(extractMinExperience(`- 5+ years of experience in sales ${filler}(nice to have)`).years).toBe(5);
+    expect(extractMinExperience(`- Preferably ${filler}5+ years of experience in sales`).years).toBe(5);
+  });
 });

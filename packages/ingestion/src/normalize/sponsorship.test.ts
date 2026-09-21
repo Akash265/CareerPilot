@@ -49,6 +49,17 @@ describe("extractSponsorship", () => {
     expect(r.evidence).toContain("||");
   });
 
+  it("several negated clauses stay not_offered (a later negation is not read as an offer)", () => {
+    for (const text of [
+      "We cannot sponsor work visas. We are unable to offer visa sponsorship.",
+      "Visa sponsorship is not available. Also, no visa sponsorship for contractors.",
+    ]) {
+      const r = extractSponsorship(text);
+      expect(r.value).toBe("not_offered");
+      expect(r.conflict).toBe(false);
+    }
+  });
+
   it("returns unknown with no evidence when the posting says nothing", () => {
     expect(extractSponsorship("Build data pipelines.")).toEqual({ value: "unknown", evidence: null, conflict: false });
   });
@@ -71,5 +82,14 @@ describe("extractSponsorship — adversarial input (posting text is untrusted)",
     const elapsed = performance.now() - started;
     expect(elapsed).toBeLessThan(1000);
     expect(result).toEqual({ value: "unknown", evidence: null, conflict: false });
+  });
+
+  it("dense repeated negations finish in under a second and stay not_offered", () => {
+    const started = performance.now();
+    const result = extractSponsorship("We cannot sponsor work visas. ".repeat(6_000));
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeLessThan(1000);
+    expect(result.value).toBe("not_offered");
+    expect(result.conflict).toBe(false);
   });
 });
