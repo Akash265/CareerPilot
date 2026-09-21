@@ -13,6 +13,12 @@ describe("companyKey", () => {
   it("never strips the name down to nothing", () => {
     expect(companyKey("Inc")).toBe("inc");
   });
+
+  it("keeps non-Latin names distinct instead of collapsing them to an empty key", () => {
+    expect(companyKey("Яндекс")).toBe("яндекс");
+    expect(companyKey("Яндекс")).not.toBe(companyKey("Сбер"));
+    expect(companyKey("株式会社 Sony")).not.toBe("");
+  });
 });
 
 describe("titleKey", () => {
@@ -27,6 +33,14 @@ describe("titleKey", () => {
     expect(titleKey("Software Engineer II")).toEqual({ titleKey: "software engineer ii", seniority: null });
   });
 
+  it("keeps non-Latin titles as non-empty keys, without splitting characters that carry combining marks", () => {
+    const { titleKey: key, seniority } = titleKey("エンジニア");
+    expect(key).not.toBe("");
+    expect(key).not.toContain(" ");
+    expect(seniority).toBeNull();
+    expect(titleKey("Senior エンジニア")).toEqual({ titleKey: key, seniority: "senior" });
+  });
+
   it("falls back to the plain key when stripping would leave nothing", () => {
     expect(titleKey("Lead")).toEqual({ titleKey: "lead", seniority: "lead" });
   });
@@ -38,6 +52,12 @@ describe("locationKey", () => {
       "remote canada|remote united kingdom|remote united states"
     );
     expect(locationKey("Remote, United States; Remote, Canada")).toBe("remote canada|remote united states");
+  });
+
+  it("keeps non-Latin locations as non-empty keys", () => {
+    expect(locationKey("東京")).not.toBe("");
+    expect(locationKey("東京")).not.toBe(locationKey("大阪"));
+    expect(locationKey("Tokyo; 東京")).toContain("|");
   });
 
   it("returns an empty key for missing locations", () => {
