@@ -64,6 +64,20 @@
       "when": 1789878869564,
       "tag": "0008_high_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790004666497,
+      "tag": "0009_job_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790004671807,
+      "tag": "0010_job_intelligence_rls_and_indexes",
+      "breakpoints": true
     }
   ]
 }
