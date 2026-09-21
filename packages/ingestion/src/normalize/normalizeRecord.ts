@@ -41,7 +41,24 @@ function nonEmpty(value: string | null | undefined): string | null {
   return v ? v : null;
 }
 
-function assemble(c: Common): NormalizedJob {
+/** Longest stored identity string. Their keys are btree-indexed, and Postgres rejects an index row over ~2.7KB. */
+const MAX_IDENTITY_CHARS = 500;
+/** External ids come from third-party APIs (uploads hash long ids already); one longer than this is rejected. */
+const MAX_EXTERNAL_ID_CHARS = 200;
+
+function cap(value: string): string {
+  return value.slice(0, MAX_IDENTITY_CHARS).trim();
+}
+
+function assemble(input: Common): NormalizedJob {
+  if (input.externalId.length > MAX_EXTERNAL_ID_CHARS) throw new NormalizeError();
+  // Truncate BEFORE computing keys, so the keys are bounded too; trim after, so a cut never leaves trailing space.
+  const c: Common = {
+    ...input,
+    companyName: cap(input.companyName),
+    title: cap(input.title),
+    locationRaw: input.locationRaw === null ? null : nonEmpty(cap(input.locationRaw)),
+  };
   if (!c.companyName || !c.title) throw new NormalizeError();
   const companyKeyValue = companyKey(c.companyName);
   const tk = titleKey(c.title);

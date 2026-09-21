@@ -286,3 +286,92 @@ describe("normalizeRecord — unparseable upload salary", () => {
     expect(job.salary).toEqual({ raw: null, min: null, max: null, currency: null, period: null, isParsed: false });
   });
 });
+
+// Identity fields feed btree-indexed key columns; Postgres rejects an index row over ~2.7KB, so one hostile
+// record must not be able to fail a whole persist run. Long values are cut to 500 characters before keys are
+// built. (The upload schema already rejects anything over 500, so for uploads the cap is a no-op backstop.)
+describe("normalizeRecord — identity field length caps", () => {
+  const HUGE = 100_000;
+  const CAP = 500;
+  const ghJob = (over: Record<string, unknown>) =>
+    normalizeRecord(greenhouse, { externalId: "1", payload: { id: 1, title: "Engineer", ...over } });
+  const leverJob = (over: Record<string, unknown>, config: Record<string, unknown> = { slug: "acme", companyName: "Acme" }) =>
+    normalizeRecord({ ...lever, config }, { externalId: "1", payload: { id: "1", text: "Engineer", ...over } });
+  const uploadJob = (over: Record<string, unknown>) =>
+    normalizeRecord(upload, { externalId: "1", payload: { title: "Engineer", company: "Acme", ...over } });
+
+  function timed<T>(run: () => T): { value: T; ms: number } {
+    const start = performance.now();
+    const value = run();
+    return { value, ms: performance.now() - start };
+  }
+
+  it("cuts a 100k-character location to exactly 500 characters with a bounded key", () => {
+    const loc = "L".repeat(HUGE);
+    for (const run of [() => ghJob({ location: { name: loc } }), () => leverJob({ categories: { location: loc } })]) {
+      const { value: job, ms } = timed(run);
+      expect(ms).toBeLessThan(1000);
+      expect(job.locationRaw).toBe("L".repeat(CAP));
+      expect(job.locationKey).toBe("l".repeat(CAP));
+    }
+  });
+
+  it("cuts a 100k-character title to exactly 500 characters with a bounded key", () => {
+    const title = "T".repeat(HUGE);
+    for (const run of [() => ghJob({ title }), () => leverJob({ text: title })]) {
+      const { value: job, ms } = timed(run);
+      expect(ms).toBeLessThan(1000);
+      expect(job.title).toBe("T".repeat(CAP));
+      expect(job.titleKey).toBe("t".repeat(CAP));
+    }
+  });
+
+  it("cuts a 100k-character company name to exactly 500 characters with a bounded key", () => {
+    const company = "C".repeat(HUGE);
+    for (const run of [() => ghJob({ company_name: company }), () => leverJob({}, { slug: "acme", companyName: company })]) {
+      const { value: job, ms } = timed(run);
+      expect(ms).toBeLessThan(1000);
+      expect(job.companyName).toBe("C".repeat(CAP));
+      expect(job.companyKey).toBe("c".repeat(CAP));
+    }
+  });
+
+  it("trims after truncating, so a cut that lands on whitespace leaves no trailing space", () => {
+    const job = ghJob({ title: `${"a".repeat(CAP - 2)}  tail` });
+    expect(job.title).toBe("a".repeat(CAP - 2));
+  });
+
+  it("leaves values at exactly the cap untouched, and upload rows over it are still rejected by the schema", () => {
+    const job = uploadJob({ title: "a".repeat(CAP), location: "b".repeat(CAP) });
+    expect(job.title).toBe("a".repeat(CAP));
+    expect(job.locationRaw).toBe("b".repeat(CAP));
+    expect(() => uploadJob({ title: "a".repeat(CAP + 1) })).toThrow(NormalizeError);
+  });
+
+  it("rejects an external id over 200 characters with a content-free NormalizeError, and accepts exactly 200", () => {
+    const marker = "SECRET-ID-MARKER";
+    const tooLong = marker + "x".repeat(200 - marker.length + 1);
+    expect(tooLong).toHaveLength(201);
+    const attempts = [
+      () => normalizeRecord(greenhouse, { externalId: tooLong, payload: { id: 1, title: "Engineer" } }),
+      () => normalizeRecord(lever, { externalId: tooLong, payload: { id: "1", text: "Engineer" } }),
+      () => normalizeRecord(upload, { externalId: tooLong, payload: { title: "Engineer", company: "Acme" } }),
+    ];
+    for (const attempt of attempts) {
+      let caught: unknown;
+      try {
+        attempt();
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(NormalizeError);
+      expect((caught as NormalizeError).message).toBe("record could not be normalized");
+      expect(String(caught)).not.toContain(marker);
+    }
+
+    const ok = "y".repeat(200);
+    expect(normalizeRecord(greenhouse, { externalId: ok, payload: { id: 1, title: "Engineer" } }).externalId).toBe(ok);
+    expect(normalizeRecord(lever, { externalId: ok, payload: { id: "1", text: "Engineer" } }).externalId).toBe(ok);
+    expect(normalizeRecord(upload, { externalId: ok, payload: { title: "Engineer", company: "Acme" } }).externalId).toBe(ok);
+  });
+});
