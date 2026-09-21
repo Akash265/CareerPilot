@@ -6,3 +6,4 @@ export * from "./normalize/salary";
 export * from "./normalize/experience";
 export * from "./normalize/sponsorship";
 export * from "./normalize/workMode";
+export * from "./normalize/normalizeRecord";
