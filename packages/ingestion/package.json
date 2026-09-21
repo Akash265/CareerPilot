@@ -12,7 +12,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src eval",
+    "eval:extraction": "tsx eval/scoreExtraction.ts"
   },
   "dependencies": {
     "@ai-career/config": "workspace:*",
