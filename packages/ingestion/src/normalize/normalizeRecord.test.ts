@@ -179,3 +179,101 @@ describe("normalizeRecord — invalid payloads", () => {
     expect(() => normalizeRecord(lever, { externalId: "1", payload: "nope" })).toThrow(NormalizeError);
   });
 });
+
+describe("normalizeRecord — dates never come out invalid", () => {
+  const leverWith = (createdAt: unknown) =>
+    normalizeRecord(lever, { externalId: "1", payload: { id: "1", text: "Engineer", createdAt } });
+
+  it("returns null for a Lever createdAt outside the Date range", () => {
+    expect(leverWith(1e20).postedAt).toBeNull();
+    expect(leverWith(-1e20).postedAt).toBeNull();
+    expect(leverWith(8.64e15 + 1e3).postedAt).toBeNull();
+  });
+
+  it("returns null for an infinite Lever createdAt (the schema accepts it, so the date guard must catch it)", () => {
+    expect(leverWith(Infinity).postedAt).toBeNull();
+    expect(leverWith(-Infinity).postedAt).toBeNull();
+  });
+
+  it("rejects a NaN Lever createdAt at the schema", () => {
+    expect(() => leverWith(NaN)).toThrow(NormalizeError);
+  });
+
+  it("still returns the exact Date for a valid Lever createdAt, including the range edges", () => {
+    expect(leverWith(1_700_000_000_000).postedAt?.toISOString()).toBe("2023-11-14T22:13:20.000Z");
+    expect(leverWith(8.64e15).postedAt?.getTime()).toBe(8.64e15);
+    expect(leverWith(0).postedAt?.getTime()).toBe(0);
+  });
+
+  it("returns null for garbage Greenhouse first_published and upload postedAt", () => {
+    const gh = normalizeRecord(greenhouse, {
+      externalId: "1",
+      payload: { id: 1, title: "Engineer", first_published: "not a date" },
+    });
+    expect(gh.postedAt).toBeNull();
+    const up = normalizeRecord(upload, {
+      externalId: "1",
+      payload: { title: "Engineer", company: "Acme", postedAt: "definitely-not-a-date" },
+    });
+    expect(up.postedAt).toBeNull();
+  });
+});
+
+describe("normalizeRecord — NormalizeError never carries posting content", () => {
+  const MARKER = "SECRET-MARKER-123";
+  const cases: [string, SourceRef, unknown][] = [
+    ["greenhouse", greenhouse, { id: "not-a-number", title: MARKER, content: MARKER }],
+    ["lever", lever, { id: 42, text: MARKER, descriptionPlain: MARKER }],
+    ["upload", upload, { title: MARKER, description: MARKER }],
+    // Valid schema, but the title normalizes to an empty key: the guard in assemble() rejects it.
+    ["upload (empty title key)", upload, { title: "!!!", company: MARKER, description: MARKER }],
+  ];
+
+  for (const [kind, source, payload] of cases) {
+    it(`${kind}: message, string form, JSON and stack header omit the payload`, () => {
+      let caught: unknown;
+      try {
+        normalizeRecord(source, { externalId: "1", payload });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(NormalizeError);
+      const err = caught as NormalizeError;
+      expect(err.message).toBe("record could not be normalized");
+      expect(err.message).not.toContain(MARKER);
+      expect(String(err)).not.toContain(MARKER);
+      expect(JSON.stringify(err)).not.toContain(MARKER);
+      expect((err.stack ?? "").split("\n")[0]).not.toContain(MARKER);
+    });
+  }
+});
+
+describe("normalizeRecord — unknown kind and empty names", () => {
+  it("throws NormalizeError for an unknown source kind instead of returning undefined", () => {
+    const bogus = { id: "s9", kind: "workday", label: "x", config: {} } as unknown as SourceRef;
+    expect(() => normalizeRecord(bogus, { externalId: "1", payload: {} })).toThrow(NormalizeError);
+  });
+
+  it("falls back to the source label when the configured company name is empty or whitespace", () => {
+    const blankGreenhouse: SourceRef = { ...greenhouse, config: { slug: "gitlab", companyName: "   " } };
+    const blankLever: SourceRef = { ...lever, label: "acme-label", config: { slug: "acme", companyName: "" } };
+    const gh = normalizeRecord(blankGreenhouse, { externalId: "1", payload: { id: 1, title: "Engineer" } });
+    expect(gh.companyName).toBe("gitlab");
+    const lv = normalizeRecord(blankLever, { externalId: "1", payload: { id: "1", text: "Engineer" } });
+    expect(lv.companyName).toBe("acme-label");
+  });
+
+  it("rejects a record whose company or title normalizes to an empty key", () => {
+    expect(() => normalizeRecord(upload, { externalId: "1", payload: { title: "Engineer", company: "***" } })).toThrow(NormalizeError);
+    expect(() => normalizeRecord(upload, { externalId: "1", payload: { title: "!!!", company: "Acme" } })).toThrow(NormalizeError);
+    expect(() => normalizeRecord(lever, { externalId: "1", payload: { id: "1", text: "???" } })).toThrow(NormalizeError);
+    expect(() => normalizeRecord(greenhouse, { externalId: "1", payload: { id: 1, title: "---" } })).toThrow(NormalizeError);
+  });
+});
+
+describe("normalizeRecord — unparseable upload salary", () => {
+  it.each(["competitive", "DOE", "negotiable"])("invents no figure for salary cell %j", (salary) => {
+    const job = normalizeRecord(upload, { externalId: "1", payload: { title: "Engineer", company: "Acme", salary } });
+    expect(job.salary).toEqual({ raw: null, min: null, max: null, currency: null, period: null, isParsed: false });
+  });
+});

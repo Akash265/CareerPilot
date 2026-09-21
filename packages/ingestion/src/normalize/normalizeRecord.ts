@@ -26,10 +26,14 @@ interface Common {
   salaryHint?: string | null;
 }
 
+/** A Date for epoch milliseconds, or null when out of range (|t| > 8.64e15) or not finite: never an Invalid Date. */
+function validDate(epochMs: number): Date | null {
+  const d = new Date(epochMs);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function parseDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const t = Date.parse(value);
-  return Number.isNaN(t) ? null : new Date(t);
+  return value ? validDate(Date.parse(value)) : null;
 }
 
 function nonEmpty(value: string | null | undefined): string | null {
@@ -39,13 +43,16 @@ function nonEmpty(value: string | null | undefined): string | null {
 
 function assemble(c: Common): NormalizedJob {
   if (!c.companyName || !c.title) throw new NormalizeError();
+  const companyKeyValue = companyKey(c.companyName);
   const tk = titleKey(c.title);
+  // A name made only of punctuation normalizes to an empty key, which would collapse unrelated jobs together.
+  if (!companyKeyValue || !tk.titleKey) throw new NormalizeError();
   const salaryText = c.salaryHint ? `Salary: ${c.salaryHint}\n${c.descriptionText}` : c.descriptionText;
   return {
     externalId: c.externalId,
     url: c.url,
     companyName: c.companyName,
-    companyKey: companyKey(c.companyName),
+    companyKey: companyKeyValue,
     title: c.title,
     titleKey: tk.titleKey,
     seniority: tk.seniority,
@@ -70,7 +77,7 @@ function fromGreenhouse(source: SourceRef, record: RawRecord): NormalizedJob {
   return assemble({
     externalId: record.externalId,
     url: nonEmpty(job.absolute_url),
-    companyName: nonEmpty(job.company_name) ?? source.config.companyName ?? source.label,
+    companyName: nonEmpty(job.company_name) ?? nonEmpty(source.config.companyName) ?? source.label,
     title: job.title.trim(),
     locationRaw: nonEmpty(job.location?.name),
     countryCode: null, // Greenhouse has only free-text location
@@ -100,14 +107,14 @@ function fromLever(source: SourceRef, record: RawRecord): NormalizedJob {
   return assemble({
     externalId: record.externalId,
     url: nonEmpty(p.hostedUrl),
-    companyName: source.config.companyName ?? source.label, // Lever postings carry no company name
+    companyName: nonEmpty(source.config.companyName) ?? source.label, // Lever postings carry no company name
     title: p.text.trim(),
     locationRaw,
     countryCode: country && /^[A-Z]{2}$/.test(country) ? country : null,
     structuredWorkMode: p.workplaceType ?? null,
     employmentType: nonEmpty(p.categories?.commitment),
     descriptionText,
-    postedAt: typeof p.createdAt === "number" ? new Date(p.createdAt) : null, // epoch milliseconds
+    postedAt: typeof p.createdAt === "number" ? validDate(p.createdAt) : null, // epoch milliseconds
   });
 }
 
@@ -138,5 +145,7 @@ export function normalizeRecord(source: SourceRef, record: RawRecord): Normalize
       return fromLever(source, record);
     case "upload":
       return fromUpload(source, record);
+    default:
+      throw new NormalizeError(); // an unknown kind must never return undefined
   }
 }
