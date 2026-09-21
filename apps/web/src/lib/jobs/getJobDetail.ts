@@ -47,7 +47,7 @@ export async function getJobDetail(tx: DbClient, id: string): Promise<JobDetail 
     .from(jobPostings)
     .innerJoin(jobSources, eq(jobPostings.sourceId, jobSources.id))
     .where(eq(jobPostings.jobId, id))
-    .orderBy(jobPostings.firstSeenAt);
+    .orderBy(jobPostings.firstSeenAt, jobPostings.id);
 
   const pairs = await tx
     .select()

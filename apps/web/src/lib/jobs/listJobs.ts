@@ -7,7 +7,8 @@ const { jobs, jobPostings } = schema;
 export const PAGE_SIZE = 25;
 
 export const ListJobsQuerySchema = z.object({
-  q: z.string().trim().max(100).optional(),
+  // A NUL character is valid in a URL (%00) but Postgres rejects it in text (22021), which would be a 500.
+  q: z.string().trim().max(100).regex(/^[^\u0000]*$/, "Search text may not contain null characters").optional(),
   status: z.enum(["open", "closed", "all"]).default("open"),
   sourceId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).max(1000).default(1),

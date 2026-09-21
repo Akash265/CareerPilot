@@ -39,6 +39,11 @@ describe("labels", () => {
     expect(formatErrorClass("empty_result")).toMatch(/nothing was closed/);
     expect(formatErrorClass("something_new")).toMatch(/Something went wrong/);
   });
+  it("falls back, and never returns an inherited object member, for names that exist on every object", () => {
+    for (const name of ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"]) {
+      expect(formatErrorClass(name), name).toBe("Something went wrong — it will retry");
+    }
+  });
 });
 
 describe("safeHttpUrl", () => {

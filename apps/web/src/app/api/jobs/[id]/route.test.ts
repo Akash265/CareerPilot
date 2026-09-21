@@ -38,8 +38,9 @@ describe("GET /api/jobs/[id]", () => {
       title: "AI Engineer", sponsorship: "not_offered", sponsorshipEvidence: "Visa sponsorship is not available.",
       minExperienceYears: 5, descriptionText: "Build agents.",
     });
-    await insertPosting(admin, USER, id, gh, { externalId: "g1", url: "https://boards.example/g1" });
-    await insertPosting(admin, USER, id, up, { externalId: "u1", status: "closed" });
+    // Distinct first-seen dates, so the expected order does not depend on how ties happen to come back.
+    await insertPosting(admin, USER, id, gh, { externalId: "g1", url: "https://boards.example/g1", firstSeenAt: "2026-09-01T00:00:00Z" });
+    await insertPosting(admin, USER, id, up, { externalId: "u1", status: "closed", firstSeenAt: "2026-09-03T00:00:00Z" });
 
     const res = await get(id);
     expect(res.status).toBe(200);
@@ -54,6 +55,16 @@ describe("GET /api/jobs/[id]", () => {
     ]);
     expect(job.postings[0].url).toBe("https://boards.example/g1");
     expect(job.duplicateCandidates).toEqual([]);
+  });
+
+  it("orders postings that were first seen at the same moment by id, so the order is deterministic", async () => {
+    const src = await insertSource(admin, USER, { kind: "greenhouse", label: "GitLab", slug: "gitlab" });
+    const id = await insertJob(admin, USER, { title: "AI Engineer" });
+    const inserted: string[] = [];
+    for (let i = 0; i < 6; i++) inserted.push(await insertPosting(admin, USER, id, src, { externalId: `tie-${i}` }));
+
+    const { job } = await (await get(id)).json();
+    expect(job.postings.map((p: { id: string }) => p.id)).toEqual([...inserted].sort());
   });
 
   it("lists possible duplicates from either side of the pair, most similar first, without merging them", async () => {

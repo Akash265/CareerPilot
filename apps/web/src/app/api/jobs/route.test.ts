@@ -91,6 +91,16 @@ describe("GET /api/jobs", () => {
 });
 
 describe("GET /api/jobs -- hostile query parameters", () => {
+  it("answers 400, not a 500, for search text with a NUL character (Postgres rejects it in text)", async () => {
+    await insertJob(admin, USER, { title: "Data Engineer" });
+    for (const query of ["?q=%00", "?q=a%00b"]) {
+      const res = await get(query);
+      expect(res.status, query).toBe(400);
+      expect(await res.json()).toEqual({ error: "q: Search text may not contain null characters" });
+    }
+    expect(await search("data")).toEqual(["Data Engineer"]); // normal queries are unaffected
+  });
+
   it("matches backslashes, quotes, semicolons and SQL fragments as literal text, leaving the table intact", async () => {
     await insertJob(admin, USER, { title: "'; DROP TABLE jobs; --", companyName: "Injector" });
     await insertJob(admin, USER, { title: "Back\\slash Engineer" });

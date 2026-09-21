@@ -57,7 +57,9 @@ const ERROR_CLASS: Record<string, string> = {
   empty_result: "The last fetch returned no jobs, so nothing was closed",
   unknown: "Something went wrong — it will retry",
 };
-export const formatErrorClass = (errorClass: string): string => ERROR_CLASS[errorClass] ?? ERROR_CLASS.unknown;
+// Own-property lookup: the class is data from the database, and "constructor" must not resolve to Object's.
+export const formatErrorClass = (errorClass: string): string =>
+  Object.hasOwn(ERROR_CLASS, errorClass) ? ERROR_CLASS[errorClass] : ERROR_CLASS.unknown;
 
 /** Posting URLs come from third-party data: only ever render http(s) links (never `javascript:` and friends). */
 export function safeHttpUrl(url: string | null): string | null {
