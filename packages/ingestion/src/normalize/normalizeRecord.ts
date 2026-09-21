@@ -43,8 +43,12 @@ function nonEmpty(value: string | null | undefined): string | null {
 
 /** Longest stored identity string. Their keys are btree-indexed, and Postgres rejects an index row over ~2.7KB. */
 const MAX_IDENTITY_CHARS = 500;
-/** External ids come from third-party APIs (uploads hash long ids already); one longer than this is rejected. */
-const MAX_EXTERNAL_ID_CHARS = 200;
+/**
+ * External ids come from third-party APIs (uploads hash long ids already); one longer than this is rejected.
+ * runIngestion checks it too, BEFORE the raw upsert: the raw table's (source_id, external_id) btree index
+ * rejects an over-long value with a database error that would fail every run of the source.
+ */
+export const MAX_EXTERNAL_ID_CHARS = 200;
 
 function cap(value: string): string {
   return value.slice(0, MAX_IDENTITY_CHARS).trim();

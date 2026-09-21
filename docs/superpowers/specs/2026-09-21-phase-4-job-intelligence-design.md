@@ -64,7 +64,7 @@ All tables carry `user_id` (default `current_setting('app.current_user_id')::uui
 **`job_duplicate_candidates`** — trigram near-matches.
 `job_id_a`, `job_id_b`, `similarity`, `status` (`pending | same | different`). Phase 4 only writes `pending`.
 
-Indexes: unique `(source_id, external_id)` on raw and postings; btree on `fingerprint`; `pg_trgm` GIN on `jobs.title` and `jobs.company_name` (for the list filter and tier-3 matching).
+Indexes: unique `(source_id, external_id)` on raw and postings; btree on `fingerprint`; `pg_trgm` GIN on `jobs.title` and `jobs.company_name` (for the list filter only; tier-3 matching is not index-accelerated, see D36).
 
 ## 4. Pipeline and worker
 

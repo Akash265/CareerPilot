@@ -603,6 +603,8 @@ pnpm --filter @ai-career/job-ingestion start          services/job-ingestion/src
       │  │  fetchJson: 30 s timeout, 25 MB cap, redirects refused, class-only IngestError; slug via assertValidSlug
       │  ├─ upload: the stored raw_job_postings rows of that source
       │  └─ per record, one withUserContext transaction:
+      │     ├─ externalId longer than MAX_EXTERNAL_ID_CHARS (200)? → counted as failed and skipped BEFORE
+      │     │  anything is stored (the raw table's unique btree would throw and brick every run)
       │     ├─ upsert raw_job_postings (payload, content_hash)
       │     ├─ normalizeRecord(ref, record)              normalize/normalizeRecord.ts (pure)
       │     │  └─ per-kind schema → escapedHtmlToText / htmlToText · companyKey/titleKey/locationKey/
@@ -617,6 +619,7 @@ pnpm --filter @ai-career/job-ingestion start          services/job-ingestion/src
       │        ├─ upsert job_postings (normalized snapshot, fingerprint, content_hash)
       │        ├─ recomputeJob → mergePostings → update jobs (+ field_provenance, status, closed_at)
       │        └─ tier 3 (new job only): flagFuzzyDuplicates → job_duplicate_candidates (pending)
+      │           (best 20 same-location look-alikes by similarity; a bounded scan, not index-accelerated)
       │  complete = fetched > 0                            (a zero-record fetch is NOT complete)
       │  if complete and kind ≠ upload → closeMissingPostings (open postings with last_seen < run start;
       │                                  recompute each affected job)
@@ -641,6 +644,9 @@ GET /api/jobs?q&status&sourceId&page     app/api/jobs/route.ts → ListJobsQuery
                                            postings-by-source filter, 25 per page, newest posted first
 GET /api/jobs/[id]                       app/api/jobs/[id]/route.ts → non-UUID / unknown → 404
                                          → getJobDetail(tx, id): job + its postings + duplicate candidates
+GET /api/job-sources                     → listJobSourceViews: latest FINISHED run per source for the counters;
+                                           a `running` row younger than 30 min (and newer than that run) makes
+                                           the view lastRunStatus "running" with lastRun null (older = crashed run)
 /sources → SourcesClient → /api/job-sources*    /jobs → JobsClient → /api/jobs    /jobs/[id] → JobDetailClient
 ```
 

@@ -10,6 +10,8 @@ const { jobs, jobPostings, jobDuplicateCandidates } = schema;
 
 /** pg_trgm similarity of "company_key title_key" at or above which two same-location jobs are flagged. */
 export const FUZZY_DUPLICATE_THRESHOLD = 0.8;
+// Bounds the scan output and the flags per job; candidates are only ever flagged, never merged.
+const MAX_FUZZY_CANDIDATES = 20;
 
 export type PersistOutcome = "created" | "linked" | "updated" | "unchanged";
 
@@ -109,6 +111,8 @@ async function flagFuzzyDuplicates(tx: DbClient, jobId: string): Promise<void> {
     JOIN jobs b ON b.location_key = a.location_key AND b.id <> a.id
     WHERE a.id = ${jobId}
       AND similarity(a.company_key || ' ' || a.title_key, b.company_key || ' ' || b.title_key) >= ${FUZZY_DUPLICATE_THRESHOLD}
+    ORDER BY sim DESC, b.id
+    LIMIT ${MAX_FUZZY_CANDIDATES}
   `)) as unknown as { other_id: string; sim: number }[];
 
   for (const row of rows) {

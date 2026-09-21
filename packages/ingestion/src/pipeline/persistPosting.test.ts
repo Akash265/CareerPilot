@@ -100,6 +100,25 @@ describe("persistPosting", () => {
     expect(Number(pairs[0].similarity)).toBeGreaterThanOrEqual(0.8);
   });
 
+  it("tier 3 is bounded: a new job is flagged against at most 20 look-alikes, and the pair invariants still hold", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    let lastJobId = "";
+    for (let i = 1; i <= 25; i++) {
+      const res = await persist(source, "greenhouse", makeNormalized({ externalId: `e${i}`, descriptionText: `Distinct description number ${i}.` }));
+      expect(res.outcome).toBe("created");
+      lastJobId = res.jobId;
+    }
+    expect(await jobsOf()).toHaveLength(25);
+
+    const pairs = await candidates();
+    // 24 look-alikes exist for the last job, but only 20 are flagged. Jobs 1..21 flag 0..20 earlier ones; jobs 22..25 flag 20 each.
+    expect(pairs.filter((p) => p.job_id_a === lastJobId || p.job_id_b === lastJobId)).toHaveLength(20);
+    expect(pairs).toHaveLength(290);
+    // Invariants: stored ordered (a < b), never the same pair twice, always pending, always above the threshold.
+    expect(pairs.every((p) => p.job_id_a < p.job_id_b && p.status === "pending" && Number(p.similarity) >= 0.8)).toBe(true);
+    expect(new Set(pairs.map((p) => `${p.job_id_a}|${p.job_id_b}`)).size).toBe(pairs.length);
+  });
+
   it("does not flag jobs at a different location or with a dissimilar title", async () => {
     const source = await insertSource(t.adminSql, USER);
     await persist(source, "greenhouse", makeNormalized({ externalId: "e1", descriptionText: "one" }));

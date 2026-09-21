@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import { withUserContext } from "@ai-career/db";
 import { runIngestion, type RunSummary } from "./runIngestion";
@@ -113,6 +114,29 @@ describe("runIngestion — safety", () => {
     const summary = await run(source, adapterFor(() => yielding([rec(1), broken])));
     expect(summary).toMatchObject({ fetched: 2, unchanged: 1, failed: 1, closed: 0, complete: true });
     expect(await statuses()).toEqual({ "Data Engineer": "open", "Product Designer": "open" });
+  });
+
+  it("a record with an over-long external id is counted and skipped before anything is stored, on every run", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    const longId = randomBytes(1500).toString("hex"); // 3000 incompressible chars: over the ~2.7KB btree index-row limit on raw_job_postings(source_id, external_id)
+    const tooLong: RawRecord = { externalId: longId, payload: { ...greenhouseJobFixture, id: 2, title: TITLES[2] } };
+    const adapter = adapterFor(() => yielding([rec(1), tooLong]));
+
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 2, created: 1, failed: 1, errorClass: null });
+    expect(await statuses()).toEqual({ "Data Engineer": "open" });
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source}`)[0].n).toBe(1);
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source} AND length(external_id) > 200`)[0].n).toBe(0);
+    expect(await sourceRow(source)).toMatchObject({ last_run_status: "succeeded", last_error_class: null });
+
+    // Not bricked: the same input behaves the same on the next run.
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 2, unchanged: 1, failed: 1 });
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source}`)[0].n).toBe(1);
+  });
+
+  it("stores a record whose external id is exactly at the 200-character cap", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    const atCap: RawRecord = { externalId: "y".repeat(200), payload: { ...greenhouseJobFixture, id: 2, title: TITLES[2] } };
+    expect(await run(source, adapterFor(() => yielding([atCap])))).toMatchObject({ created: 1, failed: 0, complete: true });
   });
 
   it("an unexpected adapter error becomes a retryable 'unknown' and its message is never stored", async () => {

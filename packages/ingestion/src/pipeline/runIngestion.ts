@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
-import { normalizeRecord } from "../normalize/normalizeRecord";
+import { MAX_EXTERNAL_ID_CHARS, normalizeRecord } from "../normalize/normalizeRecord";
 import { IngestError, type IngestErrorClass, type NormalizedJob, type SourceAdapter, type SourceRef } from "../types";
 import { closeMissingPostings } from "./closeMissing";
 import { hashPayload } from "./hashPayload";
@@ -111,6 +111,12 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
     for await (const record of opts.adapterFor(ref).fetch(ref)) {
       counters.fetched++;
       await inUserContext(async (tx) => {
+        // Checked before the raw upsert, not only inside normalizeRecord: an over-long id would make the
+        // raw table's unique btree index throw, failing this run and every later run of the source.
+        if (record.externalId.length > MAX_EXTERNAL_ID_CHARS) {
+          counters.failed++;
+          return;
+        }
         const at = now();
         const contentHash = hashPayload(record.payload);
         await tx
