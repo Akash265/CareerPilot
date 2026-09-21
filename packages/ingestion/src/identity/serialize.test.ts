@@ -10,4 +10,28 @@ describe("serializeNormalized / deserializeNormalized", () => {
       expect(roundTripped).toEqual(job);
     }
   });
+
+  it("turns an unparseable postedAt string into null instead of an Invalid Date", () => {
+    const out = deserializeNormalized({ ...serializeNormalized(makeNormalized()), postedAt: "garbage" });
+    expect(out.postedAt).toBeNull();
+  });
+
+  it("turns a postedAt of the wrong type into null", () => {
+    for (const bad of [12345, {}, true, undefined]) {
+      const out = deserializeNormalized({ ...serializeNormalized(makeNormalized()), postedAt: bad });
+      expect(out.postedAt).toBeNull();
+    }
+  });
+
+  it("throws a fixed-message error, with no input content, when the value is not an object", () => {
+    for (const bad of [null, undefined, "SECRET-RESUME-TEXT", 42, ["SECRET-RESUME-TEXT"]]) {
+      let message = "";
+      try {
+        deserializeNormalized(bad);
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      expect(message).toBe("invalid normalized snapshot");
+    }
+  });
 });

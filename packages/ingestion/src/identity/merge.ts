@@ -76,17 +76,31 @@ export function mergePostings(postings: PostingForMerge[]): MergedJob {
     firstWith((n) => n.sponsorship.value !== "unknown") ?? firstWith((n) => n.sponsorship.conflict) ?? winner;
   provenance.sponsorship = sponsorship.id;
 
-  // The original posted date is the earliest one any source reports.
+  // The original posted date is the earliest one any source reports. Iterating `sorted` makes a
+  // tie resolve to the highest-precedence posting whatever the input order; Invalid Dates are skipped.
   let posted: PostingForMerge | undefined;
-  for (const p of postings) {
+  for (const p of sorted) {
     const d = p.normalized.postedAt;
-    if (d && (!posted || d < (posted.normalized.postedAt as Date))) posted = p;
+    if (!d || Number.isNaN(d.getTime())) continue;
+    if (!posted || d < (posted.normalized.postedAt as Date)) posted = p;
   }
   if (posted) provenance.postedAt = posted.id;
 
-  const open = postings.filter((p) => p.status === "open");
-  const verifiedFrom = open.length > 0 ? open : postings;
-  const maxTime = (list: PostingForMerge[]) => new Date(Math.max(...list.map((p) => p.lastSeenAt.getTime())));
+  // Plain loops, not Math.min/max(...array): a spread of a huge list overflows the argument limit.
+  let earliestFirstSeen = Infinity;
+  let newestOpenSeen = -Infinity;
+  let newestAnySeen = -Infinity;
+  let anyOpen = false;
+  for (const p of postings) {
+    const first = p.firstSeenAt.getTime();
+    const last = p.lastSeenAt.getTime();
+    if (first < earliestFirstSeen) earliestFirstSeen = first;
+    if (last > newestAnySeen) newestAnySeen = last;
+    if (p.status === "open") {
+      anyOpen = true;
+      if (last > newestOpenSeen) newestOpenSeen = last;
+    }
+  }
 
   const w = winner.normalized;
   const s = salary.normalized.salary;
@@ -115,9 +129,9 @@ export function mergePostings(postings: PostingForMerge[]): MergedJob {
     sponsorshipEvidence: sponsorship.normalized.sponsorship.evidence,
     sponsorshipConflict: sponsorship.normalized.sponsorship.conflict,
     postedAt: posted?.normalized.postedAt ?? null,
-    firstSeenAt: new Date(Math.min(...postings.map((p) => p.firstSeenAt.getTime()))),
-    lastVerifiedAt: maxTime(verifiedFrom),
-    status: open.length > 0 ? "open" : "closed",
+    firstSeenAt: new Date(earliestFirstSeen),
+    lastVerifiedAt: new Date(anyOpen ? newestOpenSeen : newestAnySeen),
+    status: anyOpen ? "open" : "closed",
     fieldProvenance: provenance,
   };
 }

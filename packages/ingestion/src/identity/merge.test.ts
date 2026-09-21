@@ -128,6 +128,104 @@ describe("mergePostings", () => {
     expect(() => mergePostings([])).toThrow(/at least one posting/);
   });
 
+  it("skips an Invalid Date postedAt whichever posting comes first", () => {
+    const bad = posting("bad", "greenhouse", { postedAt: new Date("garbage") });
+    const good = posting("good", "upload", { postedAt: at("2026-08-01T00:00:00Z") });
+    for (const input of [[bad, good], [good, bad]]) {
+      const merged = mergePostings(input);
+      expect(merged.postedAt).toEqual(at("2026-08-01T00:00:00Z"));
+      expect(merged.fieldProvenance.postedAt).toBe("good");
+    }
+    const onlyBad = mergePostings([bad]);
+    expect(onlyBad.postedAt).toBeNull();
+    expect(onlyBad.fieldProvenance).not.toHaveProperty("postedAt");
+  });
+
+  it("resolves a posted-date tie to the highest-precedence posting regardless of input order", () => {
+    const gh = posting("gh", "greenhouse", { postedAt: at("2026-08-01T00:00:00Z") });
+    const up = posting("up", "upload", { postedAt: at("2026-08-01T00:00:00Z") });
+    expect(mergePostings([gh, up]).fieldProvenance.postedAt).toBe("gh");
+    expect(mergePostings([up, gh]).fieldProvenance.postedAt).toBe("gh");
+  });
+
+  it("surfaces a sponsorship conflict from a non-winning posting and uses its evidence", () => {
+    const merged = mergePostings([
+      posting("gh", "greenhouse", { sponsorship: { value: "unknown", evidence: null, conflict: false } }),
+      posting("up", "upload", { sponsorship: { value: "unknown", evidence: "a || b", conflict: true } }),
+    ]);
+    expect(merged).toMatchObject({ sponsorship: "unknown", sponsorshipConflict: true, sponsorshipEvidence: "a || b" });
+    expect(merged.fieldProvenance.sponsorship).toBe("up");
+  });
+
+  it("breaks a full tie (status, rank, lastSeenAt) by lower id", () => {
+    const b = posting("b", "greenhouse", { title: "Data Engineer B" });
+    const a = posting("a", "greenhouse", { title: "Data Engineer A" });
+    expect([b, a].sort(comparePostings).map((p) => p.id)).toEqual(["a", "b"]);
+    expect(mergePostings([b, a]).fieldProvenance.identity).toBe("a");
+    expect(mergePostings([a, b]).fieldProvenance.identity).toBe("a");
+  });
+
+  it("treats greenhouse and lever as equal rank, so recency decides", () => {
+    const gh = posting("gh", "greenhouse", {}, { lastSeenAt: at("2026-09-01T00:00:00Z") });
+    const lv = posting("lv", "lever", {}, { lastSeenAt: at("2026-09-05T00:00:00Z") });
+    expect([gh, lv].sort(comparePostings).map((p) => p.id)).toEqual(["lv", "gh"]);
+    expect([lv, gh].sort(comparePostings).map((p) => p.id)).toEqual(["lv", "gh"]);
+  });
+
+  it("leaves employmentType and minExperience provenance absent when no posting supplies them", () => {
+    const merged = mergePostings([posting("gh", "greenhouse"), posting("up", "upload")]);
+    expect(merged.employmentType).toBeNull();
+    expect(merged.minExperienceYears).toBeNull();
+    expect(merged.minExperienceEvidence).toBeNull();
+    expect(merged.fieldProvenance).not.toHaveProperty("employmentType");
+    expect(merged.fieldProvenance).not.toHaveProperty("minExperience");
+    expect(merged.fieldProvenance).not.toHaveProperty("postedAt");
+  });
+
+  it("does not mutate its input array or the postings", () => {
+    const deepFreeze = <T>(value: T): T => {
+      if (value && typeof value === "object" && !(value instanceof Date) && !Object.isFrozen(value)) {
+        Object.freeze(value);
+        for (const v of Object.values(value)) deepFreeze(v);
+      }
+      return value;
+    };
+    const input = deepFreeze([
+      posting("up", "upload", { workMode: "remote", postedAt: at("2026-08-01T00:00:00Z") }),
+      posting("gh", "greenhouse", { employmentType: "Full-time" }, { status: "closed" }),
+    ]);
+    expect(() => mergePostings(input)).not.toThrow();
+    expect(input.map((p) => p.id)).toEqual(["up", "gh"]);
+  });
+
+  it("merges 200,000 postings (which overflowed the argument limit of Math.max spreads) quickly and exactly", () => {
+    const kinds: SourceKind[] = ["greenhouse", "lever", "upload"];
+    const base = Date.UTC(2026, 5, 1);
+    const first = Date.UTC(2026, 0, 1);
+    const shared = makeNormalized(); // one snapshot shared by every posting keeps generation cheap
+    const N = 200_000;
+    const postings: PostingForMerge[] = new Array<PostingForMerge>(N);
+    for (let i = 0; i < N; i++) {
+      postings[i] = {
+        id: `p${String(i).padStart(6, "0")}`,
+        sourceKind: kinds[i % 3],
+        status: i % 2 === 0 ? "open" : "closed",
+        firstSeenAt: new Date(first + i * 60_000),
+        lastSeenAt: new Date(base + i * 60_000),
+        normalized: shared,
+      };
+    }
+    const started = performance.now();
+    const merged = mergePostings(postings);
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeLessThan(1500);
+    expect(merged.status).toBe("open");
+    expect(merged.firstSeenAt).toEqual(new Date(first));
+    // Largest even index below 200,000 is 199,998 (199,998 % 3 === 0 -> greenhouse, top rank).
+    expect(merged.lastVerifiedAt).toEqual(new Date(base + 199_998 * 60_000));
+    expect(merged.fieldProvenance.identity).toBe("p199998");
+  });
+
   it("merges 5,000 postings for one job without throwing, in under a second, with exact results", () => {
     const kinds: SourceKind[] = ["greenhouse", "lever", "upload"];
     const base = Date.UTC(2026, 5, 1);
