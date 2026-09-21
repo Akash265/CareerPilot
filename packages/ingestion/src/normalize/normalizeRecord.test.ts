@@ -158,7 +158,8 @@ describe("normalizeRecord — adversarial input (end to end)", () => {
       const { job, ms } = timed(() =>
         normalizeRecord(upload, {
           externalId: "1",
-          payload: { title: "Engineer", company: "Acme", description: text, salary: text },
+          // The upload schema caps salary at 200 characters, so the hostile salary text is cut to the cap.
+          payload: { title: "Engineer", company: "Acme", description: text, salary: text.slice(0, 200) },
         }),
       );
       expect(ms).toBeLessThan(1000);
@@ -166,6 +167,14 @@ describe("normalizeRecord — adversarial input (end to end)", () => {
       expect(job.companyName).toBe("Acme");
       expect(job.descriptionText).toHaveLength(textLength);
       expectNothingFound(job);
+    });
+
+    it(`upload rejects an oversized salary cell before it reaches the salary parser: ${name}`, () => {
+      const start = performance.now();
+      expect(() =>
+        normalizeRecord(upload, { externalId: "1", payload: { title: "Engineer", company: "Acme", salary: text } }),
+      ).toThrow(NormalizeError);
+      expect(performance.now() - start).toBeLessThan(1000);
     });
   }
 });

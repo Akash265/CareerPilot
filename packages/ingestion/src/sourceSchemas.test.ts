@@ -44,4 +44,24 @@ describe("UploadRowSchema", () => {
     expect(UploadRowSchema.safeParse({ title: "Data Engineer" }).success).toBe(false);
     expect(UploadRowSchema.safeParse({ company: "Acme", title: "  " }).success).toBe(false);
   });
+
+  // Field caps keep hostile cells out of btree-indexed and display columns. Description is uncapped.
+  it.each([
+    ["title", 500],
+    ["company", 500],
+    ["location", 500],
+    ["url", 2000],
+    ["postedAt", 100],
+    ["employmentType", 100],
+    ["salary", 200],
+  ])("caps %s at %i characters (at the limit passes, one over fails)", (field, max) => {
+    const base = { title: "Data Engineer", company: "Acme" };
+    expect(UploadRowSchema.safeParse({ ...base, [field]: "x".repeat(max) }).success).toBe(true);
+    expect(UploadRowSchema.safeParse({ ...base, [field]: "x".repeat(max + 1) }).success).toBe(false);
+  });
+
+  it("does not cap the description", () => {
+    const row = { title: "Data Engineer", company: "Acme", description: "d".repeat(1_000_000) };
+    expect(UploadRowSchema.safeParse(row).success).toBe(true);
+  });
 });

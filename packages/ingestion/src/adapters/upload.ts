@@ -5,6 +5,11 @@ import type { RawRecord } from "../types";
 
 export const MAX_UPLOAD_ROWS = 5000;
 
+/** Longest `id` cell kept verbatim as externalId; longer ones are hashed (external_id is btree-indexed). */
+const MAX_VERBATIM_ID_LENGTH = 200;
+
+const hash32 = (input: string) => createHash("sha256").update(input).digest("hex").slice(0, 32);
+
 /** Thrown with a user-safe message. It never includes file content. */
 export class UploadParseError extends Error {
   constructor(message: string) {
@@ -86,11 +91,11 @@ export function parseUploadFile(buffer: Buffer, filename: string): RawRecord[] {
     }
     const data = parsed.data;
     const externalId =
-      id ??
-      createHash("sha256")
-        .update([data.company, data.title, data.location ?? "", data.url ?? ""].join("\u0001"))
-        .digest("hex")
-        .slice(0, 32);
+      id === null
+        ? hash32([data.company, data.title, data.location ?? "", data.url ?? ""].join("\u0001"))
+        : id.length > MAX_VERBATIM_ID_LENGTH
+          ? hash32(id)
+          : id;
     if (seen.has(externalId)) return;
     seen.add(externalId);
     records.push({ externalId, payload: data });
@@ -99,7 +104,7 @@ export function parseUploadFile(buffer: Buffer, filename: string): RawRecord[] {
   if (invalid.length > 0) {
     const first = invalid.slice(0, 3).join(", ");
     throw new UploadParseError(
-      `${invalid.length} row${invalid.length === 1 ? " is" : "s are"} invalid (first: rows ${first}): each needs a title and a company`
+      `${invalid.length} row${invalid.length === 1 ? " is" : "s are"} invalid (first: rows ${first}): each needs a title and a company, within the length limits`
     );
   }
   return records;

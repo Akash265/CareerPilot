@@ -57,13 +57,14 @@ export const LeverPostingSchema = z
 
 /** The canonical row the upload parser produces from any CSV/JSON header spelling. */
 export const UploadRowSchema = z.object({
-  title: z.string().trim().min(1),
-  company: z.string().trim().min(1),
-  location: z.string().trim().nullable().optional(),
+  title: z.string().trim().min(1).max(500),
+  company: z.string().trim().min(1).max(500),
+  location: z.string().trim().max(500).nullable().optional(),
+  // No cap: the 10 MB file cap bounds it, and it is never indexed.
   description: z.string().nullable().optional(),
-  url: z.string().trim().nullable().optional(),
-  postedAt: z.string().trim().nullable().optional(),
-  employmentType: z.string().trim().nullable().optional(),
-  salary: z.string().trim().nullable().optional(),
+  url: z.string().trim().max(2000).nullable().optional(),
+  postedAt: z.string().trim().max(100).nullable().optional(),
+  employmentType: z.string().trim().max(100).nullable().optional(),
+  salary: z.string().trim().max(200).nullable().optional(),
 });
 export type UploadRow = z.infer<typeof UploadRowSchema>;

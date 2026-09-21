@@ -58,6 +58,56 @@ describe("parseUploadFile — rejections (messages are user-safe)", () => {
   });
 });
 
+describe("parseUploadFile — field length limits", () => {
+  const HEX32 = /^[0-9a-f]{32}$/;
+  const csvWithId = (id: string) => buf(`id,title,company\n${id},Analyst,Beta`);
+
+  it("keeps an id of exactly 200 characters verbatim and hashes one of 201", () => {
+    const at = "i".repeat(200);
+    const over = "i".repeat(201);
+    expect(parseUploadFile(csvWithId(at), "jobs.csv")[0].externalId).toBe(at);
+    const hashed = parseUploadFile(csvWithId(over), "jobs.csv")[0].externalId;
+    expect(hashed).toMatch(HEX32);
+    expect(hashed).not.toContain("i");
+    expect(parseUploadFile(csvWithId(over), "jobs.csv")[0].externalId).toBe(hashed);
+  });
+
+  it("hashes different oversized ids to different externalIds", () => {
+    const a = parseUploadFile(csvWithId("a".repeat(300)), "jobs.csv")[0].externalId;
+    const b = parseUploadFile(csvWithId("b".repeat(300)), "jobs.csv")[0].externalId;
+    expect(a).not.toBe(b);
+  });
+
+  it("turns a 5,000,000-character id into a stable 32-hex externalId, quickly", () => {
+    const b = csvWithId("z".repeat(5_000_000));
+    const start = performance.now();
+    const first = parseUploadFile(b, "jobs.csv");
+    const second = parseUploadFile(b, "jobs.csv");
+    expect(performance.now() - start).toBeLessThan(1000);
+    expect(first[0].externalId).toMatch(HEX32);
+    expect(second[0].externalId).toBe(first[0].externalId);
+    expect(first[0].payload).toEqual({ title: "Analyst", company: "Beta" });
+  });
+
+  it("rejects a 501-character title through the invalid-rows path, listing the rows", () => {
+    const csv = `title,company\nAnalyst,Beta\n${"t".repeat(501)},Gamma\nEngineer,${"c".repeat(501)}`;
+    expect(() => parseUploadFile(buf(csv), "jobs.csv")).toThrow(UploadParseError);
+    try {
+      parseUploadFile(buf(csv), "jobs.csv");
+    } catch (error) {
+      expect((error as UploadParseError).message).toBe(
+        "2 rows are invalid (first: rows 2, 3): each needs a title and a company, within the length limits",
+      );
+    }
+  });
+
+  it("accepts a title of exactly 500 characters", () => {
+    const title = "t".repeat(500);
+    const [record] = parseUploadFile(buf(`title,company\n${title},Beta`), "jobs.csv");
+    expect(record.payload).toEqual({ title, company: "Beta" });
+  });
+});
+
 // Uploaded files are hostile. Every case must finish quickly and end in either the exact parsed
 // result or an UploadParseError whose user-safe message contains none of the file's content.
 describe("parseUploadFile — adversarial input", () => {
@@ -121,7 +171,7 @@ describe("parseUploadFile — adversarial input", () => {
     expect(junk.records).toBeUndefined();
     expectUserSafeError(
       junk.error,
-      "1 row is invalid (first: rows 1): each needs a title and a company",
+      "1 row is invalid (first: rows 1): each needs a title and a company, within the length limits",
       "Analyst",
     );
 
@@ -140,7 +190,11 @@ describe("parseUploadFile — adversarial input", () => {
     expect(error).not.toBeInstanceOf(RangeError);
     // V8's JSON.parse is iterative, so this is valid JSON: an array holding one (array) entry,
     // which the parser turns into an empty row that fails the title/company check.
-    expectUserSafeError(error, "1 row is invalid (first: rows 1): each needs a title and a company", "[[");
+    expectUserSafeError(
+      error,
+      "1 row is invalid (first: rows 1): each needs a title and a company, within the length limits",
+      "[[",
+    );
   });
 
   it("(6) a JSON array of 200,000 non-object entries hits the row cap before any per-row work", () => {
@@ -155,7 +209,11 @@ describe("parseUploadFile — adversarial input", () => {
     const b = buf(JSON.stringify(Array.from({ length: 100 }, (_, i) => (i % 2 ? i : null))));
     const { ms, error } = run(b, "jobs.json");
     expect(ms).toBeLessThan(BUDGET_MS);
-    expectUserSafeError(error, "100 rows are invalid (first: rows 1, 2, 3): each needs a title and a company", "null");
+    expectUserSafeError(
+      error,
+      "100 rows are invalid (first: rows 1, 2, 3): each needs a title and a company, within the length limits",
+      "null",
+    );
   });
 
   it("(7) the file type comes from the final extension only: NUL bytes and path separators in the name change nothing else", () => {
