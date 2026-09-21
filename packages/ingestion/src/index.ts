@@ -17,3 +17,7 @@ export * from "./identity/merge";
 export * from "./pipeline/persistPosting";
 export * from "./pipeline/recomputeJob";
 export * from "./pipeline/closeMissing";
+export * from "./pipeline/hashPayload";
+export * from "./pipeline/storeUpload";
+export * from "./pipeline/adapterFor";
+export * from "./pipeline/runIngestion";
