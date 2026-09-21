@@ -3,3 +3,6 @@ export * from "./sourceSchemas";
 export * from "./normalize/text";
 export * from "./normalize/keys";
 export * from "./normalize/salary";
+export * from "./normalize/experience";
+export * from "./normalize/sponsorship";
+export * from "./normalize/workMode";
