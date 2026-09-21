@@ -4,6 +4,7 @@ import { useState } from "react";
 
 export function UploadJobsForm({ onUploaded }: { onUploaded: (message: string) => void }) {
   const [file, setFile] = useState<File | null>(null);
+  const [inputKey, setInputKey] = useState(0);
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,8 @@ export function UploadJobsForm({ onUploaded }: { onUploaded: (message: string) =
         return;
       }
       setFile(null);
+      // The file input is uncontrolled: remounting it is what clears the filename it still shows.
+      setInputKey((k) => k + 1);
       setConsent(false);
       onUploaded(
         body.queued
@@ -47,7 +50,7 @@ export function UploadJobsForm({ onUploaded }: { onUploaded: (message: string) =
     <fieldset className="flex flex-col gap-3 rounded border p-4">
       <legend className="px-1 text-sm font-medium">Upload a job export</legend>
       <label htmlFor="upload-file" className="text-sm">Job file (CSV or JSON)</label>
-      <input id="upload-file" type="file" accept=".csv,.json" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block text-sm" />
+      <input key={inputKey} id="upload-file" type="file" accept=".csv,.json" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block text-sm" />
       <p className="text-xs text-gray-500">Columns: <b>title</b> and <b>company</b> are required; location, description, url, posted_at, employment_type, salary and id are optional. Up to 5,000 rows.</p>
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1" />

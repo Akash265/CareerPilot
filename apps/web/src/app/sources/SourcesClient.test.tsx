@@ -46,6 +46,16 @@ describe("SourcesClient", () => {
     expect(screen.getByText("Not run yet")).toBeInTheDocument();
   });
 
+  it("shows 'Running…' for a run in flight, not the previous run's date or zero counters", async () => {
+    mockFetch(list([
+      source({ id: "a", label: "GitLab", enabled: true, consentConfirmedAt: "2026-09-02T00:00:00Z", lastRunStatus: "running", lastRunAt: "2026-09-20T00:00:00Z", lastRun: null }),
+    ]));
+    render(<SourcesClient />);
+    expect(await screen.findByText("Running…")).toBeInTheDocument();
+    expect(screen.queryByText(/Last run/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0 fetched/)).not.toBeInTheDocument();
+  });
+
   it("cannot enable a source until its Terms of Service confirmation is ticked, then sends it", async () => {
     let listed = [source()];
     const fn = mockFetch({

@@ -1,4 +1,4 @@
-import { desc, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { schema, type DbClient } from "@ai-career/db";
 
 const { jobSources, ingestionRuns } = schema;
@@ -57,14 +57,44 @@ export function serializeSource(row: SourceRow, run: RunRow | null): JobSourceVi
   };
 }
 
+/**
+ * A `running` row older than this is a crashed run (the worker died before it could finish the row),
+ * not a run in flight. runIngestion only writes job_sources.last_run_status when a run ends, so the
+ * running row itself is the only signal that a run is in progress.
+ */
+export const RUN_IN_FLIGHT_MAX_AGE_MS = 30 * 60 * 1000;
+
 export async function listJobSourceViews(tx: DbClient): Promise<JobSourceView[]> {
   const sources = await tx.select().from(jobSources).orderBy(desc(jobSources.createdAt));
   if (sources.length === 0) return [];
-  const latest = await tx
-    .selectDistinctOn([ingestionRuns.sourceId])
-    .from(ingestionRuns)
-    .where(inArray(ingestionRuns.sourceId, sources.map((s) => s.id)))
-    .orderBy(ingestionRuns.sourceId, desc(ingestionRuns.startedAt));
-  const runBySource = new Map(latest.map((run) => [run.sourceId, run]));
-  return sources.map((source) => serializeSource(source, runBySource.get(source.id) ?? null));
+  const sourceIds = sources.map((s) => s.id);
+  const latestOf = (running: boolean) =>
+    tx
+      .selectDistinctOn([ingestionRuns.sourceId])
+      .from(ingestionRuns)
+      .where(
+        and(
+          inArray(ingestionRuns.sourceId, sourceIds),
+          running ? eq(ingestionRuns.status, "running") : ne(ingestionRuns.status, "running")
+        )
+      )
+      .orderBy(ingestionRuns.sourceId, desc(ingestionRuns.startedAt));
+  const [latestRunning, latestFinished] = await Promise.all([latestOf(true), latestOf(false)]);
+  const runningBySource = new Map(latestRunning.map((run) => [run.sourceId, run]));
+  const finishedBySource = new Map(latestFinished.map((run) => [run.sourceId, run]));
+
+  const now = Date.now();
+  return sources.map((source) => {
+    const running = runningBySource.get(source.id);
+    const finished = finishedBySource.get(source.id) ?? null;
+    const inFlight =
+      running !== undefined &&
+      now - running.startedAt.getTime() < RUN_IN_FLIGHT_MAX_AGE_MS &&
+      (finished === null || running.startedAt > finished.startedAt);
+    if (inFlight) {
+      // Its counters are all still zero: showing them would read as a finished run that found nothing.
+      return { ...serializeSource(source, null), lastRunStatus: "running" as const };
+    }
+    return serializeSource(source, finished);
+  });
 }
