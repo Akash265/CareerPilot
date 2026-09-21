@@ -31,7 +31,9 @@ rationale behind each architectural choice.
    (there is no Dockerfile or compose service for it yet). Enabling a source
    on the Sources page makes the worker's reconcile tick (within about a
    minute) start that source's first fetch automatically; after that the
-   source is fetched every `INGEST_INTERVAL_MINUTES` (default 360).
+   source is fetched every `INGEST_INTERVAL_MINUTES` (default 360). Run
+   exactly one worker process; two would race on the same source (an advisory
+   lock per source is future work).
 
 After adding new migrations, migrate the *test* database once before running
 the whole suite:
