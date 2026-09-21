@@ -12,3 +12,5 @@ export * from "./adapters/http";
 export * from "./adapters/greenhouse";
 export * from "./adapters/lever";
 export * from "./adapters/upload";
+export * from "./identity/serialize";
+export * from "./identity/merge";
