@@ -23,6 +23,9 @@ const OFFERED: RegExp[] = [
   /\bsponsor(?:ing)?\b[^.\n]{0,12}\b(?:work )?visas?\b/i,
 ];
 
+// Global copies for blanking every negated clause. String.replace resets lastIndex to 0 first, so sharing them is safe.
+const NOT_OFFERED_GLOBAL = NOT_OFFERED.map((p) => new RegExp(p.source, p.flags + "g"));
+
 // Descriptions are untrusted third-party text; real ones are ~15KB.
 const MAX_TEXT_CHARS = 200_000;
 
@@ -39,22 +42,23 @@ export function extractSponsorship(text: string): {
 } {
   text = text.slice(0, MAX_TEXT_CHARS);
   let negatedEvidence: string | null = null;
-  let remaining = text;
-  for (const pattern of NOT_OFFERED) {
+  // Blank (not delete) every negated clause with same-length spaces, so "cannot sponsor work visas" (said any number
+  // of times) is never also read as an offer, and match indexes still point into the ORIGINAL text.
+  let blanked = text;
+  for (const [i, pattern] of NOT_OFFERED.entries()) {
     if (negatedEvidence === null) {
       const m = pattern.exec(text);
       if (m) negatedEvidence = snippet(text, m.index, m[0].length);
     }
-    // Remove EVERY negated clause so none of them ("cannot sponsor work visas", said twice) is also read as an offer.
-    // A fresh global copy per call: a shared /g regex would leak lastIndex between calls.
-    remaining = remaining.replace(new RegExp(pattern.source, pattern.flags + "g"), " ");
+    blanked = blanked.replace(NOT_OFFERED_GLOBAL[i] as RegExp, (m) => " ".repeat(m.length));
   }
 
   let offeredEvidence: string | null = null;
   for (const pattern of OFFERED) {
-    const m = pattern.exec(remaining);
+    const m = pattern.exec(blanked);
     if (m) {
-      offeredEvidence = snippet(remaining, m.index, m[0].length);
+      // Evidence is what the user reads: cut it from the original, not from the blanked copy.
+      offeredEvidence = snippet(text, m.index, m[0].length);
       break;
     }
   }

@@ -49,6 +49,28 @@ describe("extractSponsorship", () => {
     expect(r.evidence).toContain("||");
   });
 
+  it("evidence for a conflict is contiguous text from the posting, on both sides of the '||'", () => {
+    for (const text of [
+      "Visa sponsorship is available for some roles. We do not sponsor visas for contractors. Also we cannot sponsor work visas for interns.",
+      "We can sponsor your visa. Contractors: we cannot sponsor work visas. Interns: no visa sponsorship is offered.",
+    ]) {
+      const r = extractSponsorship(text);
+      expect(r.value).toBe("unknown");
+      expect(r.conflict).toBe(true);
+      const parts = r.evidence!.split(" || ");
+      expect(parts).toHaveLength(2);
+      for (const part of parts) expect(text.includes(part)).toBe(true);
+    }
+  });
+
+  it("evidence for a not_offered-only posting is a contiguous substring", () => {
+    const text = "Great team. We cannot sponsor work visas for this role. Apply today.";
+    const r = extractSponsorship(text);
+    expect(r.value).toBe("not_offered");
+    expect(r.conflict).toBe(false);
+    expect(text.includes(r.evidence!)).toBe(true);
+  });
+
   it("several negated clauses stay not_offered (a later negation is not read as an offer)", () => {
     for (const text of [
       "We cannot sponsor work visas. We are unable to offer visa sponsorship.",

@@ -3,10 +3,13 @@
 // understating is the safe direction. Optional (nice-to-have) lines and company boasts are ignored
 // (real postings: "2+ years ... (nice to have)").
 
+// Every whitespace run and word run is bounded ({0,5} / {1,5} / {1,40}): unbounded \s* around an optional
+// "+" is quadratic on "1" followed by a long whitespace run, and posting text is untrusted. Real postings
+// never put more than a few spaces between these tokens.
 const YEARS_THEN_EXPERIENCE =
-  /(\d{1,2})\s*\+?\s*(?:(?:-|–|to)\s*(\d{1,2})\s*\+?\s*)?(?:years?|yrs?)['’]?\s+(?:of\s+)?(?:[A-Za-z/&-]+\s+){0,4}?experience/gi;
+  /(\d{1,2})\s{0,5}\+?\s{0,5}(?:(?:-|–|to)\s{0,5}(\d{1,2})\s{0,5}\+?\s{0,5})?(?:years?|yrs?)['’]?\s{1,5}(?:of\s{1,5})?(?:[A-Za-z/&-]{1,40}\s{1,5}){0,4}?experience/gi;
 const EXPERIENCE_THEN_YEARS =
-  /experience[:\s]+(?:of\s+)?(?:at least\s+|minimum\s+(?:of\s+)?)?(\d{1,2})\s*\+?\s*(?:years?|yrs?)/gi;
+  /experience[:\s]{1,5}(?:of\s{1,5})?(?:at least\s{1,5}|minimum\s{1,5}(?:of\s{1,5})?)?(\d{1,2})\s{0,5}\+?\s{0,5}(?:years?|yrs?)/gi;
 const BOAST = /(?:we(?:'ve| have)|our (?:team|company|founders?)|company (?:has|with))[^.]{0,40}$/i;
 // A line is optional if it says so ANYWHERE ("... (nice to have)", "... is a plus"). "preferably" and
 // "ideally" only make the years optional when they come BEFORE them ("Preferably 3+ years..."); after

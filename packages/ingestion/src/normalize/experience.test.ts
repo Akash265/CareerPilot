@@ -85,6 +85,36 @@ describe("extractMinExperience — adversarial input (posting text is untrusted)
   });
 });
 
+describe("extractMinExperience — long whitespace runs (posting text is untrusted)", () => {
+  const cases: Array<[string, string]> = [
+    ["digit + 199k spaces", "1" + " ".repeat(199_000) + "x"],
+    ["digit + 199k tabs", "1" + "\t".repeat(199_000) + "x"],
+    ["digit + 99k ' \\n' pairs", "1" + " \n".repeat(99_000) + "x"],
+    ["'experience 1' + 199k spaces", "experience 1" + " ".repeat(199_000) + "x"],
+    ["'1 - 1' + 199k spaces", "1 - 1" + " ".repeat(199_000) + "x"],
+    ["'5+ years' + 199k spaces", "5+ years" + " ".repeat(199_000)],
+    ["'years' + 199k spaces + 'experience'", "years" + " ".repeat(199_000) + "experience"],
+  ];
+
+  it.each(cases)("%s finishes in under a second and finds nothing", (_name, input) => {
+    const started = performance.now();
+    const result = extractMinExperience(input);
+    const elapsed = performance.now() - started;
+    expect(elapsed).toBeLessThan(1000);
+    expect(result).toEqual({ years: null, evidence: null });
+  });
+
+  it("ordinary spacing still matches", () => {
+    expect(extractMinExperience("5 +  years   of experience").years).toBe(5);
+    expect(extractMinExperience("Experience:   at least   3   years").years).toBe(3);
+  });
+
+  it("a gap of 6+ spaces between '5+' and 'years' is documented as not matching", () => {
+    expect(extractMinExperience("5+     years of experience").years).toBe(5); // 5 spaces: still fine
+    expect(extractMinExperience("5+      years of experience").years).toBeNull(); // 6 spaces: bounded out
+  });
+});
+
 describe("extractMinExperience — optional-marker window", () => {
   const filler = "and other duties ".repeat(60); // ~1000 chars, no newline
 
