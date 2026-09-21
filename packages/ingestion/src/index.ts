@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./sourceSchemas";
+export * from "./queue";
 export * from "./normalize/text";
 export * from "./normalize/keys";
 export * from "./normalize/salary";
