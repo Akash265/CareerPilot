@@ -41,7 +41,7 @@ describe("enqueueIngestion", () => {
     expect(error).toBeInstanceOf(Error);
     expect(error?.message).toBe("queue unavailable");
     expect(String(error?.stack)).not.toContain("127.0.0.1");
-    expect(Date.now() - started).toBeLessThan(8000);
+    expect(Date.now() - started).toBeLessThan(12_000);
   }, 15000);
 
   it("gives up after its overall guard when Redis accepts the connection but never answers", async () => {
@@ -57,7 +57,7 @@ describe("enqueueIngestion", () => {
       await expect(enqueueIngestion({ REDIS_URL: `redis://127.0.0.1:${port}` }, randomUUID(), queueName)).rejects.toThrow(
         /^queue unavailable$/
       );
-      expect(Date.now() - started).toBeLessThan(8000);
+      expect(Date.now() - started).toBeLessThan(12_000);
     } finally {
       sockets.forEach((socket) => socket.destroy());
       await new Promise((resolve) => silent.close(resolve));

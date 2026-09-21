@@ -64,21 +64,22 @@ describe("extractMinExperience — adversarial input (posting text is untrusted)
   });
 
   // Every repetition is a real match, on one 200k-char line: the optional-line check must not scan the whole line per match.
-  it("match-dense single line ('N+ years of experience' x8,700) finishes in under a second", () => {
+  // The budget is 3 s, not the 10 s used for heavier inputs: the regression this guards measured 5.8 s.
+  it("match-dense single line ('N+ years of experience' x8,700) finishes in under 3 seconds", () => {
     const started = performance.now();
     const result = extractMinExperience("5+ years of experience ".repeat(8_700));
     const elapsed = performance.now() - started;
-    expect(elapsed).toBeLessThan(1000);
+    expect(elapsed).toBeLessThan(3000);
     expect(result.years).toBe(5);
     expect(result.evidence).toMatch(/^5\+ years of experience 5\+ years of experience/);
     expect(result.evidence!.length).toBeLessThan(200);
   });
 
-  it("match-dense single line ('experience: 5 years' x10,000) finishes in under a second", () => {
+  it("match-dense single line ('experience: 5 years' x10,000) finishes in under 3 seconds", () => {
     const started = performance.now();
     const result = extractMinExperience("experience: 5 years ".repeat(10_000));
     const elapsed = performance.now() - started;
-    expect(elapsed).toBeLessThan(1000);
+    expect(elapsed).toBeLessThan(3000);
     expect(result.years).toBe(5);
     expect(result.evidence).toMatch(/^experience: 5 years experience: 5 years/);
     expect(result.evidence!.length).toBeLessThan(200);

@@ -3,6 +3,13 @@ import { parseUploadFile, UploadParseError, MAX_UPLOAD_ROWS } from "./upload";
 
 const buf = (s: string) => Buffer.from(s, "utf8");
 
+// Wall-clock budgets for heavy adversarial inputs sit an order of magnitude below the pathological
+// behaviour they detect (regressions were 40-80 s) so that a loaded CI machine running the whole
+// suite in parallel cannot trip them (measured 0.3 s standalone, 1.1-2.4 s under heavy load).
+const HEAVY_INPUT_BUDGET_MS = 10_000;
+// Above the budget, so a budget breach fails on the assertion rather than on vitest's 5 s default.
+const HEAVY_INPUT_TIMEOUT_MS = 30_000;
+
 describe("parseUploadFile — CSV", () => {
   it("parses quoted commas and embedded newlines, and maps header aliases case-insensitively", () => {
     const csv = [
@@ -83,11 +90,11 @@ describe("parseUploadFile — field length limits", () => {
     const start = performance.now();
     const first = parseUploadFile(b, "jobs.csv");
     const second = parseUploadFile(b, "jobs.csv");
-    expect(performance.now() - start).toBeLessThan(1000);
+    expect(performance.now() - start).toBeLessThan(HEAVY_INPUT_BUDGET_MS);
     expect(first[0].externalId).toMatch(HEX32);
     expect(second[0].externalId).toBe(first[0].externalId);
     expect(first[0].payload).toEqual({ title: "Analyst", company: "Beta" });
-  });
+  }, HEAVY_INPUT_TIMEOUT_MS);
 
   it("rejects a 501-character title through the invalid-rows path, listing the rows", () => {
     expect.assertions(3);
@@ -176,8 +183,8 @@ describe("parseUploadFile — header mapping and cell handling", () => {
 
 // Uploaded files are hostile. Every case must finish quickly and end in either the exact parsed
 // result or an UploadParseError whose user-safe message contains none of the file's content.
-describe("parseUploadFile — adversarial input", () => {
-  const BUDGET_MS = 1000;
+describe("parseUploadFile — adversarial input", { timeout: HEAVY_INPUT_TIMEOUT_MS }, () => {
+  const BUDGET_MS = HEAVY_INPUT_BUDGET_MS;
 
   /** Builds nothing itself: the buffer is prepared by the caller so only parsing is timed. */
   const run = (b: Buffer, name: string) => {
@@ -304,7 +311,7 @@ describe("parseUploadFile — adversarial input", () => {
     const { ms, records, error } = run(b, "jobs.json");
     expect(records).toBeUndefined();
     expectUserSafeError(error, "File has more than 5,000 rows", "0,0");
-    expect(ms).toBeLessThan(1500);
+    expect(ms).toBeLessThan(BUDGET_MS);
   });
 
   it("(11) exactly 5,000 rows parse; 5,001 are rejected, for both CSV and JSON", () => {
