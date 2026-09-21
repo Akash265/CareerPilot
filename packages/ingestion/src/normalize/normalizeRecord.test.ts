@@ -316,6 +316,13 @@ describe("normalizeRecord — identity field length caps", () => {
     }
   });
 
+  it("keeps the location key within the btree row limit for a 500-character NFKD-expanding location", () => {
+    const job = ghJob({ location: { name: "ﷺ".repeat(CAP) } });
+    expect(job.locationRaw).toBe("ﷺ".repeat(CAP));
+    expect(job.locationKey.length).toBeLessThanOrEqual(600);
+    expect(Buffer.byteLength(job.locationKey)).toBeLessThanOrEqual(2700);
+  });
+
   it("cuts a 100k-character title to exactly 500 characters with a bounded key", () => {
     const title = "T".repeat(HUGE);
     for (const run of [() => ghJob({ title }), () => leverJob({ text: title })]) {

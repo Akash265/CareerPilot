@@ -64,6 +64,28 @@ describe("locationKey", () => {
     expect(locationKey(null)).toBe("");
     expect(locationKey("   ")).toBe("");
   });
+
+  // location_key is btree-indexed (row limit ~2.7KB) and NFKD expands some characters (U+FDFA -> 18 code points).
+  it("bounds the key to 600 characters and 2700 bytes, even for NFKD-expanding input", () => {
+    const expanding = locationKey("ﷺ".repeat(500));
+    expect(expanding.length).toBeLessThanOrEqual(600);
+    expect(Buffer.byteLength(expanding)).toBeLessThanOrEqual(2700);
+    expect(expanding.length).toBe(600);
+  });
+
+  it("bounds a multi-location string with many parts", () => {
+    const many = Array.from({ length: 500 }, (_, i) => `City${i}, Country`).join("; ");
+    const key = locationKey(many);
+    expect(key.length).toBe(600);
+    expect(Buffer.byteLength(key)).toBeLessThanOrEqual(2700);
+    expect(key.startsWith("city0 country|city1 country|")).toBe(true);
+  });
+
+  it("leaves ordinary keys byte-identical (a key just under the cap is untouched)", () => {
+    const at600 = "a".repeat(600);
+    expect(locationKey(at600)).toBe(at600);
+    expect(locationKey("Berlin")).toBe("berlin");
+  });
 });
 
 describe("descriptionHash / computeFingerprint", () => {

@@ -52,6 +52,13 @@ export function titleKey(title: string): { titleKey: string; seniority: string |
   return { titleKey: stripped || plain, seniority };
 }
 
+/**
+ * jobs.location_key is btree-indexed, and Postgres rejects an index row over ~2.7KB. NFKD can expand one
+ * character into many (U+FDFA becomes 18), so bound the computed key itself: 600 code units x <= 4 UTF-8
+ * bytes = 2400 bytes.
+ */
+const MAX_LOCATION_KEY_CHARS = 600;
+
 export function locationKey(location: string | null | undefined): string {
   if (!location) return "";
   return location
@@ -59,7 +66,8 @@ export function locationKey(location: string | null | undefined): string {
     .map((part) => words(part))
     .filter(Boolean)
     .sort()
-    .join("|");
+    .join("|")
+    .slice(0, MAX_LOCATION_KEY_CHARS);
 }
 
 function normalizeForHash(text: string): string {
