@@ -26,6 +26,51 @@ rationale behind each architectural choice.
    Next.js app).
 6. Verify: `curl http://localhost:3000/api/health` should return
    `{"status":"ok","checks":{"database":true,"redis":true}}`.
+7. Start the ingestion worker (needed for scheduled and "Run now" fetches):
+   `pnpm --filter @ai-career/job-ingestion start`. It is a plain Node process
+   (there is no Dockerfile or compose service for it yet). Enabling a source
+   on the Sources page makes the worker's reconcile tick (within about a
+   minute) start that source's first fetch automatically; after that the
+   source is fetched every `INGEST_INTERVAL_MINUTES` (default 360).
+
+After adding new migrations, migrate the *test* database once before running
+the whole suite:
+`MIGRATIONS_DATABASE_URL=postgres://career_intel:career_intel@localhost:5432/career_intel_test pnpm --filter @ai-career/db db:migrate`.
+(Suites that start together on an empty database can collide creating the same
+enum; CI does this step first for the same reason, see `DECISIONS.md` D38.)
+
+## End-to-end smoke test (optional)
+
+`services/job-ingestion/e2e/smoke.ts` drives the real web app, queue and worker
+against a fake ATS server (see its header comment). It expects a **fresh
+database** (fixed board `fakeco`, absolute job counts), so point it at a scratch
+database, never the dev database. Create one with the extensions and app-role
+grants that `infra/postgres/init.sql` gives the dev database, then migrate it:
+
+```bash
+docker exec infra-postgres-1 psql -U career_intel -d postgres -c "CREATE DATABASE career_intel_e2e"
+docker exec infra-postgres-1 psql -U career_intel -d career_intel_e2e \
+  -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pg_trgm;" \
+  -c "GRANT CONNECT ON DATABASE career_intel_e2e TO career_intel_app; GRANT USAGE ON SCHEMA public TO career_intel_app; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO career_intel_app; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO career_intel_app; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO career_intel_app; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO career_intel_app;"
+MIGRATIONS_DATABASE_URL=postgres://career_intel:career_intel@localhost:5432/career_intel_e2e pnpm --filter @ai-career/db db:migrate
+export DATABASE_URL=postgres://career_intel_app:career_intel_app@localhost:5432/career_intel_e2e
+```
+
+(`docker exec infra-postgres-1` assumes the compose project name `infra`;
+check `docker ps` if yours differs.) Then, with that `DATABASE_URL` exported,
+run these in four terminals from the repo root (a variable set before a
+`dotenv`-wrapped script wins over the value in `.env`):
+
+```bash
+pnpm --filter @ai-career/job-ingestion e2e:fake-ats
+GREENHOUSE_API_BASE=http://localhost:4011 LEVER_API_BASE=http://localhost:4011 pnpm --filter @ai-career/job-ingestion start
+pnpm --filter web build && pnpm --filter web exec dotenv -e ../../.env -- next start -p 3100
+WEB_URL=http://localhost:3100 pnpm --filter @ai-career/job-ingestion e2e:smoke
+```
+
+Every line should print `PASS`, ending with `All checks passed.`. Afterwards
+stop the three processes, delete the `bull:job-ingestion*` keys it left in Redis
+(delete exact keys; do not flush), and drop the scratch database.
 
 ## Status
 
@@ -43,3 +88,11 @@ Statement parsing with mandatory user review, deterministic parsing of the
 minimum and preferred salary, and versioned career_goal_constraints —
 replacing the Phase 2 rigid-preference fields it superseded. After
 `pnpm dev`, the home page links to both steps (/profile, /career-goal).
+
+Phase 4 (Job Intelligence) complete: Greenhouse, Lever and CSV/JSON sources
+behind a consent gate, a BullMQ ingestion worker, deterministic normalization
+(salary, work mode, experience, sponsorship, posted date), three-tier
+deduplication and a Sources page and read-only Jobs browser. The home page
+links each step (/profile, /career-goal, /sources, /jobs). Not built yet:
+matching and ranking (Phase 5), Ashby/RSS/Apify sources, resolving duplicate
+candidates, and a container image for the worker.

@@ -218,4 +218,72 @@ An audit of Phase 3 against the original spec (§6.2, §19, §21), the approved 
 
 ---
 
+## 2026-09-21 — Phase 4 (Job Intelligence)
+
+### D31. Job sources: Greenhouse + Lever + file upload; Apify, Ashby and RSS deferred
+**Decision:** Phase 4 ships three adapters behind one `SourceAdapter` interface: Greenhouse and Lever public board APIs, and CSV/JSON upload.
+**Alternatives considered:** Adding Ashby + RSS; upload + one API only; Apify-first for keyword discovery.
+**Why:** Two real API shapes plus the manual path are enough to prove the pipeline and cross-source deduplication without building adapters ahead of need. Greenhouse and Lever expose one board per company, so "discovery" is a watch-list the user curates; market-wide keyword discovery needs Apify, which adds a paid third party and is deferred.
+**What it affects:** `packages/ingestion/src/adapters/*`; the Sources page; any future adapter slots in by implementing `SourceAdapter`.
+
+### D32. Ingestion runs in a separate BullMQ worker; logic lives in `packages/ingestion`
+**Decision:** `services/job-ingestion` is a thin BullMQ process (scheduler reconcile + worker); adapters, normalization, identity and the DB pipeline live in `packages/ingestion`. There is no Dockerfile or compose service yet: `infra/docker-compose.yml` runs only infrastructure (Postgres, Redis, MinIO) and the web app is not containerized either, so the worker is started with `pnpm --filter @ai-career/job-ingestion start`.
+**Alternatives considered:** An inline API route (D17's pattern); a worker hosted inside Next.js.
+**Why:** D17 kept one-shot resume extraction inline and said recurring, high-volume work is what the worker layer is for. Inline breaks at dozens of boards (timeouts, no retries, no schedule); a worker inside Next ties fetch loops to the web server's lifecycle. Concurrency is 1 (one source at a time), which also rules out two runs of one source racing.
+**What it affects:** `services/job-ingestion`; the README (how to start the worker); Phases 6–8 reuse the queue. Note for anyone starting the worker: enabling a source makes the worker's next reconcile tick (within about 60 seconds) create that source's repeatable scheduler, and creating it fires a first run immediately.
+
+### D33. Enrichment is rules-only at ingest: no LLM, no embeddings; "unknown" is first-class
+**Decision:** Salary, work mode, minimum experience and a sponsorship signal are extracted deterministically, each with an evidence snippet or an explicit unknown. Skill/requirement extraction and job embeddings wait for Phase 5/6 and run only on jobs that survive eligibility.
+**Alternatives considered:** Embedding every new job; an LLM call per new job.
+**Why:** D8 (deterministic before AI, keep spend tied to intent). The rules were prototyped against about 1,430 real postings from live Greenhouse and Lever boards and are pinned by a labeled evaluation set (32 cases; `pnpm --filter @ai-career/ingestion eval:extraction` reports 100% precision and recall on salary, minimum experience and sponsorship) that must be extended whenever a real posting is mis-read. 100% on a small hand-labeled set is a regression guard, not a claim about accuracy on unseen postings. Work mode is covered by unit tests, not the eval set.
+**What it affects:** `packages/ingestion/src/normalize/*`, `packages/ingestion/eval/*`.
+
+### D34. Salary extraction: text scan only, with defensive rules (extends D6)
+**Decision:** No structured pay fields appeared in any sampled posting (0 of about 1,430), so salary is read from description text only (plus an upload's optional `salary` column, which is given a "Salary:" prefix so the same extractor sees context). A trailing ISO code overrides the currency symbol; magnitude figures (`$100B`), bonus/equity amounts and anything without salary context are rejected; an amount with no stated period is annual only if it is at least 10,000 (below that it is not a salary); a bare `$` is USD unless the posting's country is CA/AU/NZ/SG/HK, where it is left unparsed; several different candidate ranges (regional pay bands) are left unparsed with the first raw span kept; an annualized value under 1,000 is rejected. Hourly and monthly figures are annualized only when the period is stated explicitly (x2080 and x12). The scan is bounded (see D39).
+**Alternatives considered:** Parsing `pay_input_ranges` / `salaryRange` (shapes never seen in a real response); an LLM extractor (violates D6).
+**Why:** Each rule exists because a real posting broke the previous draft (monthly MXN read as USD; `$1.4T` read as pay; nice-to-have years read as required). Missing salary is `null`, never zero, and `is_parsed = false` with the raw span kept means the UI shows the text instead of a number.
+**What it affects:** `normalize/salary.ts` and its tests; the `salary_*` columns.
+
+### D35. A canonical job is recomputed from its postings by a pure merge
+**Decision:** Each source appearance is a `job_postings` row holding a `normalized` snapshot; `jobs` is rebuilt by `mergePostings` (open before closed, then source rank with Greenhouse/Lever above upload, then most recently seen, then id; the first *known* value per field group wins), and `jobs.field_provenance` records which posting supplied each group. The posted date is the earliest any posting reports. `fingerprint` and `content_hash` live on postings. Raw payloads are kept (latest only) so a parser fix can be re-run without refetching. `jobs.location_key` is a stored column (the design used a location key without one).
+**Alternatives considered:** Normalize-on-fetch with no raw store; overwrite-in-place merging.
+**Why:** Precedence and provenance become directly testable pure logic; a fix to any extractor can be re-applied to stored data.
+**What it affects:** `identity/merge.ts`, `pipeline/recomputeJob.ts`, the `jobs`/`job_postings`/`raw_job_postings` tables.
+
+### D36. Three-tier identity; fuzzy matches are flagged, never merged; closing is conservative
+**Decision:** Same `(source, external id)` is the same posting; the same company/title-key/location/description fingerprint links a new posting to the job that already holds that fingerprint (across sources or within one); when a brand-new job is created, a same-location trigram match (`similarity >= 0.8`, the named constant `FUZZY_DUPLICATE_THRESHOLD`, on company+title keys) becomes a `pending` duplicate candidate and is never auto-merged. Only a *complete* fetch of a non-upload source may close postings, and a job closes only when none of its postings is open; a fetch that returns zero records is treated as incomplete (`empty_result`); uploads never close anything; a record that fails to normalize still counts as seen if it is already tracked, so a transient parse failure cannot close it.
+**Alternatives considered:** Fingerprint only; auto-merging fuzzy matches.
+**Why:** A false merge silently hides a real job; a false split shows one extra row. An emptied API response, a half-failed fetch or a one-shot upload must never look like "the job expired". Seniority words are stripped from the comparison key by design, so different levels of one role can appear as candidates; the UI labels the percentage a *title match*. The 0.8 threshold has never been measured against labeled data; since nothing merges at this tier the cost of a wrong value is review noise, not data loss.
+**Accepted limitation:** Identity is decided when a posting is first seen. A posting whose content later changes stays attached to the job it was first linked to: there is no cross-job re-linking and no fuzzy re-flagging on edit, and there is no unmerge or duplicate-resolution UI (candidates are read-only). A posting that was linked to the wrong job, or that later drifts into looking like another job, has to be fixed in the database.
+**What it affects:** `pipeline/persistPosting.ts`, `pipeline/closeMissing.ts`, `pipeline/runIngestion.ts`.
+
+### D37. The consent gate (D3) is enforced in three places, and errors are stored as classes
+**Decision:** A source added through the API is created disabled and unconsented; enabling it requires `consentConfirmed: true` (once recorded, `consent_confirmed_at` stays and re-enabling does not ask again); the run API refuses a disabled or unconsented source; the worker's `runIngestion` refuses them again, recording a failed run (`source_disabled` / `consent_missing`). An upload requires an explicit `consentConfirmed=true` form field, and its source is created enabled and consented. Runs and sources store only an error *class* (`not_found`, `rate_limited`, ...), never a message (D29).
+**Alternatives considered:** A UI-only checkbox.
+**Why:** The gate exists so the system, not the user's memory, enforces permission for each source. Adapters call only operator-configured hosts (`GREENHOUSE_API_BASE`, `LEVER_API_BASE`) with a validated slug (`^[A-Za-z0-9_-]{1,64}$`, widened from the design's lowercase pattern because real board tokens are mixed-case or underscored), never a user-supplied URL, with a timeout, a response-size cap and redirects not followed.
+**What it affects:** the `api/job-sources` routes, `runIngestion`, `adapters/slug.ts`, `adapters/http.ts`.
+
+### D38. Test infrastructure: advisory-locked migration, a CI pre-migrate step, `csv-parse`, a `./testing` entry
+**Decision:** New test helpers migrate under a Postgres advisory lock and CI migrates once before the tests, because parallel suites migrating an empty database collide on enum creation (`duplicate key ... pg_type_typname_nsp_index`, seen in one of three fresh-database runs before the lock). `csv-parse` is added for upload parsing (a hand-rolled CSV parser is error-prone with quotes and embedded newlines). `@ai-career/ingestion/testing` exposes test helpers and fixtures without leaking them into production imports.
+**Alternatives considered:** Retrofitting the lock into the existing per-suite `migrate()` callers (left as a follow-up); a hand-written CSV parser.
+**Why:** Observed, not theoretical; and Turborepo's strict environment mode means `TEST_*` overrides are invisible to `pnpm test`, so a scratch run can silently migrate the shared test database. A run meant for a scratch database must use `pnpm exec turbo run test --env-mode=loose`, and the operator should check afterwards which database was touched.
+**What it affects:** `.github/workflows/ci.yml`, `packages/ingestion/src/testing/*`, `apps/web/src/test/jobsDb.ts`.
+
+### D39. Untrusted-input hardening found in review
+**Decision:** Posting text, uploaded files and third-party identifiers are hostile input. Code review of Phase 4 found and closed these holes (each has an adversarial or boundary test):
+- **HTML to text** (`normalize/text.ts`) is bounded: input is capped at 1,000,000 characters, tag bodies are matched as `<[^<>]{0,2000}>` so a stray `<` cannot scan to the end of the input, and `<script>`/`<style>` blocks are removed by a single left-to-right `indexOf` scan (linear) instead of a backtracking regex.
+- **Salary** (`normalize/salary.ts`) reads at most 200,000 characters, stops after 50 candidates (which bounds its quadratic overlap check), and its suffix pattern has a number-boundary lookbehind (`(?<![\d.,])`) so it cannot start in the middle of a number.
+- **Experience** (`normalize/experience.ts`) bounds every whitespace gap (`\s{0,5}` / `\s{1,5}`), reads at most 200,000 characters, and checks the "optional line" markers inside a window of +/-400 characters instead of rescanning the whole text for every match.
+- **Sponsorship** (`normalize/sponsorship.ts`) blanks every negated clause (not just the first) before looking for an offer, so "cannot sponsor work visas" said twice is never also read as an offer, and it cuts the evidence snippet from the *original* text so the user always sees a contiguous quotation.
+- **Identity fields are length-capped**, because a Postgres btree row over about 2.7 KB fails the insert and would otherwise fail a whole run: location, title and company are cut to 500 characters, an external id over 200 characters is rejected (`NormalizeError`), and the computed location key is at most 600 characters (NFKD can expand one character into many).
+- **Uploads**: at most 5,000 rows, enforced *during* parsing (csv-parse's `to` option; the array length for JSON) so a small file of millions of tiny rows is never materialized; `UploadRowSchema` caps every field except the description (bounded only by the 10 MB file cap); an `id` cell over 200 characters is replaced by a hash; header lookup uses own keys only, so a column named `constructor` or `__proto__` resolves to nothing.
+- **The queue producer fails fast**: `enqueueIngestion` uses a non-retrying connection with a 5-second guard and reports any failure as a class-free `queue unavailable` error, so an unreachable Redis makes `/run` answer 503 (and an upload report `queued: false`) instead of hanging the request or echoing the Redis host.
+- **`runIngestion` never masks the original error class**: failures after the fetch (the closing step and the final bookkeeping write included) are recorded as a failed, incomplete run (`unknown` when they are not already an `IngestError`), and the failure-recording writes are best-effort so a secondary database error cannot replace the original class.
+- **`NormalizeError` and `IngestError` carry no content**: their messages are fixed strings or the class name only.
+**Alternatives considered:** Rewriting the extractors around a tokenizer or a real HTML parser. Not done: bounding the existing patterns is a much smaller change and leaves the labeled evaluation set (D33) applicable unchanged.
+**Why:** CLAUDE.md §9 requires treating external content as untrusted, and Phase 4 is where hostile text first enters the system in volume; a catastrophic-backtracking pattern or an over-long identifier on one posting would otherwise stall or fail an entire ingestion run. The caps are far above real values (real descriptions are about 15 KB), so they cost nothing on honest input.
+**What it affects:** `normalize/*`, `adapters/upload.ts`, `sourceSchemas.ts`, `pipeline/runIngestion.ts`, `apps/web/src/lib/job-ingestion/enqueue.ts`, the `run` and `upload` routes and their tests.
+
+---
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

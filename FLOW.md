@@ -530,3 +530,119 @@ CareerGoalClient (on mount, and after onConfirmed())
          └─ history = every confirmed goal's {id, version, rawText,
             confirmedAt}, newest first
 ```
+
+---
+
+## 6. Job ingestion: sources → queue → worker → normalized jobs → browser (Phase 4)
+
+Three processes cooperate and share only Postgres and Redis: the Next.js web app (managing sources,
+enqueueing, reading jobs), the `services/job-ingestion` worker (fetching and writing jobs), and the
+databases themselves. Domain logic lives in `packages/ingestion`; the worker only maps error classes
+onto BullMQ's retry model (D32). Paths below are relative to `apps/web/src` unless a package is named.
+
+### 6a. Managing sources and queueing a run (request-driven)
+
+```
+POST /api/job-sources                     app/api/job-sources/route.ts: POST()
+├─ readJsonBody → CreateJobSourceSchema.safeParse        (400 on bad JSON / kind / slug)
+├─ createDbClient → withUserContext(DEFAULT_USER_ID)
+│  └─ insert job_sources { enabled:false, consent_confirmed_at:null }   (unique violation 23505 → 409)
+└─ serializeSource → 201
+
+PATCH /api/job-sources/[id]               app/api/job-sources/[id]/route.ts: PATCH()   (params is a Promise)
+├─ id not a UUID → 404 · readJsonBody / UpdateJobSourceSchema → 400
+└─ enabling with no stored consent and consentConfirmed !== true → 400 (D3);
+   else set enabled; consent_confirmed_at is stamped on the first enable and never cleared
+
+POST /api/job-sources/[id]/run            app/api/job-sources/[id]/run/route.ts: POST()
+├─ id not a UUID → 404 · unknown source → 404 · not enabled → 409 · no consent → 409
+└─ enqueueIngestion(env, id)              lib/job-ingestion/enqueue.ts
+   ├─ producer connection: maxRetriesPerRequest 1, no offline queue, no reconnect; whole call
+   │  guarded by a 5 s timeout; ANY failure → Error("queue unavailable")  (no host or port in it)
+   ├─ Queue.getJob(ingestJobId(id)) still waiting/active/delayed? → "already_queued"
+   ├─ Queue.add("ingest-source", { sourceId }, { jobId: "ingest-<sourceId>", attempts:3,
+   │            exponential backoff 30 s, removeOnComplete, removeOnFail })
+   └─ result: "queue unavailable" → 503 · "already_queued" → 409 · "enqueued" → 202 {status:"queued"}
+
+POST /api/job-sources/upload              app/api/job-sources/upload/route.ts: POST()
+├─ content-length over 10 MB (+64 KB slack) → 400 before the body is buffered
+├─ formData → file present and file.size ≤ 10 MB → consentConfirmed === "true" (else 400, D3)
+├─ parseUploadFile(buffer, name)           packages/ingestion/src/adapters/upload.ts
+│  └─ binary/JSON/CSV parse, 5,000-row cap, alias headers → UploadRowSchema, id hashing, dedupe
+│     (UploadParseError → 400 with a content-free message)
+├─ withUserContext → storeUpload           packages/ingestion/src/pipeline/storeUpload.ts
+│  └─ insert upload job_sources (enabled, consent stamped) + raw_job_postings in chunks of 500
+└─ enqueueIngestion; if it throws → the records stay stored, response is 201 with queued:false
+   (the user can press "Run now" later); otherwise 201 with queued:true
+```
+
+### 6b. The worker (process-driven)
+
+```
+pnpm --filter @ai-career/job-ingestion start          services/job-ingestion/src/main.ts: main()
+├─ loadEnv → createDbClient → IORedis(maxRetriesPerRequest:null) → Queue("job-ingestion")
+│  → createAdapterFor(db, userId, GREENHOUSE_API_BASE, LEVER_API_BASE) → createIngestWorker
+├─ reconcileSchedules(refresh:true) at boot, then refresh:false every 60 s   reconcile.ts + schedule.ts
+│  ├─ select enabled + consented + non-upload sources; planSchedules() diffs them against
+│  │  Queue.getJobSchedulers()  (only schedulers with the "schedule-" prefix are ever removed)
+│  ├─ upsertJobScheduler("schedule-<sourceId>", { every: INGEST_INTERVAL_MINUTES }, job template)
+│  │  Creating a scheduler fires its first run at once, so enabling a source starts a fetch on the
+│  │  next tick (within ~60 s). Scheduled jobs carry ids "repeat:<schedulerId>:<time>", NOT the
+│  │  manual "ingest-<sourceId>" id, so a scheduled and a manual run of one source can both exist
+│  └─ removeJobScheduler for a source that was disabled or deleted
+└─ Worker("job-ingestion", concurrency 1)               services/job-ingestion/src/worker.ts
+   └─ runIngestion(db, { userId, sourceId, adapterFor })   packages/ingestion/src/pipeline/runIngestion.ts
+      ├─ sourceId not a UUID → IngestError("not_found"); source row missing → same (nothing recorded)
+      ├─ insert ingestion_runs (started_at; status defaults to running)
+      ├─ GUARD: !enabled → "source_disabled"; !consent → "consent_missing"
+      │  → best-effort finish as failed, then throw IngestError  (D3, D37)
+      ├─ try {
+      │  for await record of adapterFor(ref).fetch(ref)
+      │  ├─ greenhouse: fetchJson(base/v1/boards/<slug>/jobs?content=true) → envelope schema → jobs
+      │  ├─ lever: fetchJson(base/v0/postings/<slug>?mode=json) → array → postings
+      │  │  fetchJson: 30 s timeout, 25 MB cap, redirects refused, class-only IngestError; slug via assertValidSlug
+      │  ├─ upload: the stored raw_job_postings rows of that source
+      │  └─ per record, one withUserContext transaction:
+      │     ├─ upsert raw_job_postings (payload, content_hash)
+      │     ├─ normalizeRecord(ref, record)              normalize/normalizeRecord.ts (pure)
+      │     │  └─ per-kind schema → escapedHtmlToText / htmlToText · companyKey/titleKey/locationKey/
+      │     │     descriptionHash · extractSalary · extractMinExperience · extractSponsorship ·
+      │     │     detectWorkMode   (throws NormalizeError → counted as failed; an already-tracked
+      │     │     posting still gets last_seen_at bumped so it is not closed)
+      │     └─ persistPosting                            pipeline/persistPosting.ts
+      │        ├─ tier 1: (source, external id) exists? unchanged content_hash → touch last_seen_at
+      │        │          (and recompute the job if the posting had been closed); else update
+      │        ├─ tier 2: no existing posting and the same fingerprint on any posting → link to that job;
+      │        │          else insert a new jobs row
+      │        ├─ upsert job_postings (normalized snapshot, fingerprint, content_hash)
+      │        ├─ recomputeJob → mergePostings → update jobs (+ field_provenance, status, closed_at)
+      │        └─ tier 3 (new job only): flagFuzzyDuplicates → job_duplicate_candidates (pending)
+      │  complete = fetched > 0                            (a zero-record fetch is NOT complete)
+      │  if complete and kind ≠ upload → closeMissingPostings (open postings with last_seen < run start;
+      │                                  recompute each affected job)
+      │  } catch (any error above, closing step included)
+      │     → best-effort finish as failed/incomplete with the error class ("unknown" if it was not an
+      │       IngestError), rethrow the IngestError. The recording write cannot replace the class.
+      ├─ finish("succeeded", complete, complete ? null : "empty_result")
+      │  ingestion_runs counters + job_sources.last_run_at/status/error class (class only, never a message)
+      │  └─ if that final write itself fails → best-effort mark failed/"unknown", throw IngestError("unknown")
+      └─ returns RunSummary
+   worker error mapping: IngestError with retryable = false (consent_missing, source_disabled,
+   invalid_slug, not_found, http_error, response_too_large, schema_mismatch) → UnrecoverableError, no retry;
+   retryable (rate_limited, server_error, network, timeout, unknown) → BullMQ retries, exponential
+   backoff from 30 s, 3 attempts. Every attempt has its own ingestion_runs row.
+```
+
+### 6c. Reading jobs (request-driven)
+
+```
+GET /api/jobs?q&status&sourceId&page     app/api/jobs/route.ts → ListJobsQuerySchema (400 on bad query)
+                                         → listJobs(tx, query): title/company ILIKE, status (default open),
+                                           postings-by-source filter, 25 per page, newest posted first
+GET /api/jobs/[id]                       app/api/jobs/[id]/route.ts → non-UUID / unknown → 404
+                                         → getJobDetail(tx, id): job + its postings + duplicate candidates
+/sources → SourcesClient → /api/job-sources*    /jobs → JobsClient → /api/jobs    /jobs/[id] → JobDetailClient
+```
+
+Not part of this flow: nothing reads `job_duplicate_candidates` to merge or resolve them (they are
+displayed only, D36), and nothing calls an LLM or embeds a job at ingest time (D33).

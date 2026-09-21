@@ -1,6 +1,6 @@
 # Architecture — AI Career Intelligence & Application Platform
 
-Status: **Phases 0–3 are implemented** (foundation, candidate profile, career goal); job intelligence onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
+Status: **Phases 0–4 are implemented** (foundation, candidate profile, career goal, job intelligence); matching onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
 
 ## 1. Product framing
 
@@ -51,6 +51,8 @@ Ingestion adapters are pluggable, one per source type:
 - Apify actors
 
 Each source must be explicitly enabled via a consent checkbox ("I confirm I have reviewed the ToS of my data sources and am legally permitted to ingest them") before its adapter runs. `LEGAL.md` at repo root documents this boundary. No generic/open-ended HTML scraper exists in this system.
+
+Implemented in Phase 4: Greenhouse and Lever board APIs and CSV/JSON upload (`packages/ingestion/src/adapters`). Ashby, RSS and Apify remain unbuilt; each is a new `SourceAdapter`. The consent gate is enforced in the API and again in the worker ([D37](../DECISIONS.md)).
 
 ## 4. Matching pipeline
 
@@ -142,10 +144,10 @@ Caching: embedding cache (permanent, content-hash keyed), match-reason cache (7-
 
 - `profile_facts` — sentence/bullet-level candidate facts, each with its own embedding. Required by the entailment guardrail ([D5](../DECISIONS.md)); not present in the original spec, which only implied resume-level embedding.
 - All tables carry `user_id UUID` with RLS policies ([D2](../DECISIONS.md)), defaulting to a fixed local UUID via `DEFAULT_USER_ID`.
-- `jobs` salary fields: `salary_raw`, `salary_normalized_min`, `salary_normalized_max`, `salary_currency`, `is_parsed` ([D6](../DECISIONS.md)).
 - `automation_sessions` stores the generated payload and per-field mapped/unmapped state rather than raw DOM-automation logs ([D4](../DECISIONS.md)).
 - `career_goals` / `career_goal_constraints` (implemented in Phase 3) deviate from spec §19's one-line description: a goal is versioned and never edited in place (`version`, `is_active`, [D23](../DECISIONS.md)), a row is created when the goal is parsed with its own `parse_status`/`parse_error` ([D24](../DECISIONS.md)), and the constraints row holds 21 structured fields including the minimum salary as `salary_floor_raw` / `salary_floor_normalized` / `salary_currency` / `salary_is_parsed` and the preferred salary as the parallel `salary_target_*` columns ([D22](../DECISIONS.md), [D25](../DECISIONS.md), [D28](../DECISIONS.md)).
 - `career_goal_constraints` is the single source of truth for search-relevant preferences. `candidate_profiles` therefore keeps only contact fields, `years_of_experience` and `work_authorization_notes`; its earlier work-mode, salary-expectation, visa, preferred-role and industry columns and the `company_preferences` table were dropped ([D21](../DECISIONS.md)).
+- `job_sources`, `ingestion_runs`, `raw_job_postings`, `jobs`, `job_postings`, `job_duplicate_candidates` (Phase 4, [D35](../DECISIONS.md)/[D36](../DECISIONS.md)). `jobs` is derived from its postings by a pure merge; salary uses the D6 raw + normalized + currency + period + `is_parsed` shape (implemented as `salary_raw`, `salary_min`, `salary_max`, `salary_currency`, `salary_period`, `salary_is_parsed`, with the min/max annualized).
 
 Everything else (job_requirements, resume_optimizations, ats_evaluations, application_pitches, application_outcomes, learning_features, plus the original core tables) follows spec §19 as written.
 
@@ -159,4 +161,28 @@ Everything else (job_requirements, resume_optimizations, ats_evaluations, applic
 ## 10. What's still open
 
 - Confirm `EMBEDDING_PROVIDER=voyage` as the actual default vs. self-hosted BGE for the first implementation pass (leaning Voyage per [D7](../DECISIONS.md); revisit only if offline operation becomes a near-term requirement).
-- Concrete job-identity/dedup algorithm (fuzzy-match thresholds, conflict resolution when sources disagree on a field) is not yet specified — needed before Phase 4 implementation, not before.
+- Never measured or not yet built after Phase 4: the 0.8 trigram threshold for duplicate candidates has no labeled data; there is no duplicate-resolution or unmerge UI and no deletion of a source ([D36](../DECISIONS.md)); behavior at the volume of many real boards is unobserved; there is no Dockerfile or compose service for the ingestion worker ([D32](../DECISIONS.md)).
+
+## 11. Job ingestion (Phase 4)
+
+```
+source (Greenhouse | Lever | upload)
+  │  fetch        adapter.fetch(source) → { externalId, payload } records         (untrusted, size/time capped)
+  ▼
+raw_job_postings   latest payload + content_hash per (source, external id)
+  │  normalize    pure rules: HTML → text, keys, salary, work mode, experience, sponsorship, posted date
+  ▼
+identify           tier 1 same (source, external id) · tier 2 same fingerprint · tier 3 trigram near-match → FLAG only
+  ▼
+job_postings       one row per source appearance, holding its normalized snapshot
+  │  recompute    mergePostings(all postings of the job) → jobs row + field_provenance
+  ▼
+close              only after a complete, non-empty fetch of a non-upload source: unseen postings close;
+                   a job closes when none of its postings is open
+```
+
+- **Process model ([D32](../DECISIONS.md)).** Adapters, normalization, identity and the database pipeline are in `packages/ingestion`. `services/job-ingestion` is a thin BullMQ process: it reconciles one repeatable scheduler per enabled, consented, non-upload source against the database every 60 seconds, and runs a concurrency-1 worker that calls `runIngestion`. The web app enqueues "Run now" and upload runs onto the same queue. Only infrastructure runs under `infra/docker-compose.yml`; the worker is started with `pnpm --filter @ai-career/job-ingestion start` (no Dockerfile or compose service exists).
+- **Failure model.** Adapters and the pipeline throw only `IngestError`, which carries an error class and no content; transient classes retry with backoff, permanent ones do not. Runs and sources store the class ([D29](../DECISIONS.md), [D37](../DECISIONS.md)). A failed record is counted and skipped without aborting the run.
+- **Consent gate ([D37](../DECISIONS.md), [D3](../DECISIONS.md)).** The source is created disabled and unconsented; enabling requires `consentConfirmed`; the run API refuses an unconsented or disabled source; `runIngestion` refuses it again. Uploads require a consent field.
+- **Data quality.** Enrichment is deterministic with evidence or an explicit unknown ([D33](../DECISIONS.md), [D34](../DECISIONS.md)); missing values are `null`/`unknown`, never defaults. Hostile input is bounded ([D39](../DECISIONS.md)).
+- **Reading.** `GET /api/jobs` and `GET /api/jobs/[id]` power the `/jobs` browser; `/sources` manages the watch-list. Ranking, eligibility filtering and embeddings are Phase 5/6 and do not exist yet.

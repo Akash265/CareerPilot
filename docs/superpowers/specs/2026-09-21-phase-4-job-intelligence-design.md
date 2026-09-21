@@ -1,7 +1,7 @@
 # Phase 4 — Job Intelligence: Design
 
 Date: 2026-09-21
-Status: design approved in brainstorming; awaiting written-spec review
+Status: implemented; see the plan's "Refinements" R1–R16 (`docs/superpowers/plans/2026-09-21-phase-4-job-intelligence.md`) for where verification against real APIs changed the design, and section 9 below
 Spec reference: project specification §7 (Job Intelligence), §15 (salary/freshness), roadmap Phase 4
 Related decisions: D3 (allowlisted sources + consent), D6 (deterministic salary), D8 (deterministic before AI), D2 (RLS), D17 (sync vs worker), D29 (error class, not message)
 
@@ -159,3 +159,18 @@ Route handlers follow the Phase 2–3 conventions: `readJsonBody`, 400 on malfor
 - **Real API response shapes.** Which of Greenhouse's and Lever's fields expose a posted/created date, structured location/country, and pay ranges is assumed, not confirmed. The first plan task records real (or documentation-derived) fixtures and adjusts section 5 accordingly. If a source has no posted date, `posted_at` stays null.
 - **Tier-3 similarity threshold** has no labeled data yet; it starts conservative and is tunable, and since nothing auto-merges the cost of a wrong value is review noise, not data loss.
 - **Default 6h schedule** is a guess at a polite polling interval; it is env-configurable.
+
+## 9. Implementation notes
+
+Written after the build. Where sections 3–5 disagree with this list, this list is what was built; the rationale for each item is in DECISIONS.md D31–D39 and the plan's "Refinements" table.
+
+- **Structured pay fields are not implemented.** Section 5's "structured source fields first" step was dropped: none of about 1,430 sampled real postings carried a pay field, so salary is read from description text (and an upload's `salary` column) only (D34).
+- **Fingerprint and content hash live on `job_postings`**, not on `jobs`. Each posting stores its `normalized` snapshot; `jobs` is recomputed from all of its postings by a pure merge and `jobs.field_provenance` records which posting supplied each field group (D35).
+- **`jobs.location_key`** is a stored column (the identity tiers needed a location key the data model did not list).
+- **Posted date:** Greenhouse `first_published` and Lever `createdAt` (epoch milliseconds) are the posted dates; Greenhouse `updated_at` is never treated as one. Only Lever gives a structured country and work-mode field; Greenhouse `country_code` is always null.
+- **Slug pattern is widened** to `^[A-Za-z0-9_-]{1,64}$`: real board tokens are mixed-case and underscored, and the set still cannot alter the host or path (D37).
+- **An empty fetch is incomplete.** A fetch that returns zero records is recorded as `complete = false` (`empty_result`) and closes nothing, in addition to section 4's partial-fetch rule (D36).
+- **No compose service.** `infra/docker-compose.yml` still runs only Postgres, Redis and MinIO; the worker is started with `pnpm --filter @ai-career/job-ingestion start`. Section 4's "Docker Compose gains the worker service" is not implemented (D32).
+- **Scheduling.** The worker reconciles one repeatable scheduler per enabled, consented, non-upload source every 60 seconds; creating a scheduler fires its first run immediately, so enabling a source starts a fetch within about a minute. "Already queued" (409) is decided by BullMQ job id (`ingest-<sourceId>`), not by an `ingestion_runs` status.
+- **Untrusted-input hardening** beyond section 7's security list (bounded text and salary/experience/sponsorship scans, identity-field length caps, upload row caps, a fail-fast queue producer, error classes that carry no content) was added during code review; see D39.
+- **Known limitation:** a posting whose content changes stays attached to the job it was first linked to; there is no cross-job re-linking, no fuzzy re-flagging on edit, and no unmerge UI (D36).
