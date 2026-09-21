@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { JobListItem } from "../../lib/jobs/listJobs";
 import { formatPosted, formatSalary, formatSponsorship, formatWorkMode } from "../../lib/jobs/format";
 
 type Status = "open" | "closed" | "all";
+interface Filters {
+  q: string;
+  status: Status;
+}
 interface Result {
   jobs: JobListItem[];
   page: number;
@@ -16,30 +20,38 @@ interface Result {
 export function JobsClient() {
   const [draftQuery, setDraftQuery] = useState("");
   const [draftStatus, setDraftStatus] = useState<Status>("open");
-  const [applied, setApplied] = useState<{ q: string; status: Status }>({ q: "", status: "open" });
+  const [applied, setApplied] = useState<Filters>({ q: "", status: "open" });
   const [page, setPage] = useState(1);
-  const [result, setResult] = useState<Result | null>(null);
+  // The result on screen, remembered together with the filters it answers.
+  const [loaded, setLoaded] = useState<{ result: Result; filters: Filters } | null>(null);
+  const result = loaded?.result ?? null;
   const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // A promise chain, not async/await: see the note in SourcesClient (react-hooks/set-state-in-effect).
-  const load = useCallback(() => {
+  // `cancelled` makes a response that arrives after a newer request (or after unmount) a no-op, so the list on screen
+  // always belongs to the latest `applied`/`page`; Retry bumps `reloadKey` to re-run this effect.
+  useEffect(() => {
+    let cancelled = false;
     const params = new URLSearchParams({ status: applied.status, page: String(page) });
     if (applied.q) params.set("q", applied.q);
-    return fetch(`/api/jobs?${params.toString()}`)
+    fetch(`/api/jobs?${params.toString()}`)
       .then((res) => {
         if (!res.ok) throw new Error("load failed");
         return res.json();
       })
       .then((body: Result) => {
-        setResult(body);
+        if (cancelled) return;
+        setLoaded({ result: body, filters: applied });
         setFailed(false);
       })
-      .catch(() => setFailed(true));
-  }, [applied, page]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applied, page, reloadKey]);
 
   function search() {
     setPage(1);
@@ -48,6 +60,9 @@ export function JobsClient() {
 
   const from = result && result.total > 0 ? (result.page - 1) * result.pageSize + 1 : 0;
   const to = result ? Math.min(result.page * result.pageSize, result.total) : 0;
+  // While a different page or filter than the one on screen is in flight (or failed), paging from the stale result's
+  // bounds could request a page past the end, so Previous/Next wait (Retry or a new search recovers).
+  const paging = loaded !== null && (loaded.filters !== applied || loaded.result.page !== page);
 
   return (
     <div className="flex flex-col gap-4">
@@ -76,7 +91,7 @@ export function JobsClient() {
       {failed && (
         <div className="flex flex-col gap-2">
           <p role="alert" className="text-sm text-red-600">Could not load jobs — check your connection and try again.</p>
-          <button type="button" onClick={() => void load()} className="w-fit rounded border px-4 py-2 text-sm">Retry</button>
+          <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="w-fit rounded border px-4 py-2 text-sm">Retry</button>
         </div>
       )}
       {result === null && !failed && <p>Loading...</p>}
@@ -107,8 +122,8 @@ export function JobsClient() {
             ))}
           </ul>
           <div className="flex gap-2">
-            <button type="button" disabled={result.page <= 1} onClick={() => setPage((p) => p - 1)} className="rounded border px-3 py-1 text-sm disabled:opacity-50">Previous</button>
-            <button type="button" disabled={to >= result.total} onClick={() => setPage((p) => p + 1)} className="rounded border px-3 py-1 text-sm disabled:opacity-50">Next</button>
+            <button type="button" disabled={paging || result.page <= 1} onClick={() => setPage((p) => p - 1)} className="rounded border px-3 py-1 text-sm disabled:opacity-50">Previous</button>
+            <button type="button" disabled={paging || to >= result.total} onClick={() => setPage((p) => p + 1)} className="rounded border px-3 py-1 text-sm disabled:opacity-50">Next</button>
           </div>
         </>
       )}

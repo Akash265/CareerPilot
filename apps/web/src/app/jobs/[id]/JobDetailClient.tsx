@@ -5,21 +5,30 @@ import Link from "next/link";
 import type { JobDetail } from "../../../lib/jobs/getJobDetail";
 import { formatDate, formatPosted, formatSalary, formatSponsorship, formatWorkMode, safeHttpUrl } from "../../../lib/jobs/format";
 
-type State = { kind: "loading" } | { kind: "missing" } | { kind: "error" } | { kind: "ready"; job: JobDetail };
+type Outcome = { kind: "missing" } | { kind: "error" } | { kind: "ready"; job: JobDetail };
+type State = { kind: "loading" } | Outcome;
 
 export function JobDetailClient({ id }: { id: string }) {
-  const [state, setState] = useState<State>({ kind: "loading" });
+  // The outcome is remembered with the id it answers; an outcome for another id counts as still loading, so a changed
+  // id never shows the previous job (and needs no synchronous reset inside the effect).
+  const [loaded, setLoaded] = useState<{ id: string; outcome: Outcome } | null>(null);
+  const state: State = loaded !== null && loaded.id === id ? loaded.outcome : { kind: "loading" };
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/jobs/${id}`)
+    const finish = (outcome: Outcome) => {
+      if (!cancelled) setLoaded({ id, outcome });
+    };
+    fetch(`/api/jobs/${encodeURIComponent(id)}`)
       .then(async (res) => {
-        if (cancelled) return;
-        if (res.status === 404) setState({ kind: "missing" });
-        else if (!res.ok) setState({ kind: "error" });
-        else setState({ kind: "ready", job: (await res.json()).job });
+        if (res.status === 404) return finish({ kind: "missing" });
+        if (!res.ok) return finish({ kind: "error" });
+        const body = await res.json();
+        // A 200 without a job object is a malformed response, not a job.
+        if (body && typeof body.job === "object" && body.job !== null) finish({ kind: "ready", job: body.job });
+        else finish({ kind: "error" });
       })
-      .catch(() => !cancelled && setState({ kind: "error" }));
+      .catch(() => finish({ kind: "error" }));
     return () => {
       cancelled = true;
     };
