@@ -20,7 +20,7 @@ const PREFIX = new RegExp(
   `(?<![A-Za-z])(${CUR})\\s?(${AMT})${UNIT}(?:${SEP}(?:${CUR})?\\s?(${AMT})|\\s+${CUR}\\s?(${AMT}))?`,
   "g"
 );
-const SUFFIX = new RegExp(`(${AMT})(?:\\s?(?:${ISO}|€|£))?(?:${SEP}(${AMT}))?\\s?(${ISO}|€|£)`, "g");
+const SUFFIX = new RegExp(`(?<![\\d.,])(${AMT})(?:\\s?(?:${ISO}|€|£))?(?:${SEP}(${AMT}))?\\s?(${ISO}|€|£)`, "g");
 const TRAILING_ISO = new RegExp(`^\\s?(${ISO})\\b`);
 
 const MAGNITUDE_AFTER = /^\s?(?:M\b|MM\b|B\b|T\b|bn\b|tn\b|million|billion|trillion)/i;
@@ -32,9 +32,11 @@ const NEGATIVE_BEFORE =
 const ANNUALIZE: Record<SalaryPeriod, number> = { year: 1, month: 12, hour: 2080 };
 const AMBIGUOUS_DOLLAR_COUNTRIES = new Set(["CA", "AU", "NZ", "SG", "HK"]);
 
-// A posting with 50+ salary-like amounts near salary words is never a clean single salary, and disagreeing
-// candidates already yield an unparsed result. Stopping here bounds the O(n^2) overlap check on hostile text.
+// Scanning stops once the candidate cap is reached, which bounds the O(n^2) overlap check on hostile text;
+// results come from the candidates seen.
 const MAX_CANDIDATES = 50;
+// Descriptions are untrusted third-party text; real ones are ~15KB.
+const MAX_TEXT_CHARS = 200_000;
 
 const NONE: SalaryResult = { raw: null, min: null, max: null, currency: null, period: null, isParsed: false };
 
@@ -76,6 +78,7 @@ interface Candidate {
 }
 
 export function extractSalary(text: string, ctx: { countryCode?: string | null } = {}): SalaryResult {
+  text = text.slice(0, MAX_TEXT_CHARS);
   const candidates: Candidate[] = [];
 
   scan: for (const re of [PREFIX, SUFFIX]) {

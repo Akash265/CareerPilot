@@ -118,26 +118,40 @@ describe("extractSalary — ambiguity and absence", () => {
 });
 
 describe("extractSalary — adversarial input (posting text is untrusted)", () => {
-  // A quadratic regex on hostile text would stall the ingestion worker. Each string is ~200k chars.
+  // A quadratic regex on hostile text would stall the ingestion worker. None of these strings contains a
+  // salary word, so the only correct answer is "no salary" (all-null), and it must arrive quickly.
+  const NO_SALARY = { raw: null, min: null, max: null, currency: null, period: null, isParsed: false };
   const cases: Array<[string, string]> = [
     ["repeated '$1,'", "$1,".repeat(70_000)],
     ["repeated '1 '", "1 ".repeat(100_000)],
     ["only currency symbols", "$".repeat(200_000)],
     ["repeated '1,000'", "1,000".repeat(40_000)],
+    ["one unbroken 200k digit run", "1".repeat(200_000)],
+    ["repeated '1,'", "1,".repeat(100_000)],
+    ["repeated '1.'", "1.".repeat(100_000)],
+    ["repeated '1 - '", "1 - ".repeat(50_000)],
+    ["repeated '1 to '", "1 to ".repeat(40_000)],
+    ["repeated '$1'", "$1".repeat(100_000)],
+    ["only euro signs", "€".repeat(200_000)],
+    ["a 1 MB digit run (exercises the input cap)", "1".repeat(1_000_000)],
+    ["only open parentheses", "(".repeat(200_000)],
+    ["a currency symbol before a 100k digit run", "$" + "1".repeat(100_000)],
+    ["many currency symbols before a digit run", "$".repeat(50_000) + "1".repeat(50_000)],
   ];
 
-  it.each(cases)("finishes quickly on %s", (_label, text) => {
+  it.each(cases)("finishes quickly and finds no salary in %s", (_label, text) => {
     const started = performance.now();
     let result: ReturnType<typeof extractSalary> | undefined;
     expect(() => {
       result = extractSalary(text);
     }).not.toThrow();
     expect(performance.now() - started).toBeLessThan(1000);
-    expect(result).toBeDefined();
+    expect(result).toEqual(NO_SALARY);
   });
 
   // Dense salary-like amounts each near a salary word: every one becomes a candidate, so the
-  // overlap check was quadratic in candidate count until the candidate cap bounded it.
+  // overlap check was quadratic in candidate count until the candidate cap bounded it. Every
+  // candidate is the same figure, so they all agree and the answer is that one amount.
   const dense: Array<[string, string]> = [
     ["~200k chars of 'pay $10k,'", "pay $10k,".repeat(22_000)],
     ["~1 MB of 'pay $10k,'", "pay $10k,".repeat(110_000)],
@@ -147,7 +161,7 @@ describe("extractSalary — adversarial input (posting text is untrusted)", () =
     const started = performance.now();
     const result = extractSalary(text);
     expect(performance.now() - started).toBeLessThan(1000);
-    expect(typeof result.isParsed).toBe("boolean");
+    expect(result).toMatchObject({ min: 10000, max: 10000, currency: "USD", period: "year", isParsed: true });
   });
 
   it("still parses when the same range is repeated past the candidate cap", () => {
