@@ -32,6 +32,10 @@ const NEGATIVE_BEFORE =
 const ANNUALIZE: Record<SalaryPeriod, number> = { year: 1, month: 12, hour: 2080 };
 const AMBIGUOUS_DOLLAR_COUNTRIES = new Set(["CA", "AU", "NZ", "SG", "HK"]);
 
+// A posting with 50+ salary-like amounts near salary words is never a clean single salary, and disagreeing
+// candidates already yield an unparsed result. Stopping here bounds the O(n^2) overlap check on hostile text.
+const MAX_CANDIDATES = 50;
+
 const NONE: SalaryResult = { raw: null, min: null, max: null, currency: null, period: null, isParsed: false };
 
 function currencyOf(symbol: string): string {
@@ -74,7 +78,7 @@ interface Candidate {
 export function extractSalary(text: string, ctx: { countryCode?: string | null } = {}): SalaryResult {
   const candidates: Candidate[] = [];
 
-  for (const re of [PREFIX, SUFFIX]) {
+  scan: for (const re of [PREFIX, SUFFIX]) {
     re.lastIndex = 0;
     const isPrefix = re === PREFIX;
     let m: RegExpExecArray | null;
@@ -109,6 +113,7 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
       if (hi * ANNUALIZE[period ?? "year"] < 1000) continue;
 
       candidates.push({ raw: text.slice(start, end).trim(), symbol, lo, hi, period: period ?? "year", start, end });
+      if (candidates.length >= MAX_CANDIDATES) break scan;
     }
   }
 

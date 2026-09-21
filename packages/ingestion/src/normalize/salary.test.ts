@@ -135,4 +135,23 @@ describe("extractSalary — adversarial input (posting text is untrusted)", () =
     expect(performance.now() - started).toBeLessThan(1000);
     expect(result).toBeDefined();
   });
+
+  // Dense salary-like amounts each near a salary word: every one becomes a candidate, so the
+  // overlap check was quadratic in candidate count until the candidate cap bounded it.
+  const dense: Array<[string, string]> = [
+    ["~200k chars of 'pay $10k,'", "pay $10k,".repeat(22_000)],
+    ["~1 MB of 'pay $10k,'", "pay $10k,".repeat(110_000)],
+  ];
+
+  it.each(dense)("stays bounded on dense candidates: %s", (_label, text) => {
+    const started = performance.now();
+    const result = extractSalary(text);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(typeof result.isParsed).toBe("boolean");
+  });
+
+  it("still parses when the same range is repeated past the candidate cap", () => {
+    const r = extractSalary("The salary is $100,000 - $120,000 per year. ".repeat(60));
+    expect(r).toMatchObject({ min: 100000, max: 120000, currency: "USD", period: "year", isParsed: true });
+  });
 });
