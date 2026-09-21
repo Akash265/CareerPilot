@@ -15,6 +15,7 @@ vi.mock("../../../../../lib/job-ingestion/enqueue", () => ({ enqueueIngestion: v
 import { enqueueIngestion } from "../../../../../lib/job-ingestion/enqueue";
 
 const USER = "00000000-0000-0000-0000-0000000000b3";
+const OTHER_USER = "00000000-0000-0000-0000-0000000000c3";
 let admin: postgres.Sql;
 
 beforeAll(async () => {
@@ -23,9 +24,11 @@ beforeAll(async () => {
 beforeEach(async () => {
   vi.mocked(enqueueIngestion).mockReset().mockResolvedValue("enqueued");
   await wipeJobData(admin, USER);
+  await wipeJobData(admin, OTHER_USER);
 });
 afterAll(async () => {
   await wipeJobData(admin, USER);
+  await wipeJobData(admin, OTHER_USER);
   await admin.end();
 });
 
@@ -57,9 +60,26 @@ describe("POST /api/job-sources/[id]/run", () => {
     expect((await res.json()).error).toMatch(/already queued or running/);
   });
 
-  it("answers 404 for an unknown or malformed id", async () => {
+  it("answers 404 for an unknown or malformed id, without queueing", async () => {
     expect((await run("00000000-0000-0000-0000-00000000ffff")).status).toBe(404);
     expect((await run("nope")).status).toBe(404);
+    expect(enqueueIngestion).not.toHaveBeenCalled();
+  });
+
+  it("answers 404 for a source owned by another user, without queueing", async () => {
+    const foreign = await insertSource(admin, OTHER_USER, { enabled: true, consent: true });
+    expect((await run(foreign)).status).toBe(404);
+    expect(enqueueIngestion).not.toHaveBeenCalled();
+  });
+
+  it("answers 503 with a fixed message when the queue is unavailable, never echoing the error", async () => {
+    vi.mocked(enqueueIngestion).mockRejectedValue(new Error("ECONNREFUSED secret-host:6379"));
+    const id = await insertSource(admin, USER, { enabled: true, consent: true });
+    const res = await run(id);
+    expect(res.status).toBe(503);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ error: "The job queue is unavailable. Is Redis running?" });
+    expect(text).not.toContain("secret-host");
   });
 
   it("allows re-running an upload source (it reprocesses the stored records)", async () => {

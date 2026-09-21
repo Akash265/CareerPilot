@@ -30,7 +30,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Confirm the source's Terms of Service before running it" }, { status: 409 });
   }
 
-  const result = await enqueueIngestion(env, id);
+  let result;
+  try {
+    result = await enqueueIngestion(env, id);
+  } catch {
+    // Fixed text: the underlying error can name the Redis host.
+    return NextResponse.json({ error: "The job queue is unavailable. Is Redis running?" }, { status: 503 });
+  }
   if (result === "already_queued") {
     return NextResponse.json({ error: "A run for this source is already queued or running" }, { status: 409 });
   }

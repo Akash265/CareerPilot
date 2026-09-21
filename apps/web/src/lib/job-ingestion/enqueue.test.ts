@@ -1,5 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
+import net from "node:net";
 import { Queue } from "bullmq";
 import { INGEST_JOB_NAME, ingestJobId } from "@ai-career/ingestion";
 import { enqueueIngestion } from "./enqueue";
@@ -30,4 +31,36 @@ describe("enqueueIngestion", () => {
     expect(await enqueueIngestion(env, randomUUID(), queueName)).toBe("enqueued");
     expect(await enqueueIngestion(env, randomUUID(), queueName)).toBe("enqueued");
   });
+
+  it("rejects promptly with a fixed message when Redis is unreachable, never leaking the URL", async () => {
+    const started = Date.now();
+    const error = await enqueueIngestion({ REDIS_URL: "redis://127.0.0.1:1" }, randomUUID(), queueName).then(
+      () => null,
+      (e: unknown) => e as Error
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.message).toBe("queue unavailable");
+    expect(String(error?.stack)).not.toContain("127.0.0.1");
+    expect(Date.now() - started).toBeLessThan(8000);
+  }, 15000);
+
+  it("gives up after its overall guard when Redis accepts the connection but never answers", async () => {
+    const sockets = new Set<net.Socket>();
+    const silent = net.createServer((socket) => {
+      sockets.add(socket);
+      socket.on("error", () => undefined);
+    });
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    const { port } = silent.address() as net.AddressInfo;
+    try {
+      const started = Date.now();
+      await expect(enqueueIngestion({ REDIS_URL: `redis://127.0.0.1:${port}` }, randomUUID(), queueName)).rejects.toThrow(
+        /^queue unavailable$/
+      );
+      expect(Date.now() - started).toBeLessThan(8000);
+    } finally {
+      sockets.forEach((socket) => socket.destroy());
+      await new Promise((resolve) => silent.close(resolve));
+    }
+  }, 15000);
 });

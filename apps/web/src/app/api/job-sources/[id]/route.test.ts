@@ -11,6 +11,7 @@ vi.mock("@ai-career/config", () => ({
 }));
 
 const USER = "00000000-0000-0000-0000-0000000000b2";
+const OTHER_USER = "00000000-0000-0000-0000-0000000000c2";
 let admin: postgres.Sql;
 
 beforeAll(async () => {
@@ -18,9 +19,11 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await wipeJobData(admin, USER);
+  await wipeJobData(admin, OTHER_USER);
 });
 afterAll(async () => {
   await wipeJobData(admin, USER);
+  await wipeJobData(admin, OTHER_USER);
   await admin.end();
 });
 
@@ -62,6 +65,21 @@ describe("PATCH /api/job-sources/[id]", () => {
 
     expect((await patch(id, { enabled: true })).status).toBe(200);
     expect(await row(id)).toMatchObject({ enabled: true });
+  });
+
+  it("does not change the recorded confirmation when re-enabling with consentConfirmed again", async () => {
+    const id = await insertSource(admin, USER, { enabled: false, consent: true });
+    const before = (await row(id)).consent_confirmed_at;
+    expect((await patch(id, { enabled: true, consentConfirmed: true })).status).toBe(200);
+    const after = await row(id);
+    expect(after.enabled).toBe(true);
+    expect(after.consent_confirmed_at).toEqual(before);
+  });
+
+  it("answers 404 for a source owned by another user, and leaves it untouched", async () => {
+    const foreign = await insertSource(admin, OTHER_USER);
+    expect((await patch(foreign, { enabled: true, consentConfirmed: true })).status).toBe(404);
+    expect(await row(foreign)).toMatchObject({ enabled: false, consent_confirmed_at: null });
   });
 
   it("answers 404 for an unknown or malformed id, and 400 for a bad body", async () => {
