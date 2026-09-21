@@ -4,6 +4,7 @@ import { UploadRowSchema, type UploadRow } from "../sourceSchemas";
 import type { RawRecord } from "../types";
 
 export const MAX_UPLOAD_ROWS = 5000;
+const TOO_MANY_ROWS = "File has more than 5,000 rows";
 
 /** Longest `id` cell kept verbatim as externalId; longer ones are hashed (external_id is btree-indexed). */
 const MAX_VERBATIM_ID_LENGTH = 200;
@@ -38,7 +39,8 @@ function readObjects(buffer: Buffer, filename: string): Record<string, unknown>[
   if (name.endsWith(".json")) {
     let data: unknown;
     try {
-      data = JSON.parse(text);
+      // JSON.parse rejects a leading BOM (csv-parse strips its own via `bom: true`).
+      data = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
     } catch {
       throw new UploadParseError("File is not valid JSON");
     }
@@ -46,12 +48,23 @@ function readObjects(buffer: Buffer, filename: string): Record<string, unknown>[
     if (!Array.isArray(list)) {
       throw new UploadParseError('JSON must be an array of jobs, or an object with a "jobs" array');
     }
+    // Check the cap before mapping so a file of millions of tiny entries costs no per-row work.
+    if (list.length > MAX_UPLOAD_ROWS) throw new UploadParseError(TOO_MANY_ROWS);
     return list.map((row) => (row && typeof row === "object" && !Array.isArray(row) ? (row as Record<string, unknown>) : {}));
   }
 
   if (name.endsWith(".csv")) {
     try {
-      return parseCsv(text, { columns: true, skip_empty_lines: true, trim: true, bom: true, relax_column_count: true });
+      // `to` stops the parser after one record past the cap, so the caller's `> MAX_UPLOAD_ROWS`
+      // check fires without ever materialising millions of rows from a small, tiny-row file.
+      return parseCsv(text, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+        bom: true,
+        relax_column_count: true,
+        to: MAX_UPLOAD_ROWS + 1,
+      });
     } catch {
       throw new UploadParseError("File is not valid CSV");
     }
@@ -63,7 +76,9 @@ function toCanonical(raw: Record<string, unknown>): { row: Record<string, string
   const row: Record<string, string> = {};
   let id: string | null = null;
   for (const [header, value] of Object.entries(raw)) {
-    const key = ALIASES[header.toLowerCase().replace(/[^a-z0-9]/g, "")];
+    const alias = header.toLowerCase().replace(/[^a-z0-9]/g, "");
+    // Own keys only: a header such as `constructor` or `__proto__` must not resolve to an inherited member.
+    const key = Object.hasOwn(ALIASES, alias) ? ALIASES[alias] : undefined;
     if (!key || value === null || value === undefined || typeof value === "object") continue;
     const text = String(value).trim();
     if (!text) continue;
@@ -76,7 +91,7 @@ function toCanonical(raw: Record<string, unknown>): { row: Record<string, string
 export function parseUploadFile(buffer: Buffer, filename: string): RawRecord[] {
   const objects = readObjects(buffer, filename);
   if (objects.length === 0) throw new UploadParseError("File contains no jobs");
-  if (objects.length > MAX_UPLOAD_ROWS) throw new UploadParseError("File has more than 5,000 rows");
+  if (objects.length > MAX_UPLOAD_ROWS) throw new UploadParseError(TOO_MANY_ROWS);
 
   const records: RawRecord[] = [];
   const seen = new Set<string>();

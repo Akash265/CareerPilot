@@ -90,14 +90,16 @@ describe("parseUploadFile — field length limits", () => {
   });
 
   it("rejects a 501-character title through the invalid-rows path, listing the rows", () => {
+    expect.assertions(3);
     const csv = `title,company\nAnalyst,Beta\n${"t".repeat(501)},Gamma\nEngineer,${"c".repeat(501)}`;
-    expect(() => parseUploadFile(buf(csv), "jobs.csv")).toThrow(UploadParseError);
     try {
       parseUploadFile(buf(csv), "jobs.csv");
     } catch (error) {
+      expect(error).toBeInstanceOf(UploadParseError);
       expect((error as UploadParseError).message).toBe(
         "2 rows are invalid (first: rows 2, 3): each needs a title and a company, within the length limits",
       );
+      expect((error as UploadParseError).message).not.toContain("tttt");
     }
   });
 
@@ -105,6 +107,70 @@ describe("parseUploadFile — field length limits", () => {
     const title = "t".repeat(500);
     const [record] = parseUploadFile(buf(`title,company\n${title},Beta`), "jobs.csv");
     expect(record.payload).toEqual({ title, company: "Beta" });
+  });
+});
+
+describe("parseUploadFile — header mapping and cell handling", () => {
+  const JOB_SHAPE_ERROR = 'JSON must be an array of jobs, or an object with a "jobs" array';
+
+  it("strips a leading BOM from JSON (CSV already handles one)", () => {
+    const rows = [{ title: "Analyst", company: "Beta" }];
+    const json = parseUploadFile(buf("﻿" + JSON.stringify(rows)), "jobs.json");
+    expect(json).toHaveLength(1);
+    expect(json[0].payload).toEqual({ title: "Analyst", company: "Beta" });
+    const wrapped = parseUploadFile(buf("﻿" + JSON.stringify({ jobs: rows })), "jobs.json");
+    expect(wrapped[0].payload).toEqual({ title: "Analyst", company: "Beta" });
+
+    const csv = parseUploadFile(buf("﻿title,company\nAnalyst,Beta"), "jobs.csv");
+    expect(csv[0].payload).toEqual({ title: "Analyst", company: "Beta" });
+  });
+
+  it("ignores headers that name inherited object keys, and never pollutes Object.prototype", () => {
+    const csv = "constructor,__proto__,toString,hasOwnProperty,title,company\nA,B,C,D,Analyst,Beta";
+    const [record] = parseUploadFile(buf(csv), "jobs.csv");
+    expect(record.payload).toEqual({ title: "Analyst", company: "Beta" });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+    const json = '[{"__proto__":"x","constructor":"y","toString":"z","title":"Analyst","company":"Beta"}]';
+    const [fromJson] = parseUploadFile(buf(json), "jobs.json");
+    expect(fromJson.payload).toEqual({ title: "Analyst", company: "Beta" });
+    expect(Object.keys(fromJson.payload as object).sort()).toEqual(["company", "title"]);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it("lets the first non-empty column win when several headers alias the same field", () => {
+    const first = parseUploadFile(buf("title,position,company\nFirst,Second,Beta"), "jobs.csv");
+    expect(first[0].payload).toEqual({ title: "First", company: "Beta" });
+    const later = parseUploadFile(buf("title,position,company\n,Second,Beta"), "jobs.csv");
+    expect(later[0].payload).toEqual({ title: "Second", company: "Beta" });
+  });
+
+  it("skips whitespace-only cells so a later alias column supplies the value", () => {
+    const json = JSON.stringify([{ title: "   \t", jobTitle: "Real", company: "Beta", city: "  " }]);
+    const [record] = parseUploadFile(buf(json), "jobs.json");
+    expect(record.payload).toEqual({ title: "Real", company: "Beta" });
+  });
+
+  it("keeps the first row when explicit ids repeat", () => {
+    const csv = "id,title,company\nX,First,Beta\nX,Second,Beta\nY,Third,Beta";
+    const records = parseUploadFile(buf(csv), "jobs.csv");
+    expect(records.map((r) => r.externalId)).toEqual(["X", "Y"]);
+    expect((records[0].payload as { title: string }).title).toBe("First");
+  });
+
+  it("coerces numbers to strings and ignores null, object and array cells", () => {
+    const json = JSON.stringify([
+      { title: "Analyst", company: "Beta", id: 42, salary: 75000, location: null, url: { a: 1 }, description: ["x"] },
+    ]);
+    const [record] = parseUploadFile(buf(json), "jobs.json");
+    expect(record.externalId).toBe("42");
+    expect(record.payload).toEqual({ title: "Analyst", company: "Beta", salary: "75000" });
+  });
+
+  it('rejects {"jobs": null}, a top-level null and other non-array shapes with the JSON-shape message', () => {
+    for (const body of ['{"jobs": null}', "null", "42", '"jobs"', '{"jobs": {}}']) {
+      expect(() => parseUploadFile(buf(body), "jobs.json")).toThrow(new UploadParseError(JOB_SHAPE_ERROR));
+    }
   });
 });
 
@@ -214,6 +280,41 @@ describe("parseUploadFile — adversarial input", () => {
       "100 rows are invalid (first: rows 1, 2, 3): each needs a title and a company, within the length limits",
       "null",
     );
+  });
+
+  // The row cap must stop the parse itself: a 10 MB file of tiny rows would otherwise be ~5M records.
+  it("(8) a ~10 MB CSV of 5.2M one-cell rows is rejected at the row cap without parsing them all", () => {
+    const b = buf("title,company\n" + "a\n".repeat(5_200_000));
+    const { ms, records, error } = run(b, "jobs.csv");
+    expect(records).toBeUndefined();
+    expectUserSafeError(error, "File has more than 5,000 rows", "aaaa");
+    expect(ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it("(9) a ~10 MB CSV of 2.6M two-cell rows is rejected at the row cap without parsing them all", () => {
+    const b = buf("title,company\n" + "a,b\n".repeat(2_600_000));
+    const { ms, records, error } = run(b, "jobs.csv");
+    expect(records).toBeUndefined();
+    expectUserSafeError(error, "File has more than 5,000 rows", "a,b");
+    expect(ms).toBeLessThan(BUDGET_MS);
+  });
+
+  it("(10) a ~10 MB JSON array of 5.2M zeros is rejected at the row cap before any per-row work", () => {
+    const b = buf("[" + "0,".repeat(5_200_000) + "0]");
+    const { ms, records, error } = run(b, "jobs.json");
+    expect(records).toBeUndefined();
+    expectUserSafeError(error, "File has more than 5,000 rows", "0,0");
+    expect(ms).toBeLessThan(1500);
+  });
+
+  it("(11) exactly 5,000 rows parse; 5,001 are rejected, for both CSV and JSON", () => {
+    const csvRows = (n: number) => buf("title,company\n" + Array.from({ length: n }, (_, i) => `Job ${i},Co`).join("\n"));
+    const jsonRows = (n: number) =>
+      buf(JSON.stringify(Array.from({ length: n }, (_, i) => ({ title: `Job ${i}`, company: "Co" }))));
+    expect(run(csvRows(MAX_UPLOAD_ROWS), "jobs.csv").records).toHaveLength(MAX_UPLOAD_ROWS);
+    expect(run(jsonRows(MAX_UPLOAD_ROWS), "jobs.json").records).toHaveLength(MAX_UPLOAD_ROWS);
+    expectUserSafeError(run(csvRows(MAX_UPLOAD_ROWS + 1), "jobs.csv").error, "File has more than 5,000 rows", "Job");
+    expectUserSafeError(run(jsonRows(MAX_UPLOAD_ROWS + 1), "jobs.json").error, "File has more than 5,000 rows", "Job");
   });
 
   it("(7) the file type comes from the final extension only: NUL bytes and path separators in the name change nothing else", () => {
