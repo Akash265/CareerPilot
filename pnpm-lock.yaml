@@ -26,9 +26,15 @@ importers:
       '@ai-career/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@ai-career/ingestion':
+        specifier: workspace:*
+        version: link:../../packages/ingestion
       '@ai-career/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      bullmq:
+        specifier: ^5.34.0
+        version: 5.81.5
       drizzle-orm:
         specifier: ^0.36.0
         version: 0.36.4(@types/react@19.2.18)(postgres@3.4.9)(react@19.2.8)
