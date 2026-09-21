@@ -69,4 +69,20 @@ describe("loadEnv", () => {
     const { VOYAGE_EMBEDDING_MODEL, ...rest } = validSource;
     expect(() => loadEnv(rest)).toThrow(/VOYAGE_EMBEDDING_MODEL/);
   });
+
+  it("defaults the ingestion settings and lets them be overridden", () => {
+    const env = loadEnv(validSource);
+    expect(env.GREENHOUSE_API_BASE).toBe("https://boards-api.greenhouse.io");
+    expect(env.LEVER_API_BASE).toBe("https://api.lever.co");
+    expect(env.INGEST_INTERVAL_MINUTES).toBe(360);
+
+    const custom = loadEnv({ ...validSource, GREENHOUSE_API_BASE: "http://localhost:4010", INGEST_INTERVAL_MINUTES: "15" });
+    expect(custom.GREENHOUSE_API_BASE).toBe("http://localhost:4010");
+    expect(custom.INGEST_INTERVAL_MINUTES).toBe(15);
+  });
+
+  it("rejects a too-short ingestion interval and a malformed API base", () => {
+    expect(() => loadEnv({ ...validSource, INGEST_INTERVAL_MINUTES: "1" })).toThrow(/INGEST_INTERVAL_MINUTES/);
+    expect(() => loadEnv({ ...validSource, LEVER_API_BASE: "not-a-url" })).toThrow(/LEVER_API_BASE/);
+  });
 });

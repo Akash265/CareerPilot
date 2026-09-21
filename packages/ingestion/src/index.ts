@@ -7,3 +7,7 @@ export * from "./normalize/experience";
 export * from "./normalize/sponsorship";
 export * from "./normalize/workMode";
 export * from "./normalize/normalizeRecord";
+export * from "./adapters/slug";
+export * from "./adapters/http";
+export * from "./adapters/greenhouse";
+export * from "./adapters/lever";

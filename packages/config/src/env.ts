@@ -20,6 +20,12 @@ const envSchema = z
     VOYAGE_API_KEY: z.string().min(1).optional(),
     ANTHROPIC_MODEL_FAST: z.string().min(1),
     VOYAGE_EMBEDDING_MODEL: z.string().min(1),
+    // Phase 4 ingestion. The API bases are operator-controlled (never user
+    // input), which is what keeps the adapters SSRF-safe; overriding them is how
+    // the E2E fake ATS server is used. See DECISIONS.md D3.
+    GREENHOUSE_API_BASE: z.string().url().default("https://boards-api.greenhouse.io"),
+    LEVER_API_BASE: z.string().url().default("https://api.lever.co"),
+    INGEST_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(360),
   })
   .superRefine((val, ctx) => {
     if (val.EMBEDDING_PROVIDER === "voyage" && !val.VOYAGE_API_KEY) {
