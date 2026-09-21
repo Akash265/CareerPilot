@@ -4,6 +4,12 @@
 //   2. worker:    GREENHOUSE_API_BASE=http://localhost:4011 LEVER_API_BASE=http://localhost:4011 pnpm --filter @ai-career/job-ingestion start
 //   3. web:       pnpm --filter web start     (after `pnpm --filter web build`)
 // Then: pnpm --filter @ai-career/job-ingestion e2e:smoke
+//
+// The smoke expects a FRESH database (fixed board `fakeco`, absolute job counts). Enabling a source also
+// makes the worker's reconcile tick (<= 60 s) start that source's first run automatically, and that
+// scheduled run can interleave with the manual runs below. Per-run counts (created, closed) therefore
+// depend on which run did the work; the assertions are on FINAL STATE (jobs, closed list) plus the
+// per-run `fetched` count, which is the same whichever run reports it.
 const WEB = process.env.WEB_URL ?? "http://localhost:3000";
 const ATS = process.env.FAKE_ATS_URL ?? "http://localhost:4011";
 
@@ -40,11 +46,27 @@ async function ensureSource(kind: "greenhouse" | "lever"): Promise<string> {
   if (!existing) throw new Error(`could not create or find the ${kind} source`);
   return existing.id;
 }
+// 202 = queued; 409 "already queued or running" = a run (e.g. the scheduled one) is in flight, which is fine.
+const triggerRun = async (id: string) => {
+  const res = await post(`/api/job-sources/${id}/run`);
+  const inFlight = res.status === 409 && /already/i.test(String(res.body?.error));
+  if (res.status !== 202 && !inFlight) throw new Error(`run was not queued: ${res.status} ${JSON.stringify(res.body)}`);
+};
 async function runAndWait(id: string) {
   const before = ((await sources()).find((s) => s.id === id) as { lastRunAt?: string | null }).lastRunAt ?? null;
-  const queued = await post(`/api/job-sources/${id}/run`);
-  if (queued.status !== 202) throw new Error(`run was not queued: ${queued.status}`);
+  await triggerRun(id);
   return waitForRun(id, before);
+}
+// Polls the closed-jobs list until `title` is in it. A run that was already fetching before the job was
+// dropped can swallow our trigger, so the run is re-triggered every few seconds while waiting.
+async function waitForClosed(id: string, title: string) {
+  for (let i = 0; i < 60; i++) {
+    const closed = (await call("/api/jobs?status=closed")).body;
+    if (closed.jobs.some((j: { title: string }) => j.title === title)) return closed;
+    if (i % 5 === 4) await triggerRun(id);
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`timed out waiting for "${title}" to be closed (is the worker running?)`);
 }
 
 async function main() {
@@ -60,8 +82,8 @@ async function main() {
   for (const id of [gh, lv]) await patch(`/api/job-sources/${id}`, { enabled: true, consentConfirmed: true });
   const ghRun = await runAndWait(gh);
   const lvRun = await runAndWait(lv);
-  check("greenhouse run fetched 5 and created 5", ghRun.lastRunStatus === "succeeded" && ghRun.lastRun?.fetched === 5 && ghRun.lastRun.created === 5, JSON.stringify(ghRun.lastRun));
-  check("lever run fetched 3 and created 3 (one of them links to an existing job)", lvRun.lastRunStatus === "succeeded" && lvRun.lastRun?.fetched === 3, JSON.stringify(lvRun.lastRun));
+  check("greenhouse run succeeded and fetched 5", ghRun.lastRunStatus === "succeeded" && ghRun.lastRun?.fetched === 5, JSON.stringify(ghRun.lastRun));
+  check("lever run succeeded and fetched 3", lvRun.lastRunStatus === "succeeded" && lvRun.lastRun?.fetched === 3, JSON.stringify(lvRun.lastRun));
 
   const list = (await call("/api/jobs?status=all")).body;
   const byTitle = (t: string) => list.jobs.find((j: { title: string }) => j.title === t);
@@ -88,10 +110,11 @@ async function main() {
   check("the near-duplicate 'Staff Data Engineer' is flagged, not merged", merged.duplicateCandidates.some((d: { title: string }) => d.title === "Staff Data Engineer"), JSON.stringify(merged.duplicateCandidates));
 
   await fetch(`${ATS}/__admin/drop/1005`, { method: "POST" });
-  const second = await runAndWait(gh);
-  check("a job removed from a complete fetch is closed", second.lastRun?.closed === 1, JSON.stringify(second.lastRun));
-  const closed = (await call("/api/jobs?status=closed")).body;
-  check("it appears under closed jobs, and open jobs drop to 6", closed.total === 1 && closed.jobs[0].title === "Office Chef" && (await call("/api/jobs")).body.total === 6);
+  await triggerRun(gh);
+  const closed = await waitForClosed(gh, "Office Chef");
+  check("a job removed from a complete fetch is closed", closed.total === 1 && closed.jobs[0].title === "Office Chef", JSON.stringify(closed.jobs.map((j: { title: string }) => j.title)));
+  const open = (await call("/api/jobs")).body;
+  check("open jobs drop to 6", open.total === 6, `total=${open.total}`);
 
   const form = new FormData();
   form.set("file", new File(["title,company,location\nWarehouse Lead,Beta,Leeds\nWarehouse Lead,Beta,Leeds"], "beta.csv"));
