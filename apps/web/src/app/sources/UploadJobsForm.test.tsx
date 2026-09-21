@@ -5,7 +5,8 @@ import { UploadJobsForm } from "./UploadJobsForm";
 
 function mockUploads(responses: Array<{ status: number; body: unknown }>) {
   let call = 0;
-  const fn = vi.fn(async (_url: string, _init?: RequestInit) => {
+  const fn = vi.fn(async (...request: [url: string, init?: RequestInit]) => {
+    expect(request[0]).toBe("/api/job-sources/upload");
     const { status, body } = responses[Math.min(call++, responses.length - 1)];
     return { ok: status < 400, status, json: async () => body } as Response;
   });
