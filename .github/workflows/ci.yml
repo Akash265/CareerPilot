@@ -132,6 +132,12 @@ jobs:
         # missing-file fallback behavior.
         run: |
           env | grep -E '^(NODE_ENV|DEFAULT_USER_ID|DATABASE_URL|MIGRATIONS_DATABASE_URL|REDIS_URL|MINIO_ENDPOINT|MINIO_ACCESS_KEY|MINIO_SECRET_KEY|ANTHROPIC_API_KEY|EMBEDDING_PROVIDER|VOYAGE_API_KEY|ANTHROPIC_MODEL_FAST|VOYAGE_EMBEDDING_MODEL)=' > .env
+      - name: Apply migrations to the test database once, before any test runs
+        # Every suite calls drizzle's migrate() in its own beforeAll, and turbo runs the packages'
+        # suites in parallel against this one database. Two simultaneous migrate() calls on an EMPTY
+        # database collide creating the same enum ("duplicate key ... pg_type_typname_nsp_index").
+        # Migrating here first makes every suite's own migrate() a no-op.
+        run: pnpm --filter @ai-career/db db:migrate
       - run: pnpm lint
       # `build` must run before `typecheck`: apps/web's tsc run depends on
       # `LayoutProps` and other ambient types Next.js's typed-routes feature
