@@ -4,14 +4,14 @@ import { openAdminDb, wipeMatchingData, insertJob, insertCareerGoal, insertMatch
 
 vi.mock("@ai-career/config", () => ({
   loadEnv: () => ({
-    DEFAULT_USER_ID: "00000000-0000-0000-0000-0000000000c2",
+    DEFAULT_USER_ID: "00000000-0000-0000-0000-0000000000c6",
     DATABASE_URL: process.env.TEST_APP_DATABASE_URL ?? "postgres://career_intel_app:career_intel_app@localhost:5432/career_intel_test",
   }),
 }));
 
 import { vi } from "vitest";
 
-const USER = "00000000-0000-0000-0000-0000000000c2";
+const USER = "00000000-0000-0000-0000-0000000000c6";
 let admin: postgres.Sql;
 
 beforeAll(async () => {
