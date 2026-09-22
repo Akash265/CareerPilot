@@ -22,6 +22,9 @@ export default function Home() {
         <Link href="/jobs" className="underline">
           4. Jobs — browse what was ingested
         </Link>
+        <Link href="/matches" className="underline">
+          5. Matches — see jobs ranked against your career goal
+        </Link>
       </nav>
     </main>
   );
