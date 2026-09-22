@@ -34,10 +34,16 @@ beforeAll(async () => {
   await adminSql.unsafe(
     `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`
   );
-  await adminSql`DELETE FROM work_experience_bullets`;
-  await adminSql`DELETE FROM work_experiences`;
-  await adminSql`DELETE FROM skills`;
-  await adminSql`DELETE FROM profile_facts`;
+  // Scoped to this file's own USER_A/USER_B (rather than a blanket DELETE)
+  // because turbo/vitest run packages/db and apps/web's test suites
+  // concurrently against the same shared local/CI test database -- an
+  // unscoped DELETE here can race with and wipe rows that apps/web's own
+  // profile route tests just inserted under their own fixed user id.
+  // Same fix as careerGoalTables.rls.test.ts's beforeAll in this directory.
+  await adminSql`DELETE FROM work_experience_bullets WHERE user_id IN (${USER_A}, ${USER_B})`;
+  await adminSql`DELETE FROM work_experiences WHERE user_id IN (${USER_A}, ${USER_B})`;
+  await adminSql`DELETE FROM skills WHERE user_id IN (${USER_A}, ${USER_B})`;
+  await adminSql`DELETE FROM profile_facts WHERE user_id IN (${USER_A}, ${USER_B})`;
 });
 
 afterAll(async () => {
