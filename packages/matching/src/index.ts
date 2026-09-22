@@ -14,3 +14,5 @@ export * from "./embeddings/vectorLiteral";
 export * from "./embeddings/ensureGoalEmbedding";
 export * from "./embeddings/ensureJobEmbeddings";
 export * from "./retrieval/fetchCandidateJobs";
+export * from "./explanation/matchExplanationSchema";
+export * from "./explanation/generateMatchExplanation";
