@@ -280,6 +280,53 @@ describe("normalizeRecord — unknown kind and empty names", () => {
   });
 });
 
+// The normalizer BUILDS text (entity decoding, slicing/truncation, evidence windows), so it can mint a
+// lone UTF-16 surrogate out of perfectly clean input. jsonb (job_postings.normalized) rejects that
+// outright, which would doom the per-record transaction and brick every later run of the source. One
+// check on the fully assembled record covers every producer, present and future.
+describe("normalizeRecord — text the normalizer itself makes unstorable", () => {
+  it("rejects a record whose decoded HTML entity mints a lone surrogate", () => {
+    expect(() =>
+      normalizeRecord(greenhouse, {
+        externalId: "1",
+        payload: { id: 1, title: "Engineer", content: "<p>Great role &#xD800; apply now</p>" },
+      }),
+    ).toThrow(NormalizeError);
+    // Decimal spelling of the same code point.
+    expect(() =>
+      normalizeRecord(greenhouse, {
+        externalId: "1",
+        payload: { id: 1, title: "Engineer", content: "<p>Great role &#55296; apply now</p>" },
+      }),
+    ).toThrow(NormalizeError);
+  });
+
+  it("rejects a record whose 500-character title cap cuts an ordinary emoji in half", () => {
+    // Nothing hostile here: a valid emoji lands across cap()'s slice boundary and leaves its high half behind.
+    expect(() =>
+      normalizeRecord(greenhouse, {
+        externalId: "1",
+        payload: { id: 1, title: `${"A".repeat(499)}😀 Engineer` },
+      }),
+    ).toThrow(NormalizeError);
+  });
+
+  it("still accepts an emoji that the cap does not cut, in a title, a location and a description", () => {
+    const job = normalizeRecord(greenhouse, {
+      externalId: "1",
+      payload: {
+        id: 1,
+        title: "Data Engineer 😀",
+        location: { name: "Berlin 🇩🇪" },
+        content: "<p>Build the 🚀 platform</p>",
+      },
+    });
+    expect(job.title).toBe("Data Engineer 😀");
+    expect(job.locationRaw).toBe("Berlin 🇩🇪");
+    expect(job.descriptionText).toBe("Build the 🚀 platform");
+  });
+});
+
 describe("normalizeRecord — unparseable upload salary", () => {
   it.each(["competitive", "DOE", "negotiable"])("invents no figure for salary cell %j", (salary) => {
     const job = normalizeRecord(upload, { externalId: "1", payload: { title: "Engineer", company: "Acme", salary } });

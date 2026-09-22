@@ -178,6 +178,26 @@ describe("runIngestion — safety", () => {
     expect(await statuses()).toEqual({ "Data Engineer": "open", "Product Designer": "open" });
   });
 
+  it("a record the normalizer turns into a lone surrogate is counted and skipped without bricking the rest of the fetch, on every run", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    // Nothing in the payload is unstorable: the entity is plain ASCII until decodeEntities mints a
+    // lone high surrogate from it, which the jsonb `normalized` column (unlike a text column) rejects.
+    const bad: RawRecord = {
+      externalId: "2",
+      payload: { ...greenhouseJobFixture, id: 2, title: "Ops Manager", content: "<p>Great role &#xD800; apply now</p>" },
+    };
+    const adapter = adapterFor(() => yielding([rec(1), bad, rec(3)]));
+
+    // The record AFTER the bad one must still be ingested: that's what proves the run didn't abort.
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 3, created: 2, failed: 1, errorClass: null });
+    expect(await statuses()).toEqual({ "Data Engineer": "open", "Security Analyst": "open" });
+    expect(await sourceRow(source)).toMatchObject({ last_run_status: "succeeded", last_error_class: null });
+
+    // Not bricked: the same input behaves the same on the next run.
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 3, unchanged: 2, failed: 1, closed: 0 });
+    expect(await statuses()).toEqual({ "Data Engineer": "open", "Security Analyst": "open" });
+  });
+
   it("stores a record whose external id is exactly at the 200-character cap", async () => {
     const source = await insertSource(t.adminSql, USER);
     const atCap: RawRecord = { externalId: "y".repeat(200), payload: { ...greenhouseJobFixture, id: 2, title: TITLES[2] } };

@@ -26,6 +26,26 @@ export function decodeEntities(input: string): string {
   });
 }
 
+/** A NUL byte, or a UTF-16 surrogate without its partner (a high one not followed by a low, or a low one not preceded by a high). */
+const UNSAFE_TEXT_RE = /\u0000|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/**
+ * True if `value` is, or contains (recursively, through objects/arrays), a string with a NUL byte or an
+ * unpaired UTF-16 surrogate -- either of which Postgres's jsonb type rejects outright, unlike a `text`
+ * column, which silently substitutes U+FFFD. Dates are treated as opaque (never strings).
+ *
+ * This is the single predicate for "safe to store as jsonb". Normalization SYNTHESIZES text -- entity
+ * decoding, length caps, evidence windows -- so it can mint a lone surrogate from clean input (an
+ * ordinary emoji cut in half by a slice is enough); validating the assembled record in one place covers
+ * every such producer, including ones added later.
+ */
+export function hasUnsafeText(value: unknown): boolean {
+  if (typeof value === "string") return UNSAFE_TEXT_RE.test(value);
+  if (value === null || typeof value !== "object" || value instanceof Date) return false;
+  if (Array.isArray(value)) return value.some(hasUnsafeText);
+  return Object.values(value).some(hasUnsafeText);
+}
+
 /** Hard cap on the input htmlToText will look at, so worst-case work on hostile content is bounded. */
 export const MAX_HTML_CHARS = 1_000_000;
 

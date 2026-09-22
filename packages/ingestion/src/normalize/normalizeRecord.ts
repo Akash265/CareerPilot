@@ -8,7 +8,7 @@ import { companyKey, descriptionHash, locationKey, titleKey } from "./keys";
 import { extractMinExperience } from "./experience";
 import { extractSalary } from "./salary";
 import { extractSponsorship } from "./sponsorship";
-import { escapedHtmlToText, htmlToText } from "./text";
+import { escapedHtmlToText, hasUnsafeText, htmlToText } from "./text";
 import { detectWorkMode } from "./workMode";
 
 interface Common {
@@ -69,7 +69,7 @@ function assemble(input: Common): NormalizedJob {
   // A name made only of punctuation normalizes to an empty key, which would collapse unrelated jobs together.
   if (!companyKeyValue || !tk.titleKey) throw new NormalizeError();
   const salaryText = c.salaryHint ? `Salary: ${c.salaryHint}\n${c.descriptionText}` : c.descriptionText;
-  return {
+  const job: NormalizedJob = {
     externalId: c.externalId,
     url: c.url,
     companyName: c.companyName,
@@ -89,6 +89,15 @@ function assemble(input: Common): NormalizedJob {
     sponsorship: extractSponsorship(c.descriptionText),
     postedAt: c.postedAt,
   };
+  // Every field above is DERIVED text: entity decoding, the 500-char caps, htmlToText's input cap and the
+  // extractors' evidence windows can each leave a NUL byte or half a surrogate pair behind, even for input
+  // that was perfectly clean (an emoji landing on a slice boundary is enough). persistPosting writes this
+  // whole object into a jsonb column, which rejects both outright -- in the OUTER transaction, so the throw
+  // would doom the per-record transaction and fail every later run of the source. One check here covers all
+  // of those producers and any added later; rejecting the record routes it into runIngestion's existing
+  // normalize-failure branch, which counts it, keeps a tracked posting open, and carries on.
+  if (hasUnsafeText(job)) throw new NormalizeError();
+  return job;
 }
 
 function fromGreenhouse(source: SourceRef, record: RawRecord): NormalizedJob {

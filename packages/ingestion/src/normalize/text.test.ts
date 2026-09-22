@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decodeEntities, htmlToText, escapedHtmlToText, MAX_HTML_CHARS } from "./text";
+import { decodeEntities, hasUnsafeText, htmlToText, escapedHtmlToText, MAX_HTML_CHARS } from "./text";
 import { greenhouseJobFixture } from "../fixtures";
 
 describe("decodeEntities", () => {
@@ -79,6 +79,37 @@ describe("htmlToText on hostile input (untrusted posting content)", () => {
 
   it("treats a non-breaking space as ordinary whitespace", () => {
     expect(htmlToText("<p>a\u00a0\u00a0b</p>")).toBe("a b");
+  });
+});
+
+// jsonb rejects a NUL byte and a lone (unpaired) UTF-16 surrogate outright, where a text column
+// silently substitutes U+FFFD. This is the one predicate the repo uses for "safe to store as jsonb".
+describe("hasUnsafeText", () => {
+  it("is true for a NUL byte and for either half of a surrogate pair on its own", () => {
+    expect(hasUnsafeText("a\u0000b")).toBe(true);
+    expect(hasUnsafeText("\ud800")).toBe(true); // lone high surrogate
+    expect(hasUnsafeText("\udc00")).toBe(true); // lone low surrogate
+    expect(hasUnsafeText("lead \udbff trail")).toBe(true);
+  });
+
+  it("is false for ordinary text and for a real emoji (a VALID surrogate pair)", () => {
+    expect(hasUnsafeText("")).toBe(false);
+    expect(hasUnsafeText("Senior Data Engineer — Berlin")).toBe(false);
+    expect(hasUnsafeText("😀")).toBe(false);
+    expect(hasUnsafeText("a 😀 b 👍🏽 c")).toBe(false);
+  });
+
+  it("is false for non-strings, including Dates, null and numbers", () => {
+    expect(hasUnsafeText(null)).toBe(false);
+    expect(hasUnsafeText(undefined)).toBe(false);
+    expect(hasUnsafeText(42)).toBe(false);
+    expect(hasUnsafeText(new Date("2026-08-01"))).toBe(false);
+  });
+
+  it("recurses through nested objects and arrays", () => {
+    expect(hasUnsafeText({ a: { b: ["ok", "\ud800"] } })).toBe(true);
+    expect(hasUnsafeText({ a: { b: ["ok", "fine"] }, c: [1, null, new Date(0)] })).toBe(false);
+    expect(hasUnsafeText([{ x: "ok" }, { y: { z: "bad\u0000" } }])).toBe(true);
   });
 });
 
