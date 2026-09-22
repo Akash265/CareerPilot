@@ -603,11 +603,14 @@ pnpm --filter @ai-career/job-ingestion start          services/job-ingestion/src
       │  │  fetchJson: 30 s timeout, 25 MB cap, redirects refused, class-only IngestError; slug via assertValidSlug
       │  ├─ upload: the stored raw_job_postings rows of that source
       │  └─ per record, one withUserContext transaction:
-      │     ├─ externalId longer than MAX_EXTERNAL_ID_CHARS (200)? → counted as failed and skipped BEFORE
-      │     │  anything is stored (the raw table's unique btree would throw and brick every run)
+      │     ├─ externalId longer than MAX_EXTERNAL_ID_CHARS (200) OR containing a NUL byte? → counted as
+      │     │  failed and skipped BEFORE anything is stored (either would throw when bound as a text
+      │     │  parameter anywhere past this point, including the last_seen_at bump just below -- D43)
       │     ├─ hashPayload + upsert raw_job_postings, inside a SAVEPOINT (tx.transaction): a NUL byte or a
-      │     │  pathologically deep payload fails just this record (counted as failed), never the whole
-      │     │  transaction -- a plain try/catch here does not suffice with postgres.js (D41)
+      │     │  pathologically deep PAYLOAD fails just this record (counted as failed, and an already-
+      │     │  tracked posting still gets last_seen_at bumped so it is not closed -- same protection as
+      │     │  the normalize-failure branch below), never the whole transaction -- a plain try/catch here
+      │     │  does not suffice with postgres.js (D41)
       │     ├─ normalizeRecord(ref, record)              normalize/normalizeRecord.ts (pure)
       │     │  └─ per-kind schema → escapedHtmlToText / htmlToText · companyKey/titleKey/locationKey/
       │     │     descriptionHash · extractSalary · extractMinExperience · extractSponsorship ·

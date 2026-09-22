@@ -123,11 +123,15 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
 
       candidates.push({ raw: text.slice(start, end).trim(), symbol, lo, hi, period: period ?? "year", start, end });
       if (candidates.length >= MAX_CANDIDATES) {
-        // Exactly hitting the cap is only "truncated" if a candidate genuinely existed beyond it:
-        // either this regex has another raw match right after the one we just took (`re.exec`
+        // Exactly hitting the cap should only be "truncated" if a candidate genuinely existed beyond
+        // it: either this regex has another raw match right after the one we just took (`re.exec`
         // resumes from its own lastIndex, so this checks exactly that), or a later, not-yet-scanned
-        // pattern matches anywhere in the text. A text with precisely MAX_CANDIDATES occurrences
-        // and nothing more must still be able to confidently parse.
+        // pattern matches anywhere in the text. This is a conservative check, not an exact one: a raw
+        // match is not re-run through the context/magnitude/overlap filters above, so it can
+        // occasionally flag `truncated` for a text with no genuine additional salary candidate --
+        // that only costs a false "unparsed" (fails safe, per D6/D34's "never guess"), never a false
+        // "parsed". A text with precisely MAX_CANDIDATES occurrences and truly nothing more must
+        // still be able to confidently parse.
         const moreInThisPattern = re.exec(text) !== null;
         const moreInLaterPatterns = PATTERNS.slice(patternIndex + 1).some((later) => {
           later.lastIndex = 0;
