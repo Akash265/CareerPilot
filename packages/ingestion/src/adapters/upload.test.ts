@@ -64,6 +64,11 @@ describe("parseUploadFile — rejections (messages are user-safe)", () => {
     rejects(buf(json), "jobs.json", /1 row is invalid \(first: rows 1\)/);
   });
 
+  it("rejects a row whose explicit id contains a NUL byte as an invalid row, before it ever becomes an externalId", () => {
+    const json = JSON.stringify([{ id: "a\u0000b", title: "Data Engineer", company: "Acme" }]);
+    rejects(buf(json), "jobs.json", /1 row is invalid \(first: rows 1\)/);
+  });
+
   it("rejects files over the row cap", () => {
     const lines = ["title,company", ...Array.from({ length: MAX_UPLOAD_ROWS + 1 }, (_, i) => `Job ${i},Co`)];
     rejects(buf(lines.join("\n")), "jobs.csv", /5,000/);

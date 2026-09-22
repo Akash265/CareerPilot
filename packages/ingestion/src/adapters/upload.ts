@@ -99,6 +99,13 @@ export function parseUploadFile(buffer: Buffer, filename: string): RawRecord[] {
 
   objects.forEach((raw, index) => {
     const { row, id } = toCanonical(raw);
+    // `id` is pulled out of the row separately (see toCanonical) so it never passes through
+    // UploadRowSchema's NUL-byte guard; it becomes `externalId` verbatim below and would otherwise
+    // reach the raw_job_postings.external_id text column unguarded.
+    if (id !== null && id.includes("\u0000")) {
+      invalid.push(index + 1);
+      return;
+    }
     const parsed = UploadRowSchema.safeParse(row);
     if (!parsed.success) {
       invalid.push(index + 1);
