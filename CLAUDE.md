@@ -537,6 +537,8 @@ Project specification document
 
 Your first responsibility is therefore **understanding and designing the system**, not immediately generating large amounts of code.
 
+This section describes the state at project inception only and is not updated as work progresses. For current status, check DECISIONS.md and FLOW.md before assuming the project is still greenfield.
+
 
 
 
@@ -560,11 +562,12 @@ After implementing changes, provide a concise summary of what changed and why.
 Then ask the user to explain back, in their own words, the core logic and flow of the modified code.
 
 Do not consider the task complete until the user demonstrates understanding. If they cannot, offer further explanation and re‑check.
- is the above claude.md file good enough for me to start the project
+
+This step may be explicitly waived by the user for a given change (e.g. "it's done, push the code"). A waiver applies only to the change in front of you, not to future changes.
 
 ---
 
-# 19. First Task
+# 22. First Task
 
 When Claude Code is first started in this repository, do the following:
 
