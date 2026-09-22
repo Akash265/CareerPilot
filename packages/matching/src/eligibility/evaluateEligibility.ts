@@ -29,7 +29,7 @@ const ELIGIBLE: EligibilityResult = { eligible: true, reason: null };
  */
 export function evaluateEligibility(input: EligibilityInput): EligibilityResult {
   if (input.previouslyDismissed) {
-    return { eligible: false, reason: "You dismissed this job." };
+    return { eligible: false, reason: `You dismissed this job at ${input.companyName}.` };
   }
 
   const nameLower = input.companyName.toLowerCase();
