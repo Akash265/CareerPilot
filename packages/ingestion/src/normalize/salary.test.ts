@@ -151,21 +151,39 @@ describe("extractSalary — adversarial input (posting text is untrusted)", () =
 
   // Dense salary-like amounts each near a salary word: every one becomes a candidate, so the
   // overlap check was quadratic in candidate count until the candidate cap bounded it. Every
-  // candidate is the same figure, so they all agree and the answer is that one amount.
+  // *seen* candidate is the same figure, but the cap means candidates past it were never looked
+  // at, so this must stay unparsed (never guess) rather than confidently agree -- see the
+  // candidate-cap-forces-unparsed tests below.
   const dense: Array<[string, string]> = [
     ["~200k chars of 'pay $10k,'", "pay $10k,".repeat(22_000)],
     ["~1 MB of 'pay $10k,'", "pay $10k,".repeat(110_000)],
   ];
 
-  it.each(dense)("stays bounded on dense candidates: %s", (_label, text) => {
+  it.each(dense)("stays bounded on dense candidates, and does not confidently parse once truncated: %s", (_label, text) => {
     const started = performance.now();
     const result = extractSalary(text);
     expect(performance.now() - started).toBeLessThan(1000);
-    expect(result).toMatchObject({ min: 10000, max: 10000, currency: "USD", period: "year", isParsed: true });
+    expect(result).toMatchObject({ min: null, max: null, currency: null, period: null, isParsed: false });
+    expect(result.raw).toContain("$10k");
   });
 
-  it("still parses when the same range is repeated past the candidate cap", () => {
+  it("no longer confidently parses when the same range is repeated past the candidate cap (never guess past what was actually scanned)", () => {
     const r = extractSalary("The salary is $100,000 - $120,000 per year. ".repeat(60));
-    expect(r).toMatchObject({ min: 100000, max: 120000, currency: "USD", period: "year", isParsed: true });
+    expect(r).toMatchObject({ min: null, max: null, currency: null, period: null, isParsed: false });
+    expect(r.raw).toContain("$100,000");
+  });
+
+  it("the candidate cap forces isParsed:false even when every candidate seen agrees, once a later disagreeing mention would otherwise be invisible", () => {
+    const text = "Salary: $150,000 - $200,000 per year.\n".repeat(51) + "Compensation: €80,000 per year.";
+    const r = extractSalary(text);
+    expect(r.isParsed).toBe(false);
+    expect(r.raw).toContain("$150,000");
+  });
+
+  it("a small number of agreeing mentions (below the cap) followed by a disagreeing one is still unparsed, without relying on the cap alone", () => {
+    const text = "Salary: $150,000 - $200,000 per year.\n".repeat(2) + "Compensation: €80,000 per year.";
+    const r = extractSalary(text);
+    expect(r.isParsed).toBe(false);
+    expect(r.raw).toContain("$150,000");
   });
 });

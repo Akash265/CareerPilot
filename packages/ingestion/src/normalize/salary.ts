@@ -80,6 +80,10 @@ interface Candidate {
 export function extractSalary(text: string, ctx: { countryCode?: string | null } = {}): SalaryResult {
   text = text.slice(0, MAX_TEXT_CHARS);
   const candidates: Candidate[] = [];
+  // Set once the MAX_CANDIDATES cap is hit: a later, disagreeing candidate could then exist past
+  // where scanning stopped without ever being seen, so "every candidate seen agrees" can no
+  // longer support a confident isParsed:true (D6/D34 "never guess").
+  let truncated = false;
 
   scan: for (const re of [PREFIX, SUFFIX]) {
     re.lastIndex = 0;
@@ -116,7 +120,10 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
       if (hi * ANNUALIZE[period ?? "year"] < 1000) continue;
 
       candidates.push({ raw: text.slice(start, end).trim(), symbol, lo, hi, period: period ?? "year", start, end });
-      if (candidates.length >= MAX_CANDIDATES) break scan;
+      if (candidates.length >= MAX_CANDIDATES) {
+        truncated = true;
+        break scan;
+      }
     }
   }
 
@@ -129,7 +136,7 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
     (c) => currencyOf(c.symbol) === currency && c.lo === head.lo && c.hi === head.hi && c.period === head.period
   );
   const ambiguousDollar = head.symbol === "$" && AMBIGUOUS_DOLLAR_COUNTRIES.has(ctx.countryCode ?? "");
-  if (!allAgree || ambiguousDollar) return { ...NONE, raw: head.raw };
+  if (!allAgree || ambiguousDollar || truncated) return { ...NONE, raw: head.raw };
 
   const factor = ANNUALIZE[head.period];
   return { raw: head.raw, min: head.lo * factor, max: head.hi * factor, currency, period: head.period, isParsed: true };

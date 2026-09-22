@@ -59,6 +59,7 @@ export async function persistPosting(
       .select({ jobId: jobPostings.jobId })
       .from(jobPostings)
       .where(eq(jobPostings.fingerprint, fingerprint))
+      .orderBy(jobPostings.firstSeenAt, jobPostings.id)
       .limit(1);
     jobId = match?.jobId;
   }

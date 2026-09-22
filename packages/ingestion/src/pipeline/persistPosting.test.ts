@@ -3,6 +3,7 @@ import { withUserContext } from "@ai-career/db";
 import { persistPosting } from "./persistPosting";
 import { insertSource, openTestDb, wipeUser, type TestDb } from "../testing/db";
 import { makeNormalized } from "../testing/factories";
+import { computeFingerprint } from "../normalize/keys";
 import type { NormalizedJob, SourceKind } from "../types";
 
 const USER = "00000000-0000-0000-0000-0000000000a1";
@@ -86,6 +87,33 @@ describe("persistPosting", () => {
     expect(jobs[0].employment_type).toBe("Full-time"); // filled from the upload posting
     const [ghPosting] = await t.adminSql`SELECT id FROM job_postings WHERE external_id = 'g1'`;
     expect(jobs[0].field_provenance.identity).toBe(ghPosting.id);
+  });
+
+  it("tier 2 is deterministic: when several postings on different jobs share a fingerprint (D36 content drift), the one with the earliest firstSeenAt always wins, across repeated runs", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    const n = makeNormalized({ externalId: "shared-a", title: "Data Engineer", workMode: "remote" });
+    const fingerprint = computeFingerprint(n);
+
+    // Job B naturally holds `fingerprint` from a fresh insert (so it sits at its original physical
+    // position) but with the LATER firstSeenAt. Job A is a distinct job with the EARLIER firstSeenAt;
+    // its posting's fingerprint is then forced to the same value via UPDATE (simulating D36's accepted
+    // content-drift limitation), which -- because the indexed column changed -- gives job A's posting
+    // a new physical tuple placed after job B's in table order. Without an explicit ORDER BY, an
+    // unordered scan therefore tends to return job B first: the wrong one per the "earliest
+    // firstSeenAt wins" rule this fix establishes.
+    const jobB = await persist(source, "greenhouse", n, "hB", T1);
+    const jobA = await persist(source, "greenhouse", makeNormalized({ externalId: "shared-a2", title: "Product Designer" }), "hA", T0);
+    expect(jobA.jobId).not.toBe(jobB.jobId);
+
+    const [postingA] = await t.adminSql`SELECT id FROM job_postings WHERE external_id = 'shared-a2'`;
+    await t.adminSql`UPDATE job_postings SET fingerprint = ${fingerprint} WHERE id = ${postingA.id}`;
+
+    // Two independent new postings match this now-ambiguous fingerprint; both must link to job A
+    // (the earlier-firstSeenAt match), deterministically, not whichever row Postgres happens to scan first.
+    const res1 = await persist(source, "greenhouse", { ...n, externalId: "new-1" }, "hNew1", T1);
+    const res2 = await persist(source, "greenhouse", { ...n, externalId: "new-2" }, "hNew2", T1);
+    expect(res1.jobId).toBe(jobA.jobId);
+    expect(res2.jobId).toBe(jobA.jobId);
   });
 
   it("tier 3: a same-place, same-title job with different content is flagged as a duplicate candidate, never merged", async () => {
