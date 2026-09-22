@@ -3901,7 +3901,7 @@ vi.mock("@ai-career/config", () => ({
 vi.mock("@ai-career/ai", () => ({ embedTexts: vi.fn() }));
 ```
 
-Add `import { vi } from "vitest";` alongside the existing `describe, it, expect, ...` import, and add `import { embedTexts } from "@ai-career/ai";` after the mock block. In `beforeAll`, after the existing DELETEs, add `vi.mocked(embedTexts).mockReset().mockResolvedValue([[0.1, 0.2, 0.3]]);` — every existing test in this file already exercises a successful confirm, so giving Voyage a working default keeps them green without individually touching each one.
+Add `import { vi } from "vitest";` alongside the existing `describe, it, expect, ...` import, and add `import { embedTexts } from "@ai-career/ai";` after the mock block. `career_goal_constraints.embedding` is a strict `vector(1024)` column (Task 3) — Postgres rejects any other length outright, so the mock must return a real 1024-length array, not a short illustrative one (Task 4 hit and fixed this same trap in its own tests; this note prevents it recurring here). Add near the top of the file: `const FAKE_EMBEDDING = Array.from({ length: 1024 }, (_, i) => (i === 0 ? 0.1 : 0));`. In `beforeAll`, after the existing DELETEs, add `vi.mocked(embedTexts).mockReset().mockResolvedValue([FAKE_EMBEDDING]);` — every existing test in this file already exercises a successful confirm, so giving Voyage a working default keeps them green without individually touching each one.
 
 Add two new tests at the end of the `describe` block:
 ```typescript
