@@ -72,7 +72,7 @@ export function MatchDetailClient({ jobId }: { jobId: string }) {
           <h1 className="text-2xl font-semibold">{job.title}</h1>
           <p className="text-sm text-gray-600">{job.companyName} · {job.locationRaw ?? "Location unknown"} · {job.workMode}</p>
         </div>
-        {match.overallScore !== null && (
+        {match.eligible && match.overallScore !== null && (
           <span className="shrink-0 rounded bg-black px-3 py-1.5 text-lg font-semibold text-white">{match.overallScore}/100</span>
         )}
       </header>
@@ -95,7 +95,7 @@ export function MatchDetailClient({ jobId }: { jobId: string }) {
         </section>
       )}
 
-      {match.explanation && (
+      {match.eligible && match.explanation && (
         <section aria-labelledby="explanation-heading">
           <h2 id="explanation-heading" className="mb-2 font-medium">Why this match</h2>
           <p className="mb-3 text-sm">{match.explanation.summary}</p>

@@ -38,4 +38,20 @@ describe("MatchDetailClient", () => {
     render(<MatchDetailClient jobId="j1" />);
     expect(await screen.findByText(/not found/i)).toBeInTheDocument();
   });
+
+  it("never shows a carried-forward score or explanation once a match becomes ineligible", async () => {
+    // upsertMatchRow deliberately carries explanation/overallScore-shaped fields forward from the previous
+    // row on recompute in some paths; the UI must still gate their *display* on eligible, not just presence.
+    mockFetch({
+      job,
+      match: { ...match, eligible: false, ineligibleReason: "You dismissed this job." },
+    });
+    render(<MatchDetailClient jobId="j1" />);
+    expect(await screen.findByText("You dismissed this job.")).toBeInTheDocument();
+    expect(screen.queryByText("82/100")).not.toBeInTheDocument();
+    expect(screen.queryByText("Strong SQL alignment")).not.toBeInTheDocument();
+    expect(screen.queryByText("Slightly under target salary")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tableau requested, not found")).not.toBeInTheDocument();
+    expect(screen.queryByText("A strong overall match.")).not.toBeInTheDocument();
+  });
 });

@@ -44,7 +44,7 @@ export function MatchRow({
         </ul>
       )}
 
-      {match.explanation?.summary && <p className="text-sm">{match.explanation.summary}</p>}
+      {match.eligible && match.explanation?.summary && <p className="text-sm">{match.explanation.summary}</p>}
 
       {match.eligible && (
         <div className="flex gap-2">

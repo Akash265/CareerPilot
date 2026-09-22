@@ -128,4 +128,23 @@ describe("MatchesClient", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Show excluded jobs/ }));
     expect(await screen.findByText("You dismissed this job.")).toBeInTheDocument();
   });
+
+  it("never shows a carried-forward explanation for an ineligible match", async () => {
+    // upsertMatchRow carries explanation forward from the previous row on recompute regardless of the new
+    // eligibility outcome (overallScore is not carried forward — it's always explicitly nulled on an
+    // ineligible write), so a row can legitimately have eligible: false with a stale non-null explanation.
+    const ineligibleWithStaleExplanation = matchItem({
+      eligible: false, ineligibleReason: "You dismissed this job.", overallScore: null, factors: null,
+    });
+    mockFetch({
+      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+      "GET /api/matches?eligible=false&page=1": () => ({ body: { matches: [ineligibleWithStaleExplanation], page: 1, pageSize: 25, total: 1 } }),
+      "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
+    });
+    render(<MatchesClient />);
+    await screen.findByText(/No matches yet/);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Show excluded jobs/ }));
+    expect(await screen.findByText("You dismissed this job.")).toBeInTheDocument();
+    expect(screen.queryByText("A strong overall match.")).not.toBeInTheDocument();
+  });
 });
