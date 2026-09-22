@@ -57,14 +57,14 @@ export const LeverPostingSchema = z
 
 /** The canonical row the upload parser produces from any CSV/JSON header spelling. */
 export const UploadRowSchema = z.object({
-  title: z.string().trim().min(1).max(500),
-  company: z.string().trim().min(1).max(500),
-  location: z.string().trim().max(500).nullable().optional(),
+  title: z.string().trim().min(1).max(500).regex(/^[^\u0000]*$/, "Title may not contain null characters"),
+  company: z.string().trim().min(1).max(500).regex(/^[^\u0000]*$/, "Company may not contain null characters"),
+  location: z.string().trim().max(500).regex(/^[^\u0000]*$/, "Location may not contain null characters").nullable().optional(),
   // No cap: the 10 MB file cap bounds it, and it is never indexed.
-  description: z.string().nullable().optional(),
-  url: z.string().trim().max(2000).nullable().optional(),
-  postedAt: z.string().trim().max(100).nullable().optional(),
-  employmentType: z.string().trim().max(100).nullable().optional(),
-  salary: z.string().trim().max(200).nullable().optional(),
+  description: z.string().regex(/^[^\u0000]*$/, "Description may not contain null characters").nullable().optional(),
+  url: z.string().trim().max(2000).regex(/^[^\u0000]*$/, "URL may not contain null characters").nullable().optional(),
+  postedAt: z.string().trim().max(100).regex(/^[^\u0000]*$/, "Posted date may not contain null characters").nullable().optional(),
+  employmentType: z.string().trim().max(100).regex(/^[^\u0000]*$/, "Employment type may not contain null characters").nullable().optional(),
+  salary: z.string().trim().max(200).regex(/^[^\u0000]*$/, "Salary may not contain null characters").nullable().optional(),
 });
 export type UploadRow = z.infer<typeof UploadRowSchema>;

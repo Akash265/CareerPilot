@@ -18,7 +18,10 @@ export async function storeUpload(
     .insert(jobSources)
     .values({
       kind: "upload",
-      label: input.filename.slice(0, 120),
+      // The filename is attacker-controlled multipart input; strip NUL bytes before it reaches
+      // this text column (Postgres rejects them outright), same as every other operator-entered
+      // string that lands here.
+      label: input.filename.replace(/\u0000/g, "").slice(0, 120),
       config: {},
       enabled: true,
       consentConfirmedAt: input.now,

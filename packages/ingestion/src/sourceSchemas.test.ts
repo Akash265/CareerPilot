@@ -64,4 +64,13 @@ describe("UploadRowSchema", () => {
     const row = { title: "Data Engineer", company: "Acme", description: "d".repeat(1_000_000) };
     expect(UploadRowSchema.safeParse(row).success).toBe(true);
   });
+
+  it.each(["title", "company", "location", "description", "url", "postedAt", "employmentType", "salary"])(
+    "rejects a NUL byte in %s, while a normal value still passes",
+    (field) => {
+      const base = { title: "Data Engineer", company: "Acme" };
+      expect(UploadRowSchema.safeParse({ ...base, [field]: `bad\u0000value` }).success).toBe(false);
+      expect(UploadRowSchema.safeParse({ ...base, [field]: "a normal value" }).success).toBe(true);
+    }
+  );
 });

@@ -15,6 +15,10 @@ describe("CreateJobSourceSchema", () => {
       expect(CreateJobSourceSchema.safeParse({ kind: "lever", slug }).success, slug).toBe(false);
     }
   });
+
+  it("rejects a company name containing a NUL byte", () => {
+    expect(CreateJobSourceSchema.safeParse({ kind: "lever", slug: "acme", companyName: "Ac\u0000me" }).success).toBe(false);
+  });
 });
 
 describe("UpdateJobSourceSchema", () => {

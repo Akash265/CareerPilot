@@ -7,7 +7,13 @@ export const CreateJobSourceSchema = z.object({
     .string()
     .trim()
     .regex(SLUG_RE, "Board token may contain only letters, digits, hyphens and underscores (max 64 characters)"),
-  companyName: z.string().trim().min(1).max(120).optional(),
+  companyName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .regex(/^[^\u0000]*$/, "Company name may not contain null characters")
+    .optional(),
 });
 
 export const UpdateJobSourceSchema = z.object({
