@@ -13,3 +13,4 @@ export * from "./scoring/computeOverallScore";
 export * from "./embeddings/vectorLiteral";
 export * from "./embeddings/ensureGoalEmbedding";
 export * from "./embeddings/ensureJobEmbeddings";
+export * from "./retrieval/fetchCandidateJobs";
