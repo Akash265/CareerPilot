@@ -19,6 +19,14 @@ describe("CreateJobSourceSchema", () => {
   it("rejects a company name containing a NUL byte", () => {
     expect(CreateJobSourceSchema.safeParse({ kind: "lever", slug: "acme", companyName: "Ac\u0000me" }).success).toBe(false);
   });
+
+  // companyName is written into job_sources.config (jsonb), which rejects an unpaired surrogate outright:
+  // catch it here as a 400 instead of an unhandled 500 from the insert. A real emoji must still pass.
+  it("rejects a company name containing an unpaired surrogate, but accepts a real emoji", () => {
+    expect(CreateJobSourceSchema.safeParse({ kind: "lever", slug: "acme", companyName: "Ac\ud800me" }).success).toBe(false);
+    expect(CreateJobSourceSchema.safeParse({ kind: "lever", slug: "acme", companyName: "Ac\udc00me" }).success).toBe(false);
+    expect(CreateJobSourceSchema.safeParse({ kind: "lever", slug: "acme", companyName: "Acme 😀" }).success).toBe(true);
+  });
 });
 
 describe("UpdateJobSourceSchema", () => {

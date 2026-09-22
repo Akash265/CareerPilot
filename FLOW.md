@@ -616,6 +616,11 @@ pnpm --filter @ai-career/job-ingestion start          services/job-ingestion/src
       │     │     descriptionHash · extractSalary · extractMinExperience · extractSponsorship ·
       │     │     detectWorkMode   (throws NormalizeError → counted as failed; an already-tracked
       │     │     posting still gets last_seen_at bumped so it is not closed)
+      │     │     assemble() ends by running hasUnsafeText (normalize/text.ts) over the FULLY ASSEMBLED
+      │     │     record and throwing NormalizeError if any derived string holds a NUL byte or an
+      │     │     unpaired surrogate -- the jsonb `normalized` column rejects both, and the normalizer
+      │     │     itself can mint one by decoding an entity or slicing an emoji in half (D44). It reuses
+      │     │     the normalize-failure branch above; no new branch was added to runIngestion.ts
       │     └─ persistPosting                            pipeline/persistPosting.ts
       │        ├─ tier 1: (source, external id) exists? unchanged content_hash → touch last_seen_at
       │        │          (and recompute the job if the posting had been closed); else update

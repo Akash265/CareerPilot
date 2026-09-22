@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SLUG_RE } from "@ai-career/ingestion";
+import { hasUnsafeText, SLUG_RE } from "@ai-career/ingestion";
 
 export const CreateJobSourceSchema = z.object({
   kind: z.enum(["greenhouse", "lever"]),
@@ -13,6 +13,9 @@ export const CreateJobSourceSchema = z.object({
     .min(1)
     .max(120)
     .regex(/^[^\u0000]*$/, "Company name may not contain null characters")
+    // It is written into job_sources.config (jsonb), which rejects an unpaired surrogate outright:
+    // reject it here as a 400 rather than letting the insert fail as an unhandled 500.
+    .refine((s) => !hasUnsafeText(s), "Company name may not contain invalid Unicode characters")
     .optional(),
 });
 
