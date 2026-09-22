@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parse as parseCsv } from "csv-parse/sync";
+import { hasUnsafeText } from "../normalize/text";
 import { UploadRowSchema, type UploadRow } from "../sourceSchemas";
 import type { RawRecord } from "../types";
 
@@ -100,9 +101,10 @@ export function parseUploadFile(buffer: Buffer, filename: string): RawRecord[] {
   objects.forEach((raw, index) => {
     const { row, id } = toCanonical(raw);
     // `id` is pulled out of the row separately (see toCanonical) so it never passes through
-    // UploadRowSchema's NUL-byte guard; it becomes `externalId` verbatim below and would otherwise
-    // reach the raw_job_postings.external_id text column unguarded.
-    if (id !== null && id.includes("\u0000")) {
+    // UploadRowSchema's guards; it becomes `externalId` verbatim below and would otherwise reach the
+    // raw_job_postings.external_id text column unguarded. A NUL byte makes it unstorable outright; an
+    // unpaired surrogate is legal JSON, survives the parser, and then breaks the jsonb write.
+    if (id !== null && hasUnsafeText(id)) {
       invalid.push(index + 1);
       return;
     }

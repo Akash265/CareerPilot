@@ -69,6 +69,17 @@ describe("parseUploadFile — rejections (messages are user-safe)", () => {
     rejects(buf(json), "jobs.json", /1 row is invalid \(first: rows 1\)/);
   });
 
+  it("rejects a row whose title or explicit id contains an unpaired surrogate, before it ever reaches storeUpload", () => {
+    // Legal JSON text, so it parses cleanly -- and would then abort storeUpload's whole 500-row chunk.
+    rejects(buf(JSON.stringify([{ title: "Data\ud800Engineer", company: "Acme" }])), "jobs.json", /1 row is invalid \(first: rows 1\)/);
+    rejects(buf(JSON.stringify([{ id: "a\ud800b", title: "Data Engineer", company: "Acme" }])), "jobs.json", /1 row is invalid \(first: rows 1\)/);
+  });
+
+  it("keeps a row whose id and title contain a real emoji (a valid surrogate pair)", () => {
+    const json = JSON.stringify([{ id: "id-😀", title: "Data Engineer 😀", company: "Acme" }]);
+    expect(parseUploadFile(buf(json), "jobs.json")[0]).toMatchObject({ externalId: "id-😀" });
+  });
+
   it("rejects files over the row cap", () => {
     const lines = ["title,company", ...Array.from({ length: MAX_UPLOAD_ROWS + 1 }, (_, i) => `Job ${i},Co`)];
     rejects(buf(lines.join("\n")), "jobs.csv", /5,000/);

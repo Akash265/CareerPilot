@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasUnsafeText } from "./normalize/text";
 
 // Shapes verified against live boards on 2026-09-21 (see plan "Refinements").
 // Schemas are deliberately lenient (`passthrough`, optional fields): they pin
@@ -55,16 +56,32 @@ export const LeverPostingSchema = z
   })
   .passthrough();
 
-/** The canonical row the upload parser produces from any CSV/JSON header spelling. */
+/**
+ * The canonical row the upload parser produces from any CSV/JSON header spelling.
+ *
+ * Every field also rejects an unpaired UTF-16 surrogate, which is legal JSON text (so it survives the
+ * upload parser) but which the jsonb payload column rejects. storeUpload inserts in 500-row chunks with
+ * no savepoint, so one such row aborts a whole chunk and escapes as a raw PostgresError -- whose .detail
+ * carries the offending row's content into the server log (CLAUDE.md §9). It is rejected here instead,
+ * as an ordinary invalid row, before it reaches the database.
+ */
 export const UploadRowSchema = z.object({
-  title: z.string().trim().min(1).max(500).regex(/^[^\u0000]*$/, "Title may not contain null characters"),
-  company: z.string().trim().min(1).max(500).regex(/^[^\u0000]*$/, "Company may not contain null characters"),
-  location: z.string().trim().max(500).regex(/^[^\u0000]*$/, "Location may not contain null characters").nullable().optional(),
+  title: z.string().trim().min(1).max(500).regex(/^[^\u0000]*$/, "Title may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "Title may not contain invalid Unicode characters"),
+  company: z.string().trim().min(1).max(500).regex(/^[^\u0000]*$/, "Company may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "Company may not contain invalid Unicode characters"),
+  location: z.string().trim().max(500).regex(/^[^\u0000]*$/, "Location may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "Location may not contain invalid Unicode characters").nullable().optional(),
   // No cap: the 10 MB file cap bounds it, and it is never indexed.
-  description: z.string().regex(/^[^\u0000]*$/, "Description may not contain null characters").nullable().optional(),
-  url: z.string().trim().max(2000).regex(/^[^\u0000]*$/, "URL may not contain null characters").nullable().optional(),
-  postedAt: z.string().trim().max(100).regex(/^[^\u0000]*$/, "Posted date may not contain null characters").nullable().optional(),
-  employmentType: z.string().trim().max(100).regex(/^[^\u0000]*$/, "Employment type may not contain null characters").nullable().optional(),
-  salary: z.string().trim().max(200).regex(/^[^\u0000]*$/, "Salary may not contain null characters").nullable().optional(),
+  description: z.string().regex(/^[^\u0000]*$/, "Description may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "Description may not contain invalid Unicode characters").nullable().optional(),
+  url: z.string().trim().max(2000).regex(/^[^\u0000]*$/, "URL may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "URL may not contain invalid Unicode characters").nullable().optional(),
+  postedAt: z.string().trim().max(100).regex(/^[^\u0000]*$/, "Posted date may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "Posted date may not contain invalid Unicode characters").nullable().optional(),
+  employmentType: z.string().trim().max(100).regex(/^[^\u0000]*$/, "Employment type may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "Employment type may not contain invalid Unicode characters").nullable().optional(),
+  salary: z.string().trim().max(200).regex(/^[^\u0000]*$/, "Salary may not contain null characters")
+    .refine((s) => !hasUnsafeText(s), "Salary may not contain invalid Unicode characters").nullable().optional(),
 });
 export type UploadRow = z.infer<typeof UploadRowSchema>;

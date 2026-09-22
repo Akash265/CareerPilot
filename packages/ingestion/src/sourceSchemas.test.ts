@@ -73,4 +73,17 @@ describe("UploadRowSchema", () => {
       expect(UploadRowSchema.safeParse({ ...base, [field]: "a normal value" }).success).toBe(true);
     }
   );
+
+  // A lone surrogate is legal JSON text, so it survives the parser -- but storeUpload's bulk insert has no
+  // savepoint, and the jsonb payload column rejects it, aborting a whole 500-row chunk with a raw
+  // PostgresError whose .detail carries the offending row's content. Reject it here, at the row level.
+  it.each(["title", "company", "location", "description", "url", "postedAt", "employmentType", "salary"])(
+    "rejects an unpaired UTF-16 surrogate in %s, while a real emoji (a valid pair) still passes",
+    (field) => {
+      const base = { title: "Data Engineer", company: "Acme" };
+      expect(UploadRowSchema.safeParse({ ...base, [field]: "bad\ud800value" }).success).toBe(false);
+      expect(UploadRowSchema.safeParse({ ...base, [field]: "bad\udc00value" }).success).toBe(false);
+      expect(UploadRowSchema.safeParse({ ...base, [field]: "a 😀 normal value" }).success).toBe(true);
+    }
+  );
 });
