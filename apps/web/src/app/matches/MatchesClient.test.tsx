@@ -79,28 +79,41 @@ describe("MatchesClient", () => {
     await waitFor(() => expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument());
   });
 
-  it("shows an alert when the polled run has failed", async () => {
-    let queued = false;
+  it("shows an alert for a run that already failed before this page loaded", async () => {
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
-      "GET /api/matches/runs/latest": () =>
-        queued
-          ? {
-              body: {
-                run: { status: "failed", errorClass: "no_active_goal", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 },
-              },
-            }
-          : { body: { run: null } },
-      "POST /api/matches/run": () => {
-        queued = true;
-        return { status: 202, body: { status: "queued" } };
-      },
+      "GET /api/matches/runs/latest": () => ({
+        body: { run: { status: "failed", errorClass: "no_active_goal", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 } },
+      }),
     });
     render(<MatchesClient />);
-    const button = await screen.findByRole("button", { name: "Find Matches" });
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    fireEvent.click(button);
     expect(await screen.findByRole("alert")).toHaveTextContent(/last matching run failed \(no_active_goal\)/i);
+  });
+
+  it("does not resurface a stale failed run's alert immediately after a successful re-queue", async () => {
+    // POST /api/matches/run only pushes a queue job — it does not create the matching_runs row. That row is
+    // only created later by the worker once it dequeues the job. So immediately after a successful re-queue,
+    // GET /api/matches/runs/latest can still legitimately report the *previous* (failed) run for a while, as
+    // simulated here by always returning "failed" regardless of whether a new run was queued. The regression
+    // this guards against: MatchesClient must not re-check run status synchronously right after enqueuing —
+    // doing so would read this still-stale "failed" row and resurface the old failure as if the retry had
+    // already failed too, even though the new run has barely started.
+    mockFetch({
+      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+      "GET /api/matches/runs/latest": () => ({
+        body: { run: { status: "failed", errorClass: "no_active_goal", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 } },
+      }),
+      "POST /api/matches/run": () => ({ status: 202, body: { status: "queued" } }),
+    });
+    render(<MatchesClient />);
+    // The prior failure is surfaced on mount, same as the test above.
+    await screen.findByRole("alert");
+
+    fireEvent.click(screen.getByRole("button", { name: "Find Matches" }));
+    // findMatches() clears the banner immediately and only the poll loop (not started synchronously by this
+    // click) re-checks run status, so the stale "failed" row must not reappear right after the notice shows.
+    expect(await screen.findByRole("status")).toHaveTextContent(/Queued a matching run/);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("toggles to show ineligible matches with their reason", async () => {

@@ -49,7 +49,12 @@ export function MatchesClient() {
   // mount (to surface a run that already failed, e.g. before a reload) and on every poll tick after Find
   // Matches (to catch a run that fails after being enqueued, e.g. an LLM/embedding outage). A "failed" run
   // is shown as an alert instead of silently leaving the list unchanged, and stops further polling since
-  // waiting longer will not resolve it; a "completed" run clears any stale failure banner from a prior run.
+  // waiting longer will not resolve it. "running" and "completed" both clear any stale failure banner from
+  // a prior run — "running" specifically because POST /api/matches/run only pushes a queue job; it does not
+  // create the matching_runs row, which the worker creates once it actually dequeues the job. So this
+  // endpoint can briefly still report the *previous* run (possibly "failed") right after a successful
+  // re-queue, until the worker catches up — deliberately not called immediately after enqueuing (only from
+  // the poll loop below) to avoid resurfacing that stale failure before the new row exists.
   const checkRunStatus = useCallback(
     () =>
       fetch("/api/matches/runs/latest")
@@ -60,7 +65,7 @@ export function MatchesClient() {
           if (run.status === "failed") {
             setRunFailure(`The last matching run failed${run.errorClass ? ` (${run.errorClass})` : ""}. Try Find Matches again, or check the worker logs.`);
             setPollUntil(0);
-          } else if (run.status === "completed") {
+          } else {
             setRunFailure(null);
           }
         })
@@ -98,7 +103,6 @@ export function MatchesClient() {
       }
       setNotice("Queued a matching run. Make sure the worker is running (pnpm --filter @ai-career/matching-worker start).");
       setPollUntil(Date.now() + POLL_DURATION_MS);
-      void checkRunStatus();
     } catch {
       setError("Could not reach the server — check your connection and try again.");
     }
