@@ -10,3 +10,6 @@ export * from "./scoring/scoreIndustry";
 export * from "./scoring/scoreFreshness";
 export * from "./scoring/scoreSemantic";
 export * from "./scoring/computeOverallScore";
+export * from "./embeddings/vectorLiteral";
+export * from "./embeddings/ensureGoalEmbedding";
+export * from "./embeddings/ensureJobEmbeddings";
