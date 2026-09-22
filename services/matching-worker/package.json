@@ -8,7 +8,9 @@
     "dev": "dotenv -e ../../.env -- tsx watch src/main.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src e2e",
+    "e2e:fake-anthropic": "tsx e2e/fakeAnthropic.ts",
+    "e2e:smoke": "tsx e2e/smoke.ts"
   },
   "dependencies": {
     "@ai-career/ai": "workspace:*",
