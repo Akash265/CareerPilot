@@ -1,7 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { schema, type DbClient } from "@ai-career/db";
-import { mergePostings, type MergedJob } from "../identity/merge";
+import { mergePostings, type MergedJob, type PostingForMerge } from "../identity/merge";
 import { deserializeNormalized } from "../identity/serialize";
+import type { NormalizedJob } from "../types";
 
 const { jobs, jobPostings, jobSources } = schema;
 
@@ -48,16 +49,20 @@ export async function recomputeJob(tx: DbClient, jobId: string, now: Date): Prom
     .where(eq(jobPostings.jobId, jobId));
   if (rows.length === 0) return;
 
-  const merged = mergePostings(
-    rows.map(({ posting, kind }) => ({
-      id: posting.id,
-      sourceKind: kind,
-      status: posting.status,
-      firstSeenAt: posting.firstSeenAt,
-      lastSeenAt: posting.lastSeenAt,
-      normalized: deserializeNormalized(posting.normalized),
-    }))
-  );
+  const postings: PostingForMerge[] = [];
+  for (const { posting, kind } of rows) {
+    let normalized: NormalizedJob;
+    try {
+      normalized = deserializeNormalized(posting.normalized);
+    } catch {
+      // An incompatible or corrupted stored snapshot (e.g. from a NormalizedJob shape change)
+      // must never crash or silently corrupt the whole job: skip just this posting.
+      continue;
+    }
+    postings.push({ id: posting.id, sourceKind: kind, status: posting.status, firstSeenAt: posting.firstSeenAt, lastSeenAt: posting.lastSeenAt, normalized });
+  }
+  if (postings.length === 0) return; // every posting's snapshot is unreadable: leave the job as it is
+  const merged = mergePostings(postings);
 
   await tx
     .update(jobs)

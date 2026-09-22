@@ -34,4 +34,15 @@ describe("serializeNormalized / deserializeNormalized", () => {
       expect(message).toBe("invalid normalized snapshot");
     }
   });
+
+  it("throws the same fixed-message error when a stored snapshot is missing a required field", () => {
+    const snapshot = serializeNormalized(makeNormalized()) as Record<string, unknown>;
+    delete snapshot.companyKey;
+    expect(() => deserializeNormalized(snapshot)).toThrow("invalid normalized snapshot");
+  });
+
+  it("throws the same fixed-message error when a stored snapshot has an old/foreign enum value", () => {
+    const snapshot = { ...serializeNormalized(makeNormalized()), workMode: "banana" };
+    expect(() => deserializeNormalized(snapshot)).toThrow("invalid normalized snapshot");
+  });
 });
