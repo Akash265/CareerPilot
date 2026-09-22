@@ -85,4 +85,15 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...validSource, INGEST_INTERVAL_MINUTES: "1" })).toThrow(/INGEST_INTERVAL_MINUTES/);
     expect(() => loadEnv({ ...validSource, LEVER_API_BASE: "not-a-url" })).toThrow(/LEVER_API_BASE/);
   });
+
+  it("defaults the matching settings and lets them be overridden", () => {
+    const env = loadEnv(validSource);
+    expect(env.MATCHING_EXPLAIN_TOP_N).toBe(25);
+    expect(env.MATCHING_EXPERIENCE_GRACE_YEARS).toBe(1);
+    expect(env.MATCHING_FRESHNESS_HALF_LIFE_HOURS).toBe(168);
+    expect(env.MATCHING_EXPLANATION_TTL_DAYS).toBe(7);
+
+    const custom = loadEnv({ ...validSource, MATCHING_EXPLAIN_TOP_N: "10" });
+    expect(custom.MATCHING_EXPLAIN_TOP_N).toBe(10);
+  });
 });

@@ -18,4 +18,5 @@ export * from "./explanation/matchExplanationSchema";
 export * from "./explanation/generateMatchExplanation";
 export * from "./pipeline/upsertMatch";
 export * from "./explanation/explanationStaleness";
+export * from "./pipeline/runMatching";
 export * from "./queue";
