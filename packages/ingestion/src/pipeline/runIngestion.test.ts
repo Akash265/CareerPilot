@@ -148,6 +148,22 @@ describe("runIngestion — safety", () => {
     expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source} AND external_id = '2'`)[0].n).toBe(0);
   });
 
+  it("a record whose external id itself contains a NUL byte is counted and skipped without bricking the rest of the fetch, on every run", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    const badId: RawRecord = { externalId: "bad\u0000id", payload: { ...greenhouseJobFixture, id: 99, title: "Ops Manager" } };
+    const adapter = adapterFor(() => yielding([rec(1), badId, rec(3)]));
+
+    // The record AFTER the bad one must still be ingested: that's what proves the run didn't abort.
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 3, created: 2, failed: 1, errorClass: null });
+    expect(await statuses()).toEqual({ "Data Engineer": "open", "Security Analyst": "open" });
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source} AND external_id LIKE 'bad%'`)[0].n).toBe(0);
+    expect(await sourceRow(source)).toMatchObject({ last_run_status: "succeeded", last_error_class: null });
+
+    // Not bricked: the same input behaves the same on the next run.
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 3, unchanged: 2, failed: 1 });
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source} AND external_id LIKE 'bad%'`)[0].n).toBe(0);
+  });
+
   it("a NUL byte on a re-fetch of an already-tracked record keeps its posting open instead of letting a complete run close it", async () => {
     const source = await insertSource(t.adminSql, USER);
     // First, ingest record 2 cleanly: its posting exists and is open.

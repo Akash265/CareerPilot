@@ -113,7 +113,11 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
       await inUserContext(async (tx) => {
         // Checked before the raw upsert, not only inside normalizeRecord: an over-long id would make the
         // raw table's unique btree index throw, failing this run and every later run of the source.
-        if (record.externalId.length > MAX_EXTERNAL_ID_CHARS) {
+        // A NUL byte makes the id itself unstorable: Postgres rejects it in ANY text parameter,
+        // including the WHERE clause of the last_seen_at bump below (which runs in the outer
+        // transaction and would doom it -- D41). Like an over-long id, such an id can never have
+        // been previously stored, so it needs no bump.
+        if (record.externalId.length > MAX_EXTERNAL_ID_CHARS || record.externalId.includes("\u0000")) {
           counters.failed++;
           return;
         }
