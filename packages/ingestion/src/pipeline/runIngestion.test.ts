@@ -133,6 +133,21 @@ describe("runIngestion — safety", () => {
     expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source}`)[0].n).toBe(1);
   });
 
+  it("a record with a NUL byte in its payload is counted and skipped before anything is stored, on every run", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    const bad: RawRecord = { externalId: "2", payload: { ...greenhouseJobFixture, id: 2, title: "Data\u0000Engineer" } };
+    const adapter = adapterFor(() => yielding([rec(1), bad]));
+
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 2, created: 1, failed: 1, errorClass: null });
+    expect(await statuses()).toEqual({ "Data Engineer": "open" });
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source} AND external_id = '2'`)[0].n).toBe(0);
+    expect(await sourceRow(source)).toMatchObject({ last_run_status: "succeeded", last_error_class: null });
+
+    // Not bricked: the same input behaves the same on the next run.
+    expect(await run(source, adapter)).toMatchObject({ status: "succeeded", complete: true, fetched: 2, unchanged: 1, failed: 1 });
+    expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source} AND external_id = '2'`)[0].n).toBe(0);
+  });
+
   it("stores a record whose external id is exactly at the 200-character cap", async () => {
     const source = await insertSource(t.adminSql, USER);
     const atCap: RawRecord = { externalId: "y".repeat(200), payload: { ...greenhouseJobFixture, id: 2, title: TITLES[2] } };
@@ -302,6 +317,14 @@ describe("runIngestion — failures after or around the fetch never escape as ra
 });
 
 describe("runIngestion — uploads", () => {
+  it("strips a NUL byte from an attacker-controlled filename instead of throwing", async () => {
+    const records: RawRecord[] = [{ externalId: "u1", payload: { title: "Data Analyst", company: "Acme" } }];
+    const stored = await withUserContext(t.db, USER, (tx) =>
+      storeUpload(tx, { filename: "jobs\u0000.csv", records, now: new Date("2026-09-21T09:00:00Z") })
+    );
+    expect(await sourceRow(stored.sourceId)).toMatchObject({ kind: "upload", label: "jobs.csv" });
+  });
+
   it("processes a stored upload and never closes anything, even when a later run has fewer records", async () => {
     const uploadAdapterFor = createAdapterFor({ db: t.db, userId: USER, greenhouseBaseUrl: "http://unused.test", leverBaseUrl: "http://unused.test" });
     const records: RawRecord[] = [

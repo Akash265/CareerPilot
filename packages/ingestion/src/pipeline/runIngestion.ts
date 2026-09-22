@@ -118,14 +118,31 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
           return;
         }
         const at = now();
-        const contentHash = hashPayload(record.payload);
-        await tx
-          .insert(rawJobPostings)
-          .values({ sourceId, externalId: record.externalId, payload: record.payload, contentHash, fetchedAt: at })
-          .onConflictDoUpdate({
-            target: [rawJobPostings.sourceId, rawJobPostings.externalId],
-            set: { payload: record.payload, contentHash, fetchedAt: at },
-          });
+        let contentHash: string;
+        try {
+          contentHash = hashPayload(record.payload);
+          // Runs in its own savepoint (nested transaction): once a statement inside a Postgres
+          // transaction errors, Postgres aborts the WHOLE transaction until a ROLLBACK, and
+          // postgres.js re-throws that error out of `db.transaction()` even if our own code
+          // already caught it -- a plain try/catch around this insert can't stop it from also
+          // dooming every record processed after it in this run. A savepoint isolates the
+          // failure to just this record's raw-store attempt.
+          await tx.transaction((savepoint) =>
+            savepoint
+              .insert(rawJobPostings)
+              .values({ sourceId, externalId: record.externalId, payload: record.payload, contentHash, fetchedAt: at })
+              .onConflictDoUpdate({
+                target: [rawJobPostings.sourceId, rawJobPostings.externalId],
+                set: { payload: record.payload, contentHash, fetchedAt: at },
+              })
+          );
+        } catch {
+          // The payload could not be hashed (e.g. pathologically deep JSON) or stored (e.g. an embedded
+          // NUL byte, which Postgres text/jsonb columns reject outright): this record is unreadable, not
+          // this run. Never let one hostile or malformed record abort every record after it.
+          counters.failed++;
+          return;
+        }
 
         let normalized: NormalizedJob | null;
         try {
