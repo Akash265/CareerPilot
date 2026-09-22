@@ -16,3 +16,6 @@ export * from "./embeddings/ensureJobEmbeddings";
 export * from "./retrieval/fetchCandidateJobs";
 export * from "./explanation/matchExplanationSchema";
 export * from "./explanation/generateMatchExplanation";
+export * from "./pipeline/upsertMatch";
+export * from "./explanation/explanationStaleness";
+export * from "./queue";
