@@ -140,6 +140,14 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
           // The payload could not be hashed (e.g. pathologically deep JSON) or stored (e.g. an embedded
           // NUL byte, which Postgres text/jsonb columns reject outright): this record is unreadable, not
           // this run. Never let one hostile or malformed record abort every record after it.
+          // It WAS seen, though: keep an already-tracked posting alive so a transient corruption
+          // cannot make a complete run close it as "missing" (same protection as the normalize-failure
+          // branch below). This runs in the outer transaction, which is still usable after the
+          // savepoint above rolled back.
+          await tx
+            .update(jobPostings)
+            .set({ lastSeenAt: at })
+            .where(and(eq(jobPostings.sourceId, sourceId), eq(jobPostings.externalId, record.externalId)));
           counters.failed++;
           return;
         }

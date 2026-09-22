@@ -148,6 +148,20 @@ describe("runIngestion — safety", () => {
     expect((await t.adminSql`SELECT count(*)::int AS n FROM raw_job_postings WHERE source_id = ${source} AND external_id = '2'`)[0].n).toBe(0);
   });
 
+  it("a NUL byte on a re-fetch of an already-tracked record keeps its posting open instead of letting a complete run close it", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    // First, ingest record 2 cleanly: its posting exists and is open.
+    await ok(source, 1, 2);
+    expect(await statuses()).toEqual({ "Data Engineer": "open", "Product Designer": "open" });
+
+    // Re-fetch the SAME external id, but today its payload picks up a NUL byte.
+    const bad: RawRecord = { externalId: "2", payload: { ...greenhouseJobFixture, id: 2, title: "Product\u0000Designer" } };
+    const summary = await run(source, adapterFor(() => yielding([rec(1), bad])));
+    expect(summary).toMatchObject({ status: "succeeded", complete: true, fetched: 2, unchanged: 1, failed: 1, closed: 0 });
+    // The posting was seen (just unreadable this time), so it must not be closed as "missing".
+    expect(await statuses()).toEqual({ "Data Engineer": "open", "Product Designer": "open" });
+  });
+
   it("stores a record whose external id is exactly at the 200-character cap", async () => {
     const source = await insertSource(t.adminSql, USER);
     const atCap: RawRecord = { externalId: "y".repeat(200), payload: { ...greenhouseJobFixture, id: 2, title: TITLES[2] } };
