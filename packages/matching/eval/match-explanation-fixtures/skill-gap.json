@@ -1,0 +1,19 @@
+{
+  "input": {
+    "jobTitle": "Senior Data Analyst",
+    "companyName": "Acme Analytics",
+    "overallScore": 78,
+    "skillMatches": [
+      { "skill": "SQL", "found": true },
+      { "skill": "Python", "found": true },
+      { "skill": "Tableau", "found": false }
+    ],
+    "experience": { "requiredYears": 3, "candidateYears": 5 },
+    "workMode": { "job": "remote", "goal": "remote" },
+    "sponsorship": { "required": false, "job": "unknown" },
+    "salary": { "comparable": true, "withinRange": true },
+    "freshnessDays": 1
+  },
+  "expectedStrongMentions": ["SQL", "Python"],
+  "expectedGapMentions": ["Tableau"]
+}
