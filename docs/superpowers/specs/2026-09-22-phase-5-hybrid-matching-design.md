@@ -35,7 +35,7 @@ Related decisions: D2 (RLS), D6 (deterministic salary/location, LLM never estima
 | 6 | Manual "Find Matches" trigger only | Auto-recompute on goal confirm and/or on ingestion-run completion |
 | 7 | `career_goal_constraints.embedding`: one query-side embedding per confirmed goal | Per-job-search-session embedding computed on the fly at request time |
 
-Each becomes a DECISIONS.md entry (D45 onward) when implemented.
+Each becomes a DECISIONS.md entry (D46 onward) when implemented.
 
 ## 3. Data model
 
@@ -175,7 +175,7 @@ Route handlers follow the Phase 2–4 conventions: `readJsonBody`, 400 on malfor
 - Logs carry error classes and counts, never job content, profile content, or explanation text.
 
 **Process**
-- DECISIONS.md D45+, FLOW.md, `docs/architecture.md` §4/§10 updated to reflect what's actually built.
+- DECISIONS.md D46+, FLOW.md, `docs/architecture.md` §4/§10 updated to reflect what's actually built.
 - CLAUDE.md §21 explain-back step after implementation (no blanket waiver granted for this phase).
 - No commits without an explicit request (CLAUDE.md §15).
 
