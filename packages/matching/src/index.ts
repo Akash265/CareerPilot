@@ -1,2 +1,12 @@
 export * from "./types";
 export { evaluateEligibility, type EligibilityInput, type EligibilityResult } from "./eligibility/evaluateEligibility";
+export * from "./scoring/scoreSkills";
+export * from "./scoring/scoreExperience";
+export * from "./scoring/scoreLocation";
+export * from "./scoring/scoreSponsorship";
+export * from "./scoring/scoreRole";
+export * from "./scoring/scoreSalary";
+export * from "./scoring/scoreIndustry";
+export * from "./scoring/scoreFreshness";
+export * from "./scoring/scoreSemantic";
+export * from "./scoring/computeOverallScore";
