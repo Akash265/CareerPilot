@@ -180,6 +180,12 @@ describe("extractSalary — adversarial input (posting text is untrusted)", () =
     expect(r.raw).toContain("$150,000");
   });
 
+  it("does NOT treat hitting the cap at exactly the last candidate as truncated: exactly 50 agreeing mentions and nothing more still confidently parses", () => {
+    const text = "Salary: $150,000 - $200,000 per year.\n".repeat(50);
+    const r = extractSalary(text);
+    expect(r).toMatchObject({ min: 150000, max: 200000, currency: "USD", period: "year", isParsed: true });
+  });
+
   it("a small number of agreeing mentions (below the cap) followed by a disagreeing one is still unparsed, without relying on the cap alone", () => {
     const text = "Salary: $150,000 - $200,000 per year.\n".repeat(2) + "Compensation: €80,000 per year.";
     const r = extractSalary(text);

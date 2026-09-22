@@ -85,7 +85,9 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
   // longer support a confident isParsed:true (D6/D34 "never guess").
   let truncated = false;
 
-  scan: for (const re of [PREFIX, SUFFIX]) {
+  const PATTERNS = [PREFIX, SUFFIX];
+  scan: for (let patternIndex = 0; patternIndex < PATTERNS.length; patternIndex++) {
+    const re = PATTERNS[patternIndex];
     re.lastIndex = 0;
     const isPrefix = re === PREFIX;
     let m: RegExpExecArray | null;
@@ -121,7 +123,17 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
 
       candidates.push({ raw: text.slice(start, end).trim(), symbol, lo, hi, period: period ?? "year", start, end });
       if (candidates.length >= MAX_CANDIDATES) {
-        truncated = true;
+        // Exactly hitting the cap is only "truncated" if a candidate genuinely existed beyond it:
+        // either this regex has another raw match right after the one we just took (`re.exec`
+        // resumes from its own lastIndex, so this checks exactly that), or a later, not-yet-scanned
+        // pattern matches anywhere in the text. A text with precisely MAX_CANDIDATES occurrences
+        // and nothing more must still be able to confidently parse.
+        const moreInThisPattern = re.exec(text) !== null;
+        const moreInLaterPatterns = PATTERNS.slice(patternIndex + 1).some((later) => {
+          later.lastIndex = 0;
+          return later.test(text);
+        });
+        truncated = moreInThisPattern || moreInLaterPatterns;
         break scan;
       }
     }

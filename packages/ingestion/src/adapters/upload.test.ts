@@ -114,7 +114,7 @@ describe("parseUploadFile — field length limits", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(UploadParseError);
       expect((error as UploadParseError).message).toBe(
-        "2 rows are invalid (first: rows 2, 3): each needs a title and a company, within the length limits",
+        "2 rows are invalid (first: rows 2, 3): each needs a title and a company, within the length limits, and must not contain null characters",
       );
       expect((error as UploadParseError).message).not.toContain("tttt");
     }
@@ -254,7 +254,7 @@ describe("parseUploadFile — adversarial input", { timeout: HEAVY_INPUT_TIMEOUT
     expect(junk.records).toBeUndefined();
     expectUserSafeError(
       junk.error,
-      "1 row is invalid (first: rows 1): each needs a title and a company, within the length limits",
+      "1 row is invalid (first: rows 1): each needs a title and a company, within the length limits, and must not contain null characters",
       "Analyst",
     );
 
@@ -275,7 +275,7 @@ describe("parseUploadFile — adversarial input", { timeout: HEAVY_INPUT_TIMEOUT
     // which the parser turns into an empty row that fails the title/company check.
     expectUserSafeError(
       error,
-      "1 row is invalid (first: rows 1): each needs a title and a company, within the length limits",
+      "1 row is invalid (first: rows 1): each needs a title and a company, within the length limits, and must not contain null characters",
       "[[",
     );
   });
@@ -292,10 +292,12 @@ describe("parseUploadFile — adversarial input", { timeout: HEAVY_INPUT_TIMEOUT
     const b = buf(JSON.stringify(Array.from({ length: 100 }, (_, i) => (i % 2 ? i : null))));
     const { ms, error } = run(b, "jobs.json");
     expect(ms).toBeLessThan(BUDGET_MS);
+    // Leak marker is one of the actual payload values, not the literal word "null" -- the message
+    // now legitimately contains "null" as English prose ("must not contain null characters").
     expectUserSafeError(
       error,
-      "100 rows are invalid (first: rows 1, 2, 3): each needs a title and a company, within the length limits",
-      "null",
+      "100 rows are invalid (first: rows 1, 2, 3): each needs a title and a company, within the length limits, and must not contain null characters",
+      "13",
     );
   });
 

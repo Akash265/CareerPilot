@@ -126,7 +126,7 @@ export function parseUploadFile(buffer: Buffer, filename: string): RawRecord[] {
   if (invalid.length > 0) {
     const first = invalid.slice(0, 3).join(", ");
     throw new UploadParseError(
-      `${invalid.length} row${invalid.length === 1 ? " is" : "s are"} invalid (first: rows ${first}): each needs a title and a company, within the length limits`
+      `${invalid.length} row${invalid.length === 1 ? " is" : "s are"} invalid (first: rows ${first}): each needs a title and a company, within the length limits, and must not contain null characters`
     );
   }
   return records;
