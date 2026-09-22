@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
-  pgTable, pgEnum, uuid, text, integer, numeric, boolean, jsonb, timestamp,
+  pgTable, pgEnum, uuid, text, integer, numeric, boolean, jsonb, timestamp, vector,
 } from "drizzle-orm/pg-core";
 
 export const jobStatusEnum = pgEnum("job_status", ["open", "closed"]);
@@ -55,6 +55,15 @@ export const jobs = pgTable("jobs", {
   status: jobStatusEnum("status").notNull().default("open"),
   closedAt: timestamp("closed_at", { withTimezone: true }),
   fieldProvenance: jsonb("field_provenance").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+
+  // Phase 5: title + descriptionText embedding for hybrid semantic retrieval. Nullable until a
+  // matching run first generates it (packages/matching/src/embeddings/ensureJobEmbeddings.ts).
+  // Same 1024-dim convention as profile_facts.embedding.
+  embedding: vector("embedding", { dimensions: 1024 }),
+  // The descriptionHash this embedding was generated from -- a permanent, content-hash-keyed cache,
+  // same pattern as profile_facts (D-line52). Regenerated only when descriptionHash no longer matches.
+  embeddingContentHash: text("embedding_content_hash"),
+  embeddingModel: text("embedding_model"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

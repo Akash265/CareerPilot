@@ -16,3 +16,5 @@ export * from "./rawJobPostings";
 export * from "./jobs";
 export * from "./jobPostings";
 export * from "./jobDuplicateCandidates";
+export * from "./jobMatches";
+export * from "./matchingRuns";
