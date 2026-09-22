@@ -29,6 +29,9 @@ importers:
       '@ai-career/ingestion':
         specifier: workspace:*
         version: link:../../packages/ingestion
+      '@ai-career/matching':
+        specifier: workspace:*
+        version: link:../../packages/matching
       '@ai-career/storage':
         specifier: workspace:*
         version: link:../../packages/storage
