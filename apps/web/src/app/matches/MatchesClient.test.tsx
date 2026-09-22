@@ -79,6 +79,30 @@ describe("MatchesClient", () => {
     await waitFor(() => expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument());
   });
 
+  it("shows an alert when the polled run has failed", async () => {
+    let queued = false;
+    mockFetch({
+      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+      "GET /api/matches/runs/latest": () =>
+        queued
+          ? {
+              body: {
+                run: { status: "failed", errorClass: "no_active_goal", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 },
+              },
+            }
+          : { body: { run: null } },
+      "POST /api/matches/run": () => {
+        queued = true;
+        return { status: 202, body: { status: "queued" } };
+      },
+    });
+    render(<MatchesClient />);
+    const button = await screen.findByRole("button", { name: "Find Matches" });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/last matching run failed \(no_active_goal\)/i);
+  });
+
   it("toggles to show ineligible matches with their reason", async () => {
     const ineligible = matchItem({ eligible: false, ineligibleReason: "You dismissed this job.", overallScore: null, factors: null, explanation: null });
     mockFetch({

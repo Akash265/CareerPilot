@@ -14,6 +14,11 @@ interface Result {
   total: number;
 }
 
+interface RunStatus {
+  status: "running" | "completed" | "failed";
+  errorClass: string | null;
+}
+
 export function MatchesClient() {
   const [showIneligible, setShowIneligible] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -21,6 +26,7 @@ export function MatchesClient() {
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [runFailure, setRunFailure] = useState<string | null>(null);
   const [pollUntil, setPollUntil] = useState(0);
 
   const load = useCallback(
@@ -38,22 +44,51 @@ export function MatchesClient() {
     [showIneligible]
   );
 
+  // A queued run finishes on the worker, out of band from this request. Enqueuing only proves the job was
+  // accepted, not that it succeeded — so this checks the run's outcome (GET /api/matches/runs/latest) on
+  // mount (to surface a run that already failed, e.g. before a reload) and on every poll tick after Find
+  // Matches (to catch a run that fails after being enqueued, e.g. an LLM/embedding outage). A "failed" run
+  // is shown as an alert instead of silently leaving the list unchanged, and stops further polling since
+  // waiting longer will not resolve it; a "completed" run clears any stale failure banner from a prior run.
+  const checkRunStatus = useCallback(
+    () =>
+      fetch("/api/matches/runs/latest")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body: { run: RunStatus | null } | null) => {
+          const run = body?.run;
+          if (!run) return;
+          if (run.status === "failed") {
+            setRunFailure(`The last matching run failed${run.errorClass ? ` (${run.errorClass})` : ""}. Try Find Matches again, or check the worker logs.`);
+            setPollUntil(0);
+          } else if (run.status === "completed") {
+            setRunFailure(null);
+          }
+        })
+        .catch(() => {}),
+    []
+  );
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void checkRunStatus();
+  }, [load, checkRunStatus]);
 
   useEffect(() => {
     if (pollUntil <= Date.now()) return;
     const timer = setInterval(() => {
       if (Date.now() > pollUntil) clearInterval(timer);
-      else void load();
+      else {
+        void load();
+        void checkRunStatus();
+      }
     }, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [pollUntil, load]);
+  }, [pollUntil, load, checkRunStatus]);
 
   async function findMatches() {
     setError(null);
     setNotice(null);
+    setRunFailure(null);
     try {
       const res = await fetch("/api/matches/run", { method: "POST" });
       const body = await res.json();
@@ -63,6 +98,7 @@ export function MatchesClient() {
       }
       setNotice("Queued a matching run. Make sure the worker is running (pnpm --filter @ai-career/matching-worker start).");
       setPollUntil(Date.now() + POLL_DURATION_MS);
+      void checkRunStatus();
     } catch {
       setError("Could not reach the server — check your connection and try again.");
     }
@@ -104,6 +140,7 @@ export function MatchesClient() {
 
       {notice && <p role="status" className="text-sm text-green-700">{notice}</p>}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {runFailure && <p role="alert" className="text-sm text-red-600">{runFailure}</p>}
 
       {loadFailed && (
         <div className="flex flex-col gap-2">
