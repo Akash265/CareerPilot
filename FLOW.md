@@ -723,7 +723,7 @@ services/matching-worker/e2e/fakeAnthropic.ts   plain node:http server on :4012,
                                                  /api/career-goal/parse calls Anthropic directly, not
                                                  through the matching worker, so it needs the same
                                                  ANTHROPIC_BASE_URL redirect as the worker does)
-services/matching-worker/e2e/smoke.ts           drives, over real HTTP: career-goal parse (7a of §5)
+services/matching-worker/e2e/smoke.ts           drives, over real HTTP: career-goal parse (§5a)
                                                  + confirm → job upload (§6a's /api/job-sources/upload,
                                                  multipart) → POST /api/matches/run → poll
                                                  /api/matches/runs/latest → GET /api/matches (eligible

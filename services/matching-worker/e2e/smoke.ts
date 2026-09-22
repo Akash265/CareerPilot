@@ -39,7 +39,13 @@ async function waitFor<T>(label: string, fn: () => Promise<T | null>, timeoutSec
 async function main() {
   // 1. Career goal: parse + confirm with a remote Data Engineer preference and SQL/Python skills.
   const parsed = await post("/api/career-goal/parse", { rawText: "Remote Data Engineer roles, at least 2 years experience, skills SQL and Python." });
-  check("career goal parsed", parsed.status === 200 && parsed.body?.status === "parsed", JSON.stringify(parsed.body));
+  // Detail is narrowed to status + error class only (never `body.draft`, the AI-extracted goal
+  // content) -- this file's own binding logging constraint: error classes, ids and counts only.
+  check(
+    "career goal parsed",
+    parsed.status === 200 && parsed.body?.status === "parsed",
+    JSON.stringify({ httpStatus: parsed.status, bodyStatus: parsed.body?.status, error: parsed.body?.error })
+  );
   const goalId = parsed.body.goalId;
   const confirmed = await post("/api/career-goal/confirm", {
     goalId,
@@ -84,7 +90,13 @@ async function main() {
   // 4. Ranked list: the eligible job should be ranked with a score and a fake explanation; the
   //    excluded-company job should not appear in the eligible list.
   const eligible = await call("/api/matches?eligible=true");
-  check("exactly one eligible match", eligible.body.matches.length === 1, JSON.stringify(eligible.body));
+  // Detail is count + job ids only -- never the full match body, which carries job title/company/
+  // location and match.explanation (AI-generated summary/strongMatches/gaps) text.
+  check(
+    "exactly one eligible match",
+    eligible.body.matches.length === 1,
+    JSON.stringify({ count: eligible.body.matches.length, jobIds: eligible.body.matches.map((m: { jobId: string }) => m.jobId) })
+  );
   const match = eligible.body.matches[0];
   check("eligible match has an overall score", typeof match?.match?.overallScore === "number");
   check("eligible match has the fake explanation summary", match?.match?.explanation?.summary === "Fake explanation from the E2E stand-in server.");
@@ -101,7 +113,12 @@ async function main() {
     return latest.body.run && latest.body.run.status !== "running" ? latest.body.run : null;
   });
   const afterDismiss = await call("/api/matches?eligible=true");
-  check("dismissed job no longer appears as eligible after a recompute", afterDismiss.body.total === 0, JSON.stringify(afterDismiss.body));
+  // Same narrowing as above: total + job ids only, never the full match body.
+  check(
+    "dismissed job no longer appears as eligible after a recompute",
+    afterDismiss.body.total === 0,
+    JSON.stringify({ total: afterDismiss.body.total, jobIds: afterDismiss.body.matches.map((m: { jobId: string }) => m.jobId) })
+  );
 
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);
