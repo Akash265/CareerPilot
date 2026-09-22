@@ -605,7 +605,9 @@ pnpm --filter @ai-career/job-ingestion start          services/job-ingestion/src
       │  └─ per record, one withUserContext transaction:
       │     ├─ externalId longer than MAX_EXTERNAL_ID_CHARS (200)? → counted as failed and skipped BEFORE
       │     │  anything is stored (the raw table's unique btree would throw and brick every run)
-      │     ├─ upsert raw_job_postings (payload, content_hash)
+      │     ├─ hashPayload + upsert raw_job_postings, inside a SAVEPOINT (tx.transaction): a NUL byte or a
+      │     │  pathologically deep payload fails just this record (counted as failed), never the whole
+      │     │  transaction -- a plain try/catch here does not suffice with postgres.js (D41)
       │     ├─ normalizeRecord(ref, record)              normalize/normalizeRecord.ts (pure)
       │     │  └─ per-kind schema → escapedHtmlToText / htmlToText · companyKey/titleKey/locationKey/
       │     │     descriptionHash · extractSalary · extractMinExperience · extractSponsorship ·
@@ -617,7 +619,9 @@ pnpm --filter @ai-career/job-ingestion start          services/job-ingestion/src
       │        ├─ tier 2: no existing posting and the same fingerprint on any posting → link to that job;
       │        │          else insert a new jobs row
       │        ├─ upsert job_postings (normalized snapshot, fingerprint, content_hash)
-      │        ├─ recomputeJob → mergePostings → update jobs (+ field_provenance, status, closed_at)
+      │        ├─ recomputeJob → deserializeNormalized validates each stored snapshot's shape (D42),
+      │        │  excluding any posting whose snapshot fails it, before mergePostings → update jobs
+      │        │  (+ field_provenance, status, closed_at); if every posting is excluded, the job is left as-is
       │        └─ tier 3 (new job only): flagFuzzyDuplicates → job_duplicate_candidates (pending)
       │           (best 20 same-location look-alikes by similarity; a bounded scan, not index-accelerated)
       │  complete = fetched > 0                            (a zero-record fetch is NOT complete)
