@@ -14,3 +14,7 @@ export { scoreFactualConsistency } from "./evaluation/scoreFactualConsistency";
 export { scoreActionVerbsAndReadability, type ReadabilityResult } from "./evaluation/scoreActionVerbsAndReadability";
 export { EVALUATOR_VERSION, EVALUATION_WEIGHTS, type EvaluationScores } from "./types";
 export { computeOverallScore } from "./evaluation/computeOverallScore";
+export {
+  runResumeOptimization, ResumeOptimizationError,
+  type ResumeOptimizationErrorClass, type RunResumeOptimizationEnv, type RunResumeOptimizationOptions, type RunResumeOptimizationResult,
+} from "./pipeline/runResumeOptimization";
