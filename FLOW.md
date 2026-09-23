@@ -708,8 +708,11 @@ BullMQ "matching" job → packages/matching/src/pipeline/runMatching.ts
  │  call site is confirmCareerGoal's own second, post-commit withUserContext call (§5b, D55); this
  │  call here is the lazy fallback for any row that reached a matching run still unembedded.
  ├─ fetchCandidateJobs(tx, goalEmbedding) → open jobs + cosine similarity to the goal embedding (if any)
- ├─ ensureJobEmbeddings(tx, env, jobIds) → Voyage per job missing one; same null-on-failure degrade;
- │  re-fetch candidates afterward so a job embedded just now has semantic similarity in THIS run
+ ├─ ensureJobEmbeddings(tx, env, jobIds) → Voyage in EMBEDDING_BATCH_SIZE-sized chunks (D56 -- a
+ │  single unchunked call was found by the final whole-branch review to fail outright against a
+ │  realistically populated jobs table); one chunk's failure only leaves ITS jobs unembedded (retried
+ │  next run), never the whole batch; embedded/failed counts persisted on matching_runs, not just
+ │  logged; re-fetch candidates afterward so a job embedded just now has semantic similarity in THIS run
  ├─ per open job: evaluateEligibility (company/industry exclusion, work mode, sponsorship, experience
  │  grace, previously-dismissed) → ineligible: upsertMatchRow(eligible:false, reason) and skip scoring;
  │  eligible: score 9 factors (skills, experience, location, sponsorship, role, salary, industry,
@@ -720,9 +723,11 @@ BullMQ "matching" job → packages/matching/src/pipeline/runMatching.ts
  │  past MATCHING_EXPLANATION_TTL_DAYS), explain the top MATCHING_EXPLAIN_TOP_N via
  │  generateMatchExplanation(anthropicClient, ...) → Anthropic `record_match_explanation` tool call
  │  (ANTHROPIC_BASE_URL redirects this, real or fake) → job_matches.explanation/explanationModel/
- │  explanationGeneratedAt; a schema-invalid response (MatchExplanationValidationError) leaves the
- │  row's deterministic score intact and does not fail the run; any other error does fail the run
+ │  explanationGeneratedAt; a schema-invalid response (MatchExplanationValidationError) OR an
+ │  Anthropic.APIError (rate limit, 5xx, network, or a permanent misconfiguration -- D57) leaves the
+ │  row's deterministic score intact and does not fail the run; any other (unexpected) error does
  └─ finish("completed"|"failed", errorClass) → matching_runs.finishedAt/status/counters
+    (jobsEmbedded/jobsEmbeddingFailed also persisted here, per D56)
 ```
 
 ### 7c. Task 16's own addition: manual end-to-end smoke test (not request-driven; a standalone script)
