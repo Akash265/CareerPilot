@@ -425,4 +425,15 @@ through it would make applyDeterministicGuard's (Task 6) verification an indirec
 second cache instead of a direct check against the source of truth -- and profile_facts.sourceId is
 itself just these same table's ids, so nothing is gained by the extra hop.
 
+### D61. The optimizer prompt is instruction, not enforcement; applyDeterministicGuard is the actual authority (Task 6)
+**Decision:** optimizeResume's system prompt tells the model it may only cite catalog ids and must never invent a fact, but nothing in this task verifies that happened -- the guard does, in a separate step the model cannot influence.
+**Why:** CLAUDE.md §6 requires that AI outputs be validated, not linguistically trusted. The prompt's instructions are guidance; the deterministic guard (Task 6) is what's actually trusted.
+**What it affects:** Task 5 (optimizeResume), Task 6 (applyDeterministicGuard), the contract between them.
+
+### D62. Both the job context and the evidence catalog get their own untrusted-content delimiter
+**Decision:** Each of jobContext and the evidence catalog gets its own random per-request delimiter (e.g., `job_context_a1b2c3d4`, `evidence_catalog_e5f6g7h8`), not a single fixed delimiter or a shared one. CLAUDE.md §9 names resumes explicitly alongside job descriptions as content needing prompt-injection defense; the evidence catalog is the user's own data but was originally extracted from a resume, so it gets the same D20-style random delimiter as the job context block, not an exemption for "already reviewed once" in Phase 2.
+**Why:** Prompt-injection defense (D20 / §9) depends on delimiters being unguessable. A resume containing the literal string `</job_context>` could close that tag early and place attacker-controlled text outside the block the system prompt says to distrust -- the standard delimiter-escape bypass. Random, per-request tags prevent this.
+**Alternatives considered:** A single fixed pair of delimiters (insufficient, vulnerable to escape). A shared random delimiter for both blocks (rejected: if one must be regenerated for a future reason, the pair loses independence).
+**What it affects:** optimizeResume (Task 5), the evidence catalog framing in the prompt, any future task that frames untrusted input.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

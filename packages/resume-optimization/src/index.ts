@@ -3,3 +3,7 @@ export type { JobRequirementExtractionDraft, ExtractedRequirement } from "./requ
 export { extractJobRequirements, JobRequirementExtractionValidationError } from "./requirements/extractJobRequirements";
 export { ensureJobRequirements, type JobForRequirements } from "./requirements/ensureJobRequirements";
 export { buildResumeSnapshot, type EvidenceSourceType, type EvidenceCatalogEntry, type ResumeSnapshot } from "./optimization/buildResumeSnapshot";
+export { OptimizeResumeSchema, SelectedBulletSchema } from "./optimization/optimizeResumeSchema";
+export type { OptimizeResumeDraft, SelectedBulletDraft } from "./optimization/optimizeResumeSchema";
+export { optimizeResume, OptimizeResumeValidationError } from "./optimization/optimizeResume";
+export type { RequirementForPrompt, OptimizeResumeInput } from "./optimization/optimizeResume";
