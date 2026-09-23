@@ -47,8 +47,8 @@ describe("ResumeOptimizationPanel", () => {
   it("calls the run endpoint and reloads the list when Regenerate is clicked", async () => {
     const fetchMock = mockFetchSequence([
       { body: { optimizations: [optimization] } },
-      { body: { optimization: { ...optimization, version: 2 } }, status: 201 },
-      { body: { optimizations: [{ ...optimization, version: 2 }, optimization] } },
+      { body: { optimization: { ...optimization, id: "opt2", version: 2 } }, status: 201 },
+      { body: { optimizations: [{ ...optimization, id: "opt2", version: 2 }, optimization] } },
     ]);
     render(<ResumeOptimizationPanel jobId="j1" />);
     await screen.findByText("92.5/100");
