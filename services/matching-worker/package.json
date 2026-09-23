@@ -1,0 +1,35 @@
+{
+  "name": "@ai-career/matching-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "dotenv -e ../../.env -- tsx src/main.ts",
+    "dev": "dotenv -e ../../.env -- tsx watch src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src e2e",
+    "e2e:fake-anthropic": "tsx e2e/fakeAnthropic.ts",
+    "e2e:smoke": "tsx e2e/smoke.ts"
+  },
+  "dependencies": {
+    "@ai-career/ai": "workspace:*",
+    "@ai-career/config": "workspace:*",
+    "@ai-career/db": "workspace:*",
+    "@ai-career/matching": "workspace:*",
+    "@anthropic-ai/sdk": "^0.32.1",
+    "bullmq": "^5.34.0",
+    "drizzle-orm": "^0.36.0",
+    "ioredis": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "dotenv-cli": "^7.4.0",
+    "eslint": "^9.0.0",
+    "postgres": "^3.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.1.0"
+  }
+}

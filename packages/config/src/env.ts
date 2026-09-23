@@ -26,6 +26,11 @@ const envSchema = z
     GREENHOUSE_API_BASE: z.string().url().default("https://boards-api.greenhouse.io"),
     LEVER_API_BASE: z.string().url().default("https://api.lever.co"),
     INGEST_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(360),
+    // Phase 5 matching. All tunable, none yet backed by labeled data (design doc §10).
+    MATCHING_EXPLAIN_TOP_N: z.coerce.number().int().min(1).max(200).default(25),
+    MATCHING_EXPERIENCE_GRACE_YEARS: z.coerce.number().min(0).max(10).default(1),
+    MATCHING_FRESHNESS_HALF_LIFE_HOURS: z.coerce.number().min(1).default(168),
+    MATCHING_EXPLANATION_TTL_DAYS: z.coerce.number().min(1).default(7),
   })
   .superRefine((val, ctx) => {
     if (val.EMBEDDING_PROVIDER === "voyage" && !val.VOYAGE_API_KEY) {

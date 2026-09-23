@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text, integer, numeric, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, numeric, boolean, pgEnum, vector } from "drizzle-orm/pg-core";
 import { careerGoals } from "./careerGoals";
 
 // Reuses the "work_mode_preference" Postgres enum type that used to belong
@@ -44,4 +44,9 @@ export const careerGoalConstraints = pgTable("career_goal_constraints", {
   preferredCompanies: text("preferred_companies").array().notNull().default(sql`ARRAY[]::text[]`),
   excludedCompanies: text("excluded_companies").array().notNull().default(sql`ARRAY[]::text[]`),
   hardConstraints: text("hard_constraints").array().notNull().default(sql`ARRAY[]::text[]`),
+  // Phase 5: embeds targetRoles + skills + the goal's rawText -- the semantic query vector for
+  // retrieval against jobs.embedding. Generated once on confirm (apps/web's saveCareerGoal.ts);
+  // never recomputed for a given row since a career_goals row is immutable once created (D23).
+  embedding: vector("embedding", { dimensions: 1024 }),
+  embeddingModel: text("embedding_model"),
 });

@@ -78,6 +78,27 @@
       "when": 1790004671807,
       "tag": "0010_job_intelligence_rls_and_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790085531871,
+      "tag": "0011_hybrid_matching",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790085539597,
+      "tag": "0012_hybrid_matching_rls_and_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790144129809,
+      "tag": "0013_bumpy_komodo",
+      "breakpoints": true
     }
   ]
 }

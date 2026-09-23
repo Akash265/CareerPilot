@@ -1,0 +1,15 @@
+{
+  "input": {
+    "jobTitle": "Data Engineer",
+    "companyName": "Globex",
+    "overallScore": 61,
+    "skillMatches": [{ "skill": "SQL", "found": true }],
+    "experience": { "requiredYears": 5, "candidateYears": 5 },
+    "workMode": { "job": "hybrid", "goal": "any" },
+    "sponsorship": { "required": true, "job": "unknown" },
+    "salary": { "comparable": false, "withinRange": null },
+    "freshnessDays": 10
+  },
+  "expectedStrongMentions": ["SQL"],
+  "expectedGapMentions": ["sponsorship"]
+}

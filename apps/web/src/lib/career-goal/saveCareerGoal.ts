@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { createDbClient, closeDbClient, withUserContext, schema } from "@ai-career/db";
 import type { Env } from "@ai-career/config";
+import { ensureGoalEmbedding } from "@ai-career/matching";
 import type { CareerGoalConstraintsInput } from "./careerGoalConstraintsSchema";
 import { lockUserCareerGoals } from "./lockUserCareerGoals";
 
@@ -40,7 +41,7 @@ export async function confirmCareerGoal(
 ): Promise<void> {
   const db = createDbClient(env);
   try {
-    await withUserContext(db, env.DEFAULT_USER_ID, async (tx) => {
+    const constraintsId = await withUserContext(db, env.DEFAULT_USER_ID, async (tx) => {
       await lockUserCareerGoals(tx, env.DEFAULT_USER_ID);
       const [goal] = await tx
         .select({
@@ -65,38 +66,51 @@ export async function confirmCareerGoal(
         .set({ isActive: false })
         .where(eq(schema.careerGoals.isActive, true));
 
-      await tx.insert(schema.careerGoalConstraints).values({
-        careerGoalId: goalId,
-        targetRoles: constraints.targetRoles,
-        seniority: constraints.seniority,
-        locations: constraints.locations,
-        workMode: constraints.workMode,
-        minExperienceYears: constraints.minExperienceYears,
-        employmentType: constraints.employmentType,
-        salaryFloorRaw: constraints.salaryFloorRaw,
-        salaryFloorNormalized:
-          constraints.salaryFloorNormalized === null ? null : String(constraints.salaryFloorNormalized),
-        salaryCurrency: constraints.salaryCurrency,
-        salaryIsParsed: constraints.salaryIsParsed,
-        salaryTargetRaw: constraints.salaryTargetRaw,
-        salaryTargetNormalized:
-          constraints.salaryTargetNormalized === null ? null : String(constraints.salaryTargetNormalized),
-        salaryTargetCurrency: constraints.salaryTargetCurrency,
-        salaryTargetIsParsed: constraints.salaryTargetIsParsed,
-        visaSponsorshipRequired: constraints.visaSponsorshipRequired,
-        skills: constraints.skills,
-        preferredIndustries: constraints.preferredIndustries,
-        excludedIndustries: constraints.excludedIndustries,
-        preferredCompanies: constraints.preferredCompanies,
-        excludedCompanies: constraints.excludedCompanies,
-        hardConstraints: constraints.hardConstraints,
-      });
+      const [constraintsRow] = await tx
+        .insert(schema.careerGoalConstraints)
+        .values({
+          careerGoalId: goalId,
+          targetRoles: constraints.targetRoles,
+          seniority: constraints.seniority,
+          locations: constraints.locations,
+          workMode: constraints.workMode,
+          minExperienceYears: constraints.minExperienceYears,
+          employmentType: constraints.employmentType,
+          salaryFloorRaw: constraints.salaryFloorRaw,
+          salaryFloorNormalized:
+            constraints.salaryFloorNormalized === null ? null : String(constraints.salaryFloorNormalized),
+          salaryCurrency: constraints.salaryCurrency,
+          salaryIsParsed: constraints.salaryIsParsed,
+          salaryTargetRaw: constraints.salaryTargetRaw,
+          salaryTargetNormalized:
+            constraints.salaryTargetNormalized === null ? null : String(constraints.salaryTargetNormalized),
+          salaryTargetCurrency: constraints.salaryTargetCurrency,
+          salaryTargetIsParsed: constraints.salaryTargetIsParsed,
+          visaSponsorshipRequired: constraints.visaSponsorshipRequired,
+          skills: constraints.skills,
+          preferredIndustries: constraints.preferredIndustries,
+          excludedIndustries: constraints.excludedIndustries,
+          preferredCompanies: constraints.preferredCompanies,
+          excludedCompanies: constraints.excludedCompanies,
+          hardConstraints: constraints.hardConstraints,
+        })
+        .returning({ id: schema.careerGoalConstraints.id });
 
       await tx
         .update(schema.careerGoals)
         .set({ confirmationStatus: "confirmed", isActive: true, confirmedAt: new Date() })
         .where(eq(schema.careerGoals.id, goalId));
+
+      return constraintsRow.id;
     });
+
+    // Outside the confirm transaction, same rationale as saveProfile.ts (Phase 2): a Voyage outage
+    // must not roll back the already-committed confirm, and the confirm transaction must not hold a
+    // Postgres transaction open for the duration of an external HTTP call. `ensureGoalEmbedding`
+    // itself degrades to a no-op (leaves `embedding` null) on any failure; Phase 5's `runMatching`
+    // falls back to generating it lazily on the first "Find Matches" run if this ever didn't run
+    // (design doc §10's last item).
+    await withUserContext(db, env.DEFAULT_USER_ID, (tx) => ensureGoalEmbedding(tx, env, constraintsId));
   } finally {
     await closeDbClient(db);
   }

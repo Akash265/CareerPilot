@@ -1,0 +1,15 @@
+{
+  "input": {
+    "jobTitle": "Data Analyst",
+    "companyName": "Initech",
+    "overallScore": 45,
+    "skillMatches": [{ "skill": "Excel", "found": true }],
+    "experience": { "requiredYears": 2, "candidateYears": 5 },
+    "workMode": { "job": "onsite", "goal": "onsite" },
+    "sponsorship": { "required": false, "job": "offered" },
+    "salary": { "comparable": true, "withinRange": false },
+    "freshnessDays": 30
+  },
+  "expectedStrongMentions": ["Excel"],
+  "expectedGapMentions": ["salary"]
+}

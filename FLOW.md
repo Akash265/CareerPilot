@@ -511,6 +511,16 @@ GoalReviewForm.handleConfirm()                   [apps/web/src/app/career-goal/G
             │  never an update to an existing career_goal_constraints row
             └─ update career_goals set confirmationStatus="confirmed",
                is_active=true, confirmedAt=now() where id=goalId
+         └─ withUserContext(db, ..., tx => ...)   — SECOND, separate call, only after
+            │  the confirm transaction above has committed (Phase 5, D55)
+            └─ ensureGoalEmbedding(tx, env, constraintsId)   [@ai-career/matching]
+               → embedTexts() → Voyage call → stores career_goal_constraints
+               .embedding/.embeddingModel on the row just inserted; ON FAILURE
+               degrades to a no-op (embedding stays null) rather than throwing —
+               a Voyage outage must not roll back the already-committed confirm.
+               Idempotent; §7b's runMatching calls this same helper again as a
+               lazy fallback for any row that still has no embedding by the
+               time a matching run reads it.
 ```
 
 ### 5c. Dashboard read
@@ -664,3 +674,81 @@ GET /api/job-sources                     → listJobSourceViews: latest FINISHED
 
 Not part of this flow: nothing reads `job_duplicate_candidates` to merge or resolve them (they are
 displayed only, D36), and nothing calls an LLM or embeds a job at ingest time (D33).
+
+## 7. Hybrid matching: goal → score every open job → explain top N → ranked list (Phase 5)
+
+Sections 7a/7b trace the pipeline this repo already had going into Task 16 (Phase 5, Tasks 1-14);
+this entry documents it for the first time because Task 16's E2E smoke test is the first thing to
+drive it end-to-end and needed to trace it to debug the run. 7c documents Task 16's own addition.
+
+### 7a. Triggering and reading a run (request-driven)
+
+```
+POST /api/matches/run          app/api/matches/run/route.ts
+                                → 409 if no confirmed, active career goal exists
+                                → enqueueMatching(env, DEFAULT_USER_ID) → BullMQ "matching" queue
+                                → 202 {status:"queued"} (409 if a run is already queued/running)
+GET /api/matches/runs/latest   → most recent matching_runs row for the user
+GET /api/matches?eligible=     → app/lib/matching/listMatches.ts: job_matches joined to jobs,
+                                  eligible/ineligible filter, newest-scored first
+PATCH /api/matches/[jobId]     → sets job_matches.userAction ("dismissed"/"saved"/etc) + userActionAt
+                                  (read back on the NEXT run via evaluateEligibility's
+                                  previouslyDismissed, not applied retroactively to the current row)
+```
+
+### 7b. The worker (process-driven) — `services/matching-worker/src/worker.ts` → `runMatching`
+
+```
+BullMQ "matching" job → packages/matching/src/pipeline/runMatching.ts
+ ├─ guard: an active, confirmed career_goal_constraints row must exist, else MatchingError("no_active_goal")
+ ├─ insert matching_runs (startedAt)
+ ├─ ensureGoalEmbedding(tx, env, constraintsId) → Voyage embedding call; ON FAILURE degrades to a
+ │  null embedding rather than throwing (matches CLAUDE.md §6's "handle missing information").
+ │  Idempotent — a no-op if the row already has an embedding, which is the common case: the primary
+ │  call site is confirmCareerGoal's own second, post-commit withUserContext call (§5b, D55); this
+ │  call here is the lazy fallback for any row that reached a matching run still unembedded.
+ ├─ fetchCandidateJobs(tx, goalEmbedding) → open jobs + cosine similarity to the goal embedding (if any)
+ ├─ ensureJobEmbeddings(tx, env, jobIds) → Voyage in EMBEDDING_BATCH_SIZE-sized chunks (D56 -- a
+ │  single unchunked call was found by the final whole-branch review to fail outright against a
+ │  realistically populated jobs table); one chunk's failure only leaves ITS jobs unembedded (retried
+ │  next run), never the whole batch; embedded/failed counts persisted on matching_runs, not just
+ │  logged; re-fetch candidates afterward so a job embedded just now has semantic similarity in THIS run
+ ├─ per open job: evaluateEligibility (company/industry exclusion, work mode, sponsorship, experience
+ │  grace, previously-dismissed) → ineligible: upsertMatchRow(eligible:false, reason) and skip scoring;
+ │  eligible: score 9 factors (skills, experience, location, sponsorship, role, salary, industry,
+ │  freshness, semantic) → computeOverallScore → upsertMatchRow(eligible:true, factors, score)
+ │  (scoreSkills falls back to lexical-only when semanticSimilarity is null, per the embedding degrade)
+ ├─ sort scored jobs by overallScore desc; among ones whose explanation is stale/missing
+ │  (isExplanationStale: no explanation, a different active goal, a changed job description hash, or
+ │  past MATCHING_EXPLANATION_TTL_DAYS), explain the top MATCHING_EXPLAIN_TOP_N via
+ │  generateMatchExplanation(anthropicClient, ...) → Anthropic `record_match_explanation` tool call
+ │  (ANTHROPIC_BASE_URL redirects this, real or fake) → job_matches.explanation/explanationModel/
+ │  explanationGeneratedAt; a schema-invalid response (MatchExplanationValidationError) OR an
+ │  Anthropic.APIError (rate limit, 5xx, network, or a permanent misconfiguration -- D57) leaves the
+ │  row's deterministic score intact and does not fail the run; any other (unexpected) error does
+ └─ finish("completed"|"failed", errorClass) → matching_runs.finishedAt/status/counters
+    (jobsEmbedded/jobsEmbeddingFailed also persisted here, per D56)
+```
+
+### 7c. Task 16's own addition: manual end-to-end smoke test (not request-driven; a standalone script)
+
+```
+services/matching-worker/e2e/fakeAnthropic.ts   plain node:http server on :4012, POST /v1/messages
+                                                 only; keys its canned tool_use input off the
+                                                 REQUESTED tool's name (record_match_explanation for
+                                                 7b above, record_career_goal_extraction for
+                                                 packages/ai/src/extractCareerGoal.ts — apps/web's
+                                                 /api/career-goal/parse calls Anthropic directly, not
+                                                 through the matching worker, so it needs the same
+                                                 ANTHROPIC_BASE_URL redirect as the worker does)
+services/matching-worker/e2e/smoke.ts           drives, over real HTTP: career-goal parse (§5a)
+                                                 + confirm → job upload (§6a's /api/job-sources/upload,
+                                                 multipart) → POST /api/matches/run → poll
+                                                 /api/matches/runs/latest → GET /api/matches (eligible
+                                                 + ineligible) → PATCH a dismissal → re-run → re-check
+```
+
+Verified for real (see task-16-report.md): all four processes (fake Anthropic, job-ingestion worker,
+matching worker, web) running against a scratch database, with placeholder `VOYAGE_API_KEY` — the
+Voyage calls in 7b fail and degrade to a null embedding as designed, and the run still completes with
+real, schema-validated explanations from the fake Anthropic server.

@@ -1,6 +1,6 @@
 # Architecture — AI Career Intelligence & Application Platform
 
-Status: **Phases 0–4 are implemented** (foundation, candidate profile, career goal, job intelligence); matching onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
+Status: **Phases 0–5 are implemented** (foundation, candidate profile, career goal, job intelligence, hybrid matching); application generation onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
 
 ## 1. Product framing
 
@@ -61,7 +61,7 @@ Career Goal + Candidate Profile
         │
         ▼
 Deterministic Eligibility Filter   (disallowed countries, hard experience mismatch,
-        │                           already-applied/dismissed, onsite-when-remote-required)
+        │                           dismissed, onsite-when-remote-required)
         ▼
 Full-Text/Trigram Retrieval  +  pgvector Semantic Retrieval  (hybrid — neither alone is sufficient)
         │
@@ -78,6 +78,8 @@ Final Personalized Ranking + Explanation
 Ranking weights (initial, tunable, see spec §8): skills/requirements 30%, experience 15%, location/work mode 15%, sponsorship 10%, role preference 10%, salary 5%, industry/company 5%, freshness 5%, semantic fit 5%.
 
 Salary and location values entering this pipeline are always deterministically parsed ([D6](../DECISIONS.md)) — the LLM never extracts or estimates numeric salary data.
+
+Implemented in Phase 5: eligibility (`packages/matching/src/eligibility`), hybrid retrieval (`packages/matching/src/retrieval/fetchCandidateJobs.ts` -- lexical keyword hit-rate computed in TS, semantic similarity via pgvector `<=>`), the nine weighted factors (`packages/matching/src/scoring`), and AI match reasoning bounded to the top `MATCHING_EXPLAIN_TOP_N` jobs per run (`packages/matching/src/explanation`). No structured `job_requirements` table exists yet -- skill matching reads `jobs.descriptionText` directly (D49); that extraction is Phase 6's job. See D49–D55.
 
 ## 5. Application generation & hallucination guardrail ([D5](../DECISIONS.md))
 
@@ -185,4 +187,30 @@ close              only after a complete, non-empty fetch of a non-upload source
 - **Failure model.** Adapters and the pipeline throw only `IngestError`, which carries an error class and no content; transient classes retry with backoff, permanent ones do not. Runs and sources store the class ([D29](../DECISIONS.md), [D37](../DECISIONS.md)). A failed record is counted and skipped without aborting the run.
 - **Consent gate ([D37](../DECISIONS.md), [D3](../DECISIONS.md)).** The source is created disabled and unconsented; enabling requires `consentConfirmed`; the run API refuses an unconsented or disabled source; `runIngestion` refuses it again. Uploads require a consent field.
 - **Data quality.** Enrichment is deterministic with evidence or an explicit unknown ([D33](../DECISIONS.md), [D34](../DECISIONS.md)); missing values are `null`/`unknown`, never defaults. Hostile input is bounded ([D39](../DECISIONS.md)).
-- **Reading.** `GET /api/jobs` and `GET /api/jobs/[id]` power the `/jobs` browser; `/sources` manages the watch-list. Ranking, eligibility filtering and embeddings are Phase 5/6 and do not exist yet.
+- **Reading.** `GET /api/jobs` and `GET /api/jobs/[id]` power the `/jobs` browser; `/sources` manages the watch-list. Ranking, eligibility filtering and embeddings are implemented in Phase 5 (`packages/matching`, `/matches`); see §4.
+
+## 12. Hybrid matching (Phase 5)
+
+```
+career_goal_constraints (embedding, generated on confirm)  +  jobs (embedding, generated lazily on a matching run)
+  │
+  ▼
+services/matching-worker  (BullMQ "matching" queue, concurrency 1, no scheduler -- manual trigger only)
+  │  runMatching()
+  ▼
+deterministic eligibility  (excluded company/industry, remote-required vs. onsite/hybrid, experience gap beyond
+                             a grace window, sponsorship required-but-not-offered, previously dismissed)
+  │  ineligible -> job_matches row with a reason, nothing further
+  ▼
+nine weighted factor scores + computeOverallScore  (unknown data -> full/neutral credit or redistributed weight, never a guessed zero -- D52)
+  │
+  ▼
+top MATCHING_EXPLAIN_TOP_N by score, whose explanation is stale or missing
+  │  generateMatchExplanation()  (fast/cheap tier; only pre-computed scores/evidence in the prompt -- D53)
+  ▼
+job_matches  (read by GET /api/matches, GET /api/matches/[jobId]; PATCH sets user_action)
+```
+
+- **Process model.** Mirrors D32: domain logic in `packages/matching`, `services/matching-worker` is BullMQ glue only. No compose service or Dockerfile (same as `job-ingestion`); started with `pnpm --filter @ai-career/matching-worker start`.
+- **Cost control.** Embeddings are permanent, content-hash-keyed caches (`jobs.embedding_content_hash`, mirrors `profile_facts`). Explanations are capped per run and invalidated only on real change, not a blind re-run (D54).
+- **Known gaps carried into Phase 6+.** No structured `industry` field, so industry preference/exclusion is a company-name-substring heuristic (weak signal, never a hard block on a non-match). "Already applied" is not an eligibility rule (no applications table until Phase 9). No auto-trigger on goal confirm or ingestion completion -- "Find Matches" is manual. `MATCHING_EXPLAIN_TOP_N`, `MATCHING_EXPERIENCE_GRACE_YEARS`, `MATCHING_FRESHNESS_HALF_LIFE_HOURS` are unmeasured starting defaults.

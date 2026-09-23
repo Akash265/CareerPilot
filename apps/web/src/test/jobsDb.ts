@@ -36,6 +36,51 @@ export async function wipeJobData(adminSql: postgres.Sql, userId: string): Promi
   await adminSql`DELETE FROM job_sources WHERE user_id = ${userId}`;
 }
 
+/** Also wipes the tables wipeJobData already covers, plus the matching-specific ones. */
+export async function wipeMatchingData(adminSql: postgres.Sql, userId: string): Promise<void> {
+  await adminSql`DELETE FROM job_matches WHERE user_id = ${userId}`;
+  await adminSql`DELETE FROM matching_runs WHERE user_id = ${userId}`;
+  await adminSql`DELETE FROM career_goals WHERE user_id = ${userId}`;
+  await wipeJobData(adminSql, userId);
+}
+
+export async function insertCareerGoal(
+  adminSql: postgres.Sql,
+  userId: string,
+  opts: { isActive?: boolean; confirmationStatus?: "draft" | "confirmed" } = {}
+): Promise<string> {
+  const [row] = await adminSql`
+    INSERT INTO career_goals (user_id, raw_text, version, parse_status, confirmation_status, is_active)
+    VALUES (${userId}, 'Data roles', 1, 'parsed', ${opts.confirmationStatus ?? "confirmed"}, ${opts.isActive ?? true})
+    RETURNING id`;
+  return row.id as string;
+}
+
+export async function insertMatch(
+  adminSql: postgres.Sql,
+  userId: string,
+  jobId: string,
+  careerGoalId: string,
+  opts: {
+    eligible?: boolean;
+    ineligibleReason?: string | null;
+    overallScore?: number | null;
+    skillsScore?: number | null;
+    explanation?: object | null;
+    userAction?: "none" | "saved" | "dismissed";
+  } = {}
+): Promise<string> {
+  const eligible = opts.eligible ?? true;
+  const [row] = await adminSql`
+    INSERT INTO job_matches (user_id, job_id, career_goal_id, eligible, ineligible_reason, overall_score, skills_score,
+                              explanation, user_action, computed_at)
+    VALUES (${userId}, ${jobId}, ${careerGoalId}, ${eligible}, ${opts.ineligibleReason ?? null},
+            ${eligible ? (opts.overallScore ?? 75) : null}, ${eligible ? (opts.skillsScore ?? 0.8) : null},
+            ${opts.explanation ? JSON.stringify(opts.explanation) : null}::jsonb, ${opts.userAction ?? "none"}, now())
+    RETURNING id`;
+  return row.id as string;
+}
+
 export async function insertSource(
   adminSql: postgres.Sql,
   userId: string,

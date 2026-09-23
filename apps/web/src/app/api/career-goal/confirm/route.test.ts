@@ -10,8 +10,13 @@ vi.mock("@ai-career/config", () => ({
     DEFAULT_USER_ID: "00000000-0000-0000-0000-000000000010",
     DATABASE_URL: process.env.TEST_APP_DATABASE_URL ??
       "postgres://career_intel_app:career_intel_app@localhost:5432/career_intel_test",
+    EMBEDDING_PROVIDER: "voyage",
+    VOYAGE_API_KEY: "test-key",
+    VOYAGE_EMBEDDING_MODEL: "voyage-3.5",
   }),
 }));
+vi.mock("@ai-career/ai", () => ({ embedTexts: vi.fn() }));
+import { embedTexts } from "@ai-career/ai";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_FOLDER = path.resolve(__dirname, "../../../../../../../packages/db/migrations");
@@ -21,6 +26,10 @@ const adminSql = postgres(
 );
 // Must match the DEFAULT_USER_ID in the @ai-career/config mock above.
 const TEST_USER_ID = "00000000-0000-0000-0000-000000000010";
+// career_goal_constraints.embedding is a strict vector(1024) column -- Postgres
+// rejects any other length outright, so the mock must return a real 1024-length
+// array rather than a short illustrative one.
+const FAKE_EMBEDDING = Array.from({ length: 1024 }, (_, i) => (i === 0 ? 0.1 : 0));
 
 beforeAll(async () => {
   await migrate(drizzle(adminSql), { migrationsFolder: MIGRATIONS_FOLDER });
@@ -34,6 +43,10 @@ beforeAll(async () => {
   // inserted. Delete the FK-child table first.
   await adminSql`DELETE FROM career_goal_constraints WHERE user_id = ${TEST_USER_ID}`;
   await adminSql`DELETE FROM career_goals WHERE user_id = ${TEST_USER_ID}`;
+  // Every existing test in this file already exercises a successful confirm,
+  // so giving Voyage a working default keeps them green without individually
+  // touching each one.
+  vi.mocked(embedTexts).mockReset().mockResolvedValue([FAKE_EMBEDDING]);
 });
 
 afterAll(async () => {
@@ -293,5 +306,26 @@ describe("POST /api/career-goal/confirm", () => {
       expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
       expect(await constraintsCount(goalId)).toBe(1);
     });
+  });
+
+  it("generates and stores the career-goal embedding on confirm", async () => {
+    const goalId = await insertPendingGoal("Data jobs, remote, Python and SQL", 20);
+    await POST(makeRequest({ goalId, constraints: { ...validConstraints, skills: ["Python", "SQL"] } }));
+
+    const [row] = await adminSql`SELECT embedding IS NOT NULL AS has_embedding, embedding_model FROM career_goal_constraints WHERE career_goal_id = ${goalId}`;
+    expect(row.has_embedding).toBe(true);
+    expect(row.embedding_model).toBe("voyage-3.5");
+    expect(vi.mocked(embedTexts)).toHaveBeenCalled();
+  });
+
+  it("still confirms successfully when embedding generation fails", async () => {
+    vi.mocked(embedTexts).mockRejectedValueOnce(new Error("voyage down"));
+    const goalId = await insertPendingGoal("Data jobs", 21);
+
+    const res = await POST(makeRequest({ goalId, constraints: validConstraints }));
+    expect(res.status).toBe(200);
+
+    const [row] = await adminSql`SELECT embedding FROM career_goal_constraints WHERE career_goal_id = ${goalId}`;
+    expect(row.embedding).toBeNull();
   });
 });

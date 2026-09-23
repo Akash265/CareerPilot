@@ -1,7 +1,7 @@
 # Phase 5 — Hybrid Matching Engine: Design
 
 Date: 2026-09-22
-Status: design, not yet implemented
+Status: implemented; see this plan's tasks and DECISIONS.md D49-D55 for where implementation refined the design.
 Spec reference: project specification §8 (Eligibility + Hybrid Matching Engine), §9 (Recommendation System), roadmap Phase 5
 Related decisions: D2 (RLS), D6 (deterministic salary/location, LLM never estimates numeric data), D7/D8 (task-to-tier model selection, deterministic before AI), D21/D22 (career_goal_constraints is the single source of truth for search-relevant preferences), D29 (advisory-lock pattern for versioned/active rows), D32 (separate worker process, domain logic out of the worker), D36 (never auto-merge/auto-hide on an unconfirmed signal — carried over here as "never silently drop")
 
@@ -35,7 +35,7 @@ Related decisions: D2 (RLS), D6 (deterministic salary/location, LLM never estima
 | 6 | Manual "Find Matches" trigger only | Auto-recompute on goal confirm and/or on ingestion-run completion |
 | 7 | `career_goal_constraints.embedding`: one query-side embedding per confirmed goal | Per-job-search-session embedding computed on the fly at request time |
 
-Each becomes a DECISIONS.md entry (D46 onward) when implemented.
+Each becomes a DECISIONS.md entry (D49 onward) when implemented.
 
 ## 3. Data model
 
@@ -175,7 +175,7 @@ Route handlers follow the Phase 2–4 conventions: `readJsonBody`, 400 on malfor
 - Logs carry error classes and counts, never job content, profile content, or explanation text.
 
 **Process**
-- DECISIONS.md D46+, FLOW.md, `docs/architecture.md` §4/§10 updated to reflect what's actually built.
+- DECISIONS.md D49+, FLOW.md, `docs/architecture.md` §4/§10 updated to reflect what's actually built.
 - CLAUDE.md §21 explain-back step after implementation (no blanket waiver granted for this phase).
 - No commits without an explicit request (CLAUDE.md §15).
 
