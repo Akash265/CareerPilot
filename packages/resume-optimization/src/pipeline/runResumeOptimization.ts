@@ -86,6 +86,12 @@ export async function runResumeOptimization(
   let draft: Awaited<ReturnType<typeof optimizeResume>>;
   let guardResult: ReturnType<typeof applyDeterministicGuard>;
   try {
+    // Deliberate trade-off: ensureJobRequirements' extractJobRequirements call (an Anthropic
+    // round-trip, seconds not milliseconds) runs inside this withUserContext transaction, holding
+    // the connection idle-in-transaction for the duration. Accepted because it buys atomicity for
+    // the cache's delete-then-insert (D58's "replace on change" -- a request that dies mid-write
+    // must never leave job_requirements half-replaced), and this is a single-job, user-triggered
+    // action, not a hot path serving concurrent traffic on the same job.
     const requirements = await inUserContext((tx) =>
       ensureJobRequirements(tx, env, anthropicClient, {
         id: job.id, title: job.title, descriptionText: job.descriptionText, descriptionHash: job.descriptionHash,
@@ -159,7 +165,11 @@ export async function runResumeOptimization(
         selectedBullets: guardResult.appliedBullets,
         addedTerms: draft.addedTerms,
         unsupportedClaimsDetected: draft.unsupportedClaimsDetected,
-        requiresReview: draft.unsupportedClaimsDetected.length > 0 || guardResult.rejectedClaims.length > 0,
+        // OR, never AND: the model's own self-report can only ADD caution here, never remove it --
+        // the authoritative signals remain unsupportedClaimsDetected and the guard's own rejections
+        // (D61/D63), but a model that sets requiresReview:true for a reason it didn't otherwise
+        // report should still have that flag land on the persisted row rather than be discarded.
+        requiresReview: draft.requiresReview || draft.unsupportedClaimsDetected.length > 0 || guardResult.rejectedClaims.length > 0,
         rejectedClaims: guardResult.rejectedClaims,
         generationModel: env.ANTHROPIC_MODEL_FAST,
       })

@@ -129,6 +129,19 @@ describe("runResumeOptimization", () => {
     expect(result.optimization.requiresReview).toBe(true);
   });
 
+  it("respects the model's own requiresReview:true self-report even with no unsupportedClaimsDetected and no guard rejections", async () => {
+    const { jobId } = await seedFixture();
+    vi.mocked(optimizeResume).mockResolvedValue({
+      selectedBullets: [], addedTerms: [], unsupportedClaimsDetected: [], requiresReview: true,
+    });
+
+    const result = await runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicClient: FAKE_CLIENT, env: ENV });
+
+    // The self-report can only ADD caution, never remove it -- there's no other signal here that
+    // would set requiresReview, so this proves draft.requiresReview alone is still honored.
+    expect(result.optimization.requiresReview).toBe(true);
+  });
+
   it("maps an Anthropic.APIError from optimizeResume to a ResumeOptimizationError with errorClass 'unknown'", async () => {
     const { jobId } = await seedFixture();
     vi.mocked(optimizeResume).mockRejectedValue(new Anthropic.APIError(429, {}, "rate limited", undefined));
