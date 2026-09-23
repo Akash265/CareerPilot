@@ -446,4 +446,13 @@ itself just these same table's ids, so nothing is gained by the extra hop.
 **Why:** This is the single line of defense between a hallucinated resume claim ("I led 1000 engineers at Acme!") and the user seeing it as "applied" and safe to send to an ATS. The guard must be absolutely deterministic and must rely only on the specific catalog passed to it. No async I/O, no database reads, no caching, no model participation — just a pure `Map` lookup for each claim and assembly of the result.
 **What it affects:** Task 6 implementation; the interface contract between Task 5 (optimizeResume) and Task 9 (presentOptimizations); test fixtures and evidence in D62's prompt-framing decisions (both untrusted-content delimiters are validated by Task 5/6 behavior now, not just prompt instruction).
 
+## 2026-09-23 — Phase 6 (ATS Resume Optimization) Task 8: scoreSemanticSimilarity
+
+### D64. semantic similarity is a pure in-memory cosine over already-fetched vectors, and the optimized-resume embedding is computed once over the whole combined text.
+**Decision:** Task 11 embeds `appliedBullets.map(b => b.optimizedText).join("\n")` as a single embedTexts call rather than re-embedding only the bullets whose changeType is "reworded" and reusing profile_facts embeddings for the rest.
+**Alternatives considered:** (1) An incremental-reuse approach, re-embedding only bullets that changed and pulling cached embeddings from profile_facts for unchanged bullets. This was flagged in the design doc §10 as unmeasured.
+**Why:** The simpler whole-text approach is one Voyage call per optimization (bounded, user-triggered, same cost class as one embedTexts call in ensureGoalEmbedding) and is easier to reason about and test. A pure, in-memory cosine is used instead of a pgvector `<=>` query because both vectors are already in hand by the time Task 11 calls this (job.embedding from the row it already fetched, the resume embedding from one embedTexts call), so a second DB round trip would add nothing. Cosine is in [-1, 1]; clamped to [0, 1] for the 0-100 scorecard percentage, same convention as matching's scoreSemantic.
+**Revisit if:** Voyage cost/latency in practice justifies the incremental version.
+**What it affects:** Task 8 implementation (scoreSemanticSimilarity.ts), Task 11's embedding and scoring pipeline.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

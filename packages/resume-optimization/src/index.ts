@@ -9,3 +9,4 @@ export { optimizeResume, OptimizeResumeValidationError } from "./optimization/op
 export type { RequirementForPrompt, OptimizeResumeInput } from "./optimization/optimizeResume";
 export { applyDeterministicGuard, type AppliedBullet, type RejectedClaim, type GuardResult } from "./optimization/applyDeterministicGuard";
 export { scoreKeywordCoverage, type RequirementTerm, type KeywordCoverageResult } from "./evaluation/scoreKeywordCoverage";
+export { cosineSimilarity, scoreSemanticSimilarity } from "./evaluation/scoreSemanticSimilarity";
