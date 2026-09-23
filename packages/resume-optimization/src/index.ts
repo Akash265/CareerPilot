@@ -10,3 +10,5 @@ export type { RequirementForPrompt, OptimizeResumeInput } from "./optimization/o
 export { applyDeterministicGuard, type AppliedBullet, type RejectedClaim, type GuardResult } from "./optimization/applyDeterministicGuard";
 export { scoreKeywordCoverage, type RequirementTerm, type KeywordCoverageResult } from "./evaluation/scoreKeywordCoverage";
 export { cosineSimilarity, scoreSemanticSimilarity } from "./evaluation/scoreSemanticSimilarity";
+export { scoreFactualConsistency } from "./evaluation/scoreFactualConsistency";
+export { scoreActionVerbsAndReadability, type ReadabilityResult } from "./evaluation/scoreActionVerbsAndReadability";
