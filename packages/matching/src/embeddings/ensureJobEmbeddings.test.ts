@@ -7,7 +7,11 @@ import { ensureJobEmbeddings, EMBEDDING_BATCH_SIZE } from "./ensureJobEmbeddings
 vi.mock("@ai-career/ai", () => ({ embedTexts: vi.fn() }));
 import { embedTexts } from "@ai-career/ai";
 
-const USER = "00000000-0000-0000-0000-0000000000e2";
+// Not e2: packages/ingestion/src/pipeline/runIngestion.test.ts uses e2 as its own OTHER_USER and
+// unconditionally wipes it in beforeEach/afterAll, which raced this file's job inserts under
+// `turbo run test`'s cross-package parallelism (both packages share one test database) -- found via
+// intermittent "row undefined" / wrong-call-count failures that never reproduced in isolation.
+const USER = "00000000-0000-0000-0000-0000000000e6";
 const ENV = { EMBEDDING_PROVIDER: "voyage" as const, VOYAGE_API_KEY: "k", VOYAGE_EMBEDDING_MODEL: "voyage-3.5" };
 let testDb: TestDb;
 
