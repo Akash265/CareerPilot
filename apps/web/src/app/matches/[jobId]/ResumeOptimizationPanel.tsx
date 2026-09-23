@@ -174,7 +174,7 @@ export function ResumeOptimizationPanel({ jobId }: { jobId: string }) {
                 <li key={b.sourceFactId} className="rounded border p-2 text-sm">
                   <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs uppercase text-gray-600">{b.changeType}</span>
                   <p>{b.optimizedText}</p>
-                  {b.changeType !== "unchanged" && <p className="mt-1 text-xs text-gray-500">Was: {b.originalText}</p>}
+                  {b.originalText !== b.optimizedText && <p className="mt-1 text-xs text-gray-500">Was: {b.originalText}</p>}
                   <p className="mt-1 text-xs text-gray-500">{b.justification}</p>
                 </li>
               ))}

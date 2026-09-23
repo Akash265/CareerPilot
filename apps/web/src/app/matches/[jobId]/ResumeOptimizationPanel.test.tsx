@@ -60,6 +60,34 @@ describe("ResumeOptimizationPanel", () => {
     expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST" });
   });
 
+  it("shows the 'Was:' evidence line when originalText differs from optimizedText, even if changeType is mislabeled 'unchanged'", async () => {
+    mockFetchSequence([{
+      body: {
+        optimizations: [{
+          ...optimization,
+          selectedBullets: [{ ...optimization.selectedBullets[0], changeType: "unchanged" }],
+        }],
+      },
+    }]);
+    render(<ResumeOptimizationPanel jobId="j1" />);
+    expect(await screen.findByText("Built X using SQL")).toBeInTheDocument();
+    expect(screen.getByText("Was: Built X")).toBeInTheDocument();
+  });
+
+  it("hides the 'Was:' evidence line when originalText and optimizedText are genuinely identical", async () => {
+    mockFetchSequence([{
+      body: {
+        optimizations: [{
+          ...optimization,
+          selectedBullets: [{ ...optimization.selectedBullets[0], optimizedText: "Built X", changeType: "unchanged" }],
+        }],
+      },
+    }]);
+    render(<ResumeOptimizationPanel jobId="j1" />);
+    await screen.findByText("Built X");
+    expect(screen.queryByText(/^Was:/)).not.toBeInTheDocument();
+  });
+
   it("shows an error message when generation fails", async () => {
     mockFetchSequence([
       { body: { optimizations: [] } },
