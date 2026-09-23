@@ -32,6 +32,9 @@ importers:
       '@ai-career/matching':
         specifier: workspace:*
         version: link:../../packages/matching
+      '@ai-career/resume-optimization':
+        specifier: workspace:*
+        version: link:../../packages/resume-optimization
       '@ai-career/storage':
         specifier: workspace:*
         version: link:../../packages/storage
