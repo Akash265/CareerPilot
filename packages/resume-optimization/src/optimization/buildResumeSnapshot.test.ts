@@ -49,6 +49,21 @@ describe("buildResumeSnapshot", () => {
     expect(byType.skill).toMatchObject({ text: "Python", context: null });
   });
 
+  it("orders projects, certifications, and skills by their own displayOrder, not insertion order", async () => {
+    await testDb.adminSql`INSERT INTO projects (user_id, name, description, display_order) VALUES (${USER}, 'Second Project', 'B', 1), (${USER}, 'First Project', 'A', 0)`;
+    await testDb.adminSql`INSERT INTO certifications (user_id, name, issuer, display_order) VALUES (${USER}, 'Second Cert', 'X', 1), (${USER}, 'First Cert', 'Y', 0)`;
+    await testDb.adminSql`INSERT INTO skills (user_id, name, display_order) VALUES (${USER}, 'SQL', 1), (${USER}, 'Python', 0)`;
+
+    const snapshot = await withUserContext(testDb.db, USER, (tx) => buildResumeSnapshot(tx));
+
+    const projectTexts = snapshot.catalog.filter((e) => e.sourceType === "project").map((e) => e.context);
+    const certTexts = snapshot.catalog.filter((e) => e.sourceType === "certification").map((e) => e.text);
+    const skillTexts = snapshot.catalog.filter((e) => e.sourceType === "skill").map((e) => e.text);
+    expect(projectTexts).toEqual(["First Project", "Second Project"]);
+    expect(certTexts).toEqual(["First Cert", "Second Cert"]);
+    expect(skillTexts).toEqual(["Python", "SQL"]);
+  });
+
   it("is idempotent: re-running against unchanged data produces the same contentHash", async () => {
     await testDb.adminSql`INSERT INTO skills (user_id, name) VALUES (${USER}, 'Python'), (${USER}, 'SQL')`;
 

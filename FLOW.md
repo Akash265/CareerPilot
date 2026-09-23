@@ -772,8 +772,12 @@ User clicks "Optimize Resume" on an eligible job's match detail page
         anything not found is dropped into rejectedClaims, never treated as applied.
      6. `evaluation/*` scorers (keyword coverage, semantic similarity via embedTexts + cosine,
         factual consistency from the guard's tally, action-verb/readability heuristics) ->
-        `computeOverallScore`.
-     7. One transaction inserts `resume_optimizations` (versioned) and `ats_evaluations` (1:1).
+        `computeOverallScore`. `requiresReview` on the row this writes is
+        `draft.requiresReview || unsupportedClaimsDetected.length > 0 || rejectedClaims.length > 0`
+        -- the model's own self-report can only add caution here, never remove it.
+     7. One transaction inserts `resume_optimizations` (versioned) and `ats_evaluations` (1:1,
+        DB-enforced via `ats_evaluations_resume_optimization_id_uniq` plus a CHECK constraint per
+        score column keeping every value in its documented 0-1/0-100 range).
   -> Route serializes via `lib/resumeOptimization/serializeOptimization.ts`'s `toOptimizationView`,
      returns 201.
   -> Panel re-fetches `GET /api/resume-optimizations/[jobId]`
