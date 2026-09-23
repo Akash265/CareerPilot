@@ -63,20 +63,28 @@ describe("MatchesClient", () => {
     expect(fn).toHaveBeenCalledWith("/api/matches/run", expect.objectContaining({ method: "POST" }));
   });
 
-  it("dismisses a match and removes it from the eligible list", async () => {
-    let matches = [matchItem()];
+  it("dismisses a match: it stays in the eligible list (no recompute has run yet) but the row shows dismissed feedback", async () => {
+    // Per design spec §8, a dismissal only takes effect on the NEXT matching recompute --
+    // evaluateEligibility's previouslyDismissed check runs during runMatching, not retroactively. So
+    // the real, immediate behavior after a successful dismiss PATCH is: the job stays eligible=true in
+    // the list (GET /api/matches?eligible=true still returns it) until "Find Matches" is run again.
+    let match = matchItem().match;
     mockFetch({
-      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches, page: 1, pageSize: 25, total: matches.length } }),
+      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [{ ...matchItem(), match }], page: 1, pageSize: 25, total: 1 } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
       "PATCH /api/matches/j1": () => {
-        matches = [];
-        return { body: { match: { ...matchItem().match, eligible: false, userAction: "dismissed" } } };
+        match = { ...match, userAction: "dismissed" };
+        return { body: { match } };
       },
     });
     render(<MatchesClient />);
     const dismiss = await screen.findByRole("button", { name: "Dismiss" });
     fireEvent.click(dismiss);
-    await waitFor(() => expect(screen.queryByText("Data Engineer")).not.toBeInTheDocument());
+
+    // Still in the list -- not immediately removed.
+    await waitFor(() => expect(screen.getByText("Data Engineer")).toBeInTheDocument());
+    // Visible acknowledgment that the dismiss was recorded.
+    expect(await screen.findByRole("button", { name: "Dismissed" })).toBeInTheDocument();
   });
 
   it("shows an alert for a run that already failed before this page loaded", async () => {

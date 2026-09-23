@@ -51,7 +51,9 @@ export function MatchRow({
           <button type="button" disabled={busy} onClick={onSave} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
             {match.userAction === "saved" ? "Saved" : "Save"}
           </button>
-          <button type="button" disabled={busy} onClick={onDismiss} className="rounded border px-3 py-1 text-sm disabled:opacity-50">Dismiss</button>
+          <button type="button" disabled={busy} onClick={onDismiss} className="rounded border px-3 py-1 text-sm disabled:opacity-50">
+            {match.userAction === "dismissed" ? "Dismissed" : "Dismiss"}
+          </button>
         </div>
       )}
     </li>
