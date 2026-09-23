@@ -1,21 +1,30 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { eq } from "drizzle-orm";
 import { schema, withUserContext } from "@ai-career/db";
 import { openTestDb, wipeUser, type TestDb } from "../testing/db";
 import { runResumeOptimization, ResumeOptimizationError } from "./runResumeOptimization";
 
-vi.mock("../optimization/optimizeResume", () => ({ optimizeResume: vi.fn() }));
+// Both mocks preserve real exports (importOriginal) other than the function itself, since the
+// Anthropic.APIError-mapping tests below need the real *ValidationError classes to construct
+// rejections with -- a bare `{ fn: vi.fn() }` factory would make those imports `undefined`.
+vi.mock("../optimization/optimizeResume", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../optimization/optimizeResume")>();
+  return { ...actual, optimizeResume: vi.fn() };
+});
 vi.mock("@ai-career/ai", () => ({ embedTexts: vi.fn() }));
 // Not in the brief's original mock list: ensureJobRequirements (Task 3) always calls the real
 // extractJobRequirements when no fresh job_requirements row exists yet, and this fixture never seeds
 // one -- so without this mock every test past the early-return checks would attempt a real
 // anthropicClient.messages.create() call against FAKE_CLIENT, which has no `messages` property.
 // Same mocking technique as ensureJobRequirements.test.ts itself.
-vi.mock("../requirements/extractJobRequirements", () => ({ extractJobRequirements: vi.fn() }));
-import { optimizeResume } from "../optimization/optimizeResume";
+vi.mock("../requirements/extractJobRequirements", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../requirements/extractJobRequirements")>();
+  return { ...actual, extractJobRequirements: vi.fn() };
+});
+import { optimizeResume, OptimizeResumeValidationError } from "../optimization/optimizeResume";
 import { embedTexts } from "@ai-career/ai";
-import { extractJobRequirements } from "../requirements/extractJobRequirements";
+import { extractJobRequirements, JobRequirementExtractionValidationError } from "../requirements/extractJobRequirements";
 
 const USER = "00000000-0000-0000-0000-0000000000f9";
 const ENV = { ANTHROPIC_MODEL_FAST: "test-model", EMBEDDING_PROVIDER: "voyage" as const, VOYAGE_API_KEY: "k", VOYAGE_EMBEDDING_MODEL: "voyage-3.5" };
@@ -81,6 +90,8 @@ describe("runResumeOptimization", () => {
     expect(stored).toHaveLength(1);
   });
 
+  // Also a regression test for the pg_advisory_xact_lock added to the final transaction's
+  // version-allocation query: two sequential calls must still get versions 1 and 2.
   it("increments version on a second call for the same job", async () => {
     const { jobId } = await seedFixture();
     vi.mocked(optimizeResume).mockResolvedValue({ selectedBullets: [], addedTerms: [], unsupportedClaimsDetected: [], requiresReview: false });
@@ -116,6 +127,42 @@ describe("runResumeOptimization", () => {
     const result = await runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicClient: FAKE_CLIENT, env: ENV });
 
     expect(result.optimization.requiresReview).toBe(true);
+  });
+
+  it("maps an Anthropic.APIError from optimizeResume to a ResumeOptimizationError with errorClass 'unknown'", async () => {
+    const { jobId } = await seedFixture();
+    vi.mocked(optimizeResume).mockRejectedValue(new Anthropic.APIError(429, {}, "rate limited", undefined));
+
+    await expect(
+      runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicClient: FAKE_CLIENT, env: ENV })
+    ).rejects.toMatchObject({ errorClass: "unknown" });
+  });
+
+  it("maps an OptimizeResumeValidationError from optimizeResume to a ResumeOptimizationError with errorClass 'unknown'", async () => {
+    const { jobId } = await seedFixture();
+    vi.mocked(optimizeResume).mockRejectedValue(new OptimizeResumeValidationError("bad schema"));
+
+    await expect(
+      runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicClient: FAKE_CLIENT, env: ENV })
+    ).rejects.toMatchObject({ errorClass: "unknown" });
+  });
+
+  it("maps a JobRequirementExtractionValidationError from ensureJobRequirements to a ResumeOptimizationError with errorClass 'unknown'", async () => {
+    const { jobId } = await seedFixture();
+    vi.mocked(extractJobRequirements).mockRejectedValue(new JobRequirementExtractionValidationError("bad schema"));
+
+    await expect(
+      runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicClient: FAKE_CLIENT, env: ENV })
+    ).rejects.toMatchObject({ errorClass: "unknown" });
+  });
+
+  it("rethrows an unrelated error unchanged rather than swallowing it as 'unknown'", async () => {
+    const { jobId } = await seedFixture();
+    vi.mocked(optimizeResume).mockRejectedValue(new TypeError("genuine bug"));
+
+    await expect(
+      runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicClient: FAKE_CLIENT, env: ENV })
+    ).rejects.toThrow("genuine bug");
   });
 
   it("leaves semanticSimilarity null and does not fail the run when Voyage fails transiently", async () => {

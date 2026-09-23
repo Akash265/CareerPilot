@@ -1,10 +1,11 @@
-import { and, eq, max } from "drizzle-orm";
-import type Anthropic from "@anthropic-ai/sdk";
+import { and, eq, max, sql } from "drizzle-orm";
+import Anthropic from "@anthropic-ai/sdk";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { embedTexts } from "@ai-career/ai";
 import { ensureJobRequirements } from "../requirements/ensureJobRequirements";
+import { JobRequirementExtractionValidationError } from "../requirements/extractJobRequirements";
 import { buildResumeSnapshot } from "../optimization/buildResumeSnapshot";
-import { optimizeResume, type RequirementForPrompt } from "../optimization/optimizeResume";
+import { optimizeResume, OptimizeResumeValidationError, type RequirementForPrompt } from "../optimization/optimizeResume";
 import { applyDeterministicGuard } from "../optimization/applyDeterministicGuard";
 import { scoreKeywordCoverage } from "../evaluation/scoreKeywordCoverage";
 import { scoreSemanticSimilarity } from "../evaluation/scoreSemanticSimilarity";
@@ -52,8 +53,10 @@ const numOrNull = (n: number | null): string | null => (n === null ? null : Stri
  * ensureJobRequirements/optimizeResume errors (JobRequirementExtractionValidationError,
  * OptimizeResumeValidationError, Anthropic.APIError) are deliberately NOT swallowed here, unlike
  * runMatching's "skip this job's explanation, keep going" rule -- this is a single user-triggered
- * action on one job, not a batch run scoring many jobs, so there is nothing else to "keep going" to;
- * the caller (Task 12's API route) surfaces the failure and lets the user retry.
+ * action on one job, not a batch run scoring many jobs, so there is nothing else to "keep going" to.
+ * They are instead mapped to ResumeOptimizationError("unknown") (D57's lesson, same distinction
+ * runMatching.ts's outer catch makes) so the caller (Task 12's API route) can tell "this call needs
+ * to surface a 502 and let the user retry" apart from a genuine bug, which is rethrown unchanged.
  */
 export async function runResumeOptimization(
   db: DbClient,
@@ -78,21 +81,36 @@ export async function runResumeOptimization(
   const [job] = await inUserContext((tx) => tx.select().from(jobs).where(eq(jobs.id, jobId)).limit(1));
   if (!job) throw new ResumeOptimizationError("no_match");
 
-  const requirements = await inUserContext((tx) =>
-    ensureJobRequirements(tx, env, anthropicClient, {
-      id: job.id, title: job.title, descriptionText: job.descriptionText, descriptionHash: job.descriptionHash,
-    })
-  );
-  const requirementsForPrompt: RequirementForPrompt[] = requirements.map((r) => ({
-    termText: r.termText, requirementLevel: r.requirementLevel,
-  }));
+  let requirementsForPrompt: RequirementForPrompt[];
+  let snapshot: Awaited<ReturnType<typeof buildResumeSnapshot>>;
+  let draft: Awaited<ReturnType<typeof optimizeResume>>;
+  let guardResult: ReturnType<typeof applyDeterministicGuard>;
+  try {
+    const requirements = await inUserContext((tx) =>
+      ensureJobRequirements(tx, env, anthropicClient, {
+        id: job.id, title: job.title, descriptionText: job.descriptionText, descriptionHash: job.descriptionHash,
+      })
+    );
+    requirementsForPrompt = requirements.map((r) => ({
+      termText: r.termText, requirementLevel: r.requirementLevel,
+    }));
 
-  const snapshot = await inUserContext((tx) => buildResumeSnapshot(tx));
+    snapshot = await inUserContext((tx) => buildResumeSnapshot(tx));
 
-  const draft = await optimizeResume(anthropicClient, env, {
-    jobTitle: job.title, companyName: job.companyName, requirements: requirementsForPrompt, catalog: snapshot.catalog,
-  });
-  const guardResult = applyDeterministicGuard(snapshot.catalog, draft);
+    draft = await optimizeResume(anthropicClient, env, {
+      jobTitle: job.title, companyName: job.companyName, requirements: requirementsForPrompt, catalog: snapshot.catalog,
+    });
+    guardResult = applyDeterministicGuard(snapshot.catalog, draft);
+  } catch (error) {
+    if (
+      error instanceof Anthropic.APIError ||
+      error instanceof JobRequirementExtractionValidationError ||
+      error instanceof OptimizeResumeValidationError
+    ) {
+      throw new ResumeOptimizationError("unknown");
+    }
+    throw error;
+  }
 
   const combinedOptimizedText = guardResult.appliedBullets.map((b) => b.optimizedText).join("\n");
   const keywordCoverage = scoreKeywordCoverage(requirementsForPrompt, combinedOptimizedText);
@@ -119,6 +137,12 @@ export async function runResumeOptimization(
   });
 
   return inUserContext(async (tx) => {
+    // Serializes version allocation per (user, job) for this transaction's lifetime -- same
+    // "two simultaneous requests read the same max(version)" race lockUserCareerGoals.ts solves for
+    // career goals (D23/D24), reimplemented here scoped by user+job so unrelated jobs/users are
+    // never serialized against each other.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('resume_optimizations'), hashtext(${userId} || ':' || ${jobId}))`);
+
     const [{ maxVersion }] = await tx
       .select({ maxVersion: max(resumeOptimizations.version) })
       .from(resumeOptimizations)
