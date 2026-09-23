@@ -288,6 +288,52 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)(lightningcss@1.32.0)
 
+  packages/resume-optimization:
+    dependencies:
+      '@ai-career/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@ai-career/config':
+        specifier: workspace:*
+        version: link:../config
+      '@ai-career/db':
+        specifier: workspace:*
+        version: link:../db
+      '@anthropic-ai/sdk':
+        specifier: ^0.32.1
+        version: 0.32.1
+      drizzle-orm:
+        specifier: ^0.36.0
+        version: 0.36.4(@types/react@19.2.18)(postgres@3.4.9)(react@19.2.8)
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      dotenv-cli:
+        specifier: ^7.4.0
+        version: 7.4.4
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@2.7.0)
+      postgres:
+        specifier: ^3.4.0
+        version: 3.4.9
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.13
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      typescript-eslint:
+        specifier: ^8.0.0
+        version: 8.69.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)(jsdom@25.0.1)(lightningcss@1.32.0)
+
   packages/storage:
     dependencies:
       '@ai-career/config':
