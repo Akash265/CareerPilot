@@ -30,8 +30,11 @@ function stableStringifyCatalog(entries: EvidenceCatalogEntry[]): string {
  * Builds the flat evidence catalog the optimizer may select/reword from (design doc §4) directly
  * from the user's structured profile tables -- not from profile_facts -- so every sourceFactId
  * applyDeterministicGuard (Task 6) checks is a real row id in one of these six tables, not an
- * indirection through another cache (D60). Order follows each table's displayOrder where it has
- * one, matching the order a resume would actually present them in.
+ * indirection through another cache (D60). Order follows each of the six tables' own displayOrder
+ * column, matching the order a resume would actually present them in. (A tied displayOrder, e.g.
+ * the common default of 0, leaves Postgres free to return those rows in any order -- this only
+ * affects the optimizer prompt's presentation order, never contentHash, which sorts by
+ * sourceFactId before hashing.)
  */
 export async function buildResumeSnapshot(tx: DbClient): Promise<ResumeSnapshot> {
   const [expRows, bulletRows, achievementRows, projectRows, certRows, eduRows, skillRows] = await Promise.all([

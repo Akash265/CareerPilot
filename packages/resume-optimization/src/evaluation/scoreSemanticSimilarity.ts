@@ -19,5 +19,12 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  */
 export function scoreSemanticSimilarity(jobEmbedding: number[] | null, resumeEmbedding: number[] | null): number | null {
   if (jobEmbedding === null || resumeEmbedding === null) return null;
-  return Math.max(0, Math.min(1, cosineSimilarity(jobEmbedding, resumeEmbedding)));
+  const similarity = cosineSimilarity(jobEmbedding, resumeEmbedding);
+  // A length mismatch between the two vectors (e.g. an embedding-model/dimension change) produces
+  // NaN, not a value cosineSimilarity's own zero-vector guard catches. Treated the same as "nothing
+  // safe to compare" (null) rather than persisting a NaN that Postgres numeric would silently accept
+  // as text and only reject later via ats_evaluations' CHECK constraint -- fail here, at the source,
+  // with the same sentinel every other "not comparable" case already uses.
+  if (!Number.isFinite(similarity)) return null;
+  return Math.max(0, Math.min(1, similarity));
 }

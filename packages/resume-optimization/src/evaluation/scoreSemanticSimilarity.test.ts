@@ -31,4 +31,8 @@ describe("scoreSemanticSimilarity", () => {
   it("returns the cosine similarity for two comparable embeddings", () => {
     expect(scoreSemanticSimilarity([1, 0], [1, 0])).toBe(1);
   });
+
+  it("returns null rather than NaN when the two vectors have mismatched lengths", () => {
+    expect(scoreSemanticSimilarity([1, 0, 0], [1, 0])).toBeNull();
+  });
 });
