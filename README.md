@@ -34,6 +34,11 @@ rationale behind each architectural choice.
    source is fetched every `INGEST_INTERVAL_MINUTES` (default 360). Run
    exactly one worker process; two would race on the same source (an advisory
    lock per source is future work).
+8. Start the matching worker (needed for "Find Matches" runs):
+   `pnpm --filter @ai-career/matching-worker start`. Also a plain Node
+   process with no scheduler -- matching only ever runs when the `/matches`
+   page's "Find Matches" button enqueues it. Run exactly one worker process
+   (concurrency is 1 either way).
 
 After adding new migrations, migrate the *test* database once before running
 the whole suite:
@@ -94,7 +99,14 @@ replacing the Phase 2 rigid-preference fields it superseded. After
 Phase 4 (Job Intelligence) complete: Greenhouse, Lever and CSV/JSON sources
 behind a consent gate, a BullMQ ingestion worker, deterministic normalization
 (salary, work mode, experience, sponsorship, posted date), three-tier
-deduplication and a Sources page and read-only Jobs browser. The home page
-links each step (/profile, /career-goal, /sources, /jobs). Not built yet:
-matching and ranking (Phase 5), Ashby/RSS/Apify sources, resolving duplicate
-candidates, and a container image for the worker.
+deduplication and a Sources page and read-only Jobs browser.
+
+Phase 5 (Hybrid Matching) complete: deterministic eligibility filtering,
+PostgreSQL/pg_trgm lexical + pgvector semantic hybrid retrieval, nine
+weighted match factors with an explainable per-factor breakdown, and AI
+match reasoning (top-ranked jobs only, evidence-grounded, never given raw
+job text) via a separate matching-worker. The home page links every step
+(/profile, /career-goal, /sources, /jobs, /matches). Not built yet: ATS
+resume optimization (Phase 6), structured job-requirement extraction, an
+`industry` field (industry matching is a company-name heuristic), and
+auto-triggered recomputes.

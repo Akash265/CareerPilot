@@ -345,6 +345,50 @@ An audit of Phase 3 against the original spec (§6.2, §19, §21), the approved 
 **Why no change needed to already-reviewed Phase 5 production code:** every failure the real run surfaced traced to the E2E harness itself (D46, D47), not to `packages/matching`, `services/matching-worker/src`, or the `/api/matches*`/`/api/career-goal*`/`/api/job-sources/upload` routes — matching the task's escalation boundary (fix harness bugs here; escalate, don't fix, a genuine production bug from an earlier task). None was found.
 **What it affects:** none (verification only); full run transcript and cleanup confirmation are in the task report, not duplicated here.
 
+## 2026-09-22 — Phase 5 (Hybrid Matching)
+
+### D49. Skill matching reads `jobs.descriptionText` directly; no `job_requirements` table in Phase 5
+**Decision:** The 30%-weighted skills factor is computed from a literal keyword hit-rate against the job's free-text title+description, blended with job↔goal semantic similarity -- not from a structured, LLM-extracted requirements table.
+**Alternatives considered:** An LLM extraction step per job producing structured required/preferred terms (a `job_requirements` table).
+**Why:** The roadmap's own phase list places "Requirement extraction" under Phase 6 (ATS Resume Optimization), and Phase 4 deliberately left `jobs` with no structured skill fields for the same reason (D33). Building it now would duplicate work Phase 6 needs to do more thoroughly anyway (required vs. preferred, ATS keyword coverage).
+**What it affects:** `packages/matching/src/scoring/scoreSkills.ts`; Phase 6 adds `job_requirements` as new data, not a replacement.
+
+### D50. Separate `matching-worker` process; an ineligible job is recorded, not dropped
+**Decision:** `services/matching-worker` is a thin BullMQ process (mirrors `services/job-ingestion`, D32) with no scheduler -- matching only ever runs on an explicit "Find Matches" enqueue. Every job a run evaluates gets a `job_matches` row, including ineligible ones (`eligible=false` + a fixed, evidence-carrying reason).
+**Alternatives considered:** A synchronous API route running eligibility, scoring and ~25 LLM calls inline; silently omitting ineligible jobs from any table.
+**Why:** A run's ~25 explanation calls are too slow and rate-limit-fragile to hold an HTTP request open for (same reasoning as D17/D32's inline-vs-worker line). Recording ineligible jobs keeps eligibility explainable and browsable (CLAUDE.md §6) instead of a silent filter the user can't inspect or dispute.
+**What it affects:** `services/matching-worker`, `packages/matching/src/pipeline/runMatching.ts`, `job_matches.eligible`/`ineligible_reason`.
+
+### D51. `skillsScore` and `semanticScore` share one job↔goal embedding pair
+**Decision:** A single cosine-similarity value (career-goal embedding vs. job embedding) is used twice: blended 70/30 with the literal keyword hit-rate inside `skillsScore`, and used directly, unblended, as `semanticScore`.
+**Alternatives considered:** Two separate embeddings/similarity computations for the two factors.
+**Why:** architecture.md §4's weight table already describes `skillsScore` as "Exact + semantic alignment" and `semanticScore` as "Overall contextual fit" -- two different roles for one signal, not two signals. A second embedding pair would double Voyage cost and pgvector storage for no accuracy gain evident in the spec.
+**What it affects:** `packages/matching/src/scoring/scoreSkills.ts`, `scoreSemantic.ts`, `retrieval/fetchCandidateJobs.ts`.
+
+### D52. Unknown data never becomes a guessed zero -- full/neutral credit or weight redistribution
+**Decision:** A factor with missing input data resolves to full credit (experience/sponsorship/role/industry with nothing stated), a neutral 0.5 (unknown work mode, unknown sponsorship-when-required, no embedding yet), or `null` with its weight redistributed proportionally across the other factors (`salaryScore` only, today) -- `computeOverallScore` never treats a missing signal as a 0.
+**Alternatives considered:** Defaulting an unscoreable factor to 0 (punishing missing data as if it were a bad fit).
+**Why:** CLAUDE.md §6/§9 and D6's "never guess" principle apply as much to scoring as to extraction -- a job with an unparsed salary is not evidence of a bad salary, and treating it as 0 would silently punish jobs for a data-quality gap the user never asked about.
+**What it affects:** every `packages/matching/src/scoring/score*.ts` function; `computeOverallScore.ts`'s redistribution.
+
+### D53. The explanation prompt never contains raw job description or resume text
+**Decision:** `generateMatchExplanation`'s input is exclusively pre-computed factor scores and short evidence strings (which skills matched/were missing, the stated experience numbers, work-mode/sponsorship state) -- never `jobs.descriptionText` or any resume content.
+**Alternatives considered:** Passing the raw job description alongside the scores so the model can add color; D20's per-request random-delimiter defense (used for career-goal/resume text) applied to job content instead.
+**Why:** The model's job here is narration of already-trustworthy facts, not extraction -- it needs no untrusted text at all, which is a stronger boundary than any delimiter defense (there is nothing to inject into). Matches CLAUDE.md §9's "protect against prompt injection from job descriptions."
+**What it affects:** `packages/matching/src/explanation/generateMatchExplanation.ts`.
+
+### D54. Explanation cost is bounded to the top N per run; staleness invalidates on change, not only by TTL
+**Decision:** Only the top `MATCHING_EXPLAIN_TOP_N` (default 25) eligible jobs by score get an AI explanation per run. An existing explanation is regenerated when the job's `description_hash` changed, the active career goal changed, or 7 days (`MATCHING_EXPLANATION_TTL_DAYS`) have passed -- whichever comes first; a schema-invalid response leaves the row's deterministic scores untouched rather than failing the run.
+**Alternatives considered:** Explaining every eligible job every run; a pure time-based TTL with no content-change invalidation; failing the whole run on one malformed explanation.
+**Why:** architecture.md §7 puts match explanation on the fast/cheap tier but still bills per call; explaining hundreds of jobs on every click doesn't scale with the job catalog. A pure TTL would show a stale explanation for up to a week after the user edits their goal or a job posting changes.
+**What it affects:** `packages/matching/src/explanation/explanationStaleness.ts`, `pipeline/runMatching.ts`, `MATCHING_EXPLAIN_TOP_N`/`MATCHING_EXPLANATION_TTL_DAYS`.
+
+### D55. The career-goal embedding is generated on confirm, outside the write transaction, with a lazy fallback
+**Decision:** `confirmCareerGoal` generates `career_goal_constraints.embedding` in a second, separate `withUserContext` call after the confirm transaction commits (same split saveProfile.ts uses for `profile_facts` embeddings, Phase 2). `ensureGoalEmbedding` is idempotent and is also called from `runMatching`, covering any row that reaches a matching run still unembedded.
+**Alternatives considered:** Generating it inside the confirm transaction; generating it only lazily inside `runMatching` and never on confirm.
+**Why:** Embedding inside the confirm transaction would hold a Postgres transaction (and RLS session setting) open for an external HTTP call, and would roll back an otherwise-valid confirm on a Voyage outage. Confirm-time generation is still the primary path so the very first "Find Matches" run does not pay that latency.
+**What it affects:** `apps/web/src/lib/career-goal/saveCareerGoal.ts`, `packages/matching/src/embeddings/ensureGoalEmbedding.ts`.
+
 ---
 
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

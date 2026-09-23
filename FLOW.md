@@ -511,6 +511,16 @@ GoalReviewForm.handleConfirm()                   [apps/web/src/app/career-goal/G
             │  never an update to an existing career_goal_constraints row
             └─ update career_goals set confirmationStatus="confirmed",
                is_active=true, confirmedAt=now() where id=goalId
+         └─ withUserContext(db, ..., tx => ...)   — SECOND, separate call, only after
+            │  the confirm transaction above has committed (Phase 5, D55)
+            └─ ensureGoalEmbedding(tx, env, constraintsId)   [@ai-career/matching]
+               → embedTexts() → Voyage call → stores career_goal_constraints
+               .embedding/.embeddingModel on the row just inserted; ON FAILURE
+               degrades to a no-op (embedding stays null) rather than throwing —
+               a Voyage outage must not roll back the already-committed confirm.
+               Idempotent; §7b's runMatching calls this same helper again as a
+               lazy fallback for any row that still has no embedding by the
+               time a matching run reads it.
 ```
 
 ### 5c. Dashboard read
@@ -693,7 +703,10 @@ BullMQ "matching" job → packages/matching/src/pipeline/runMatching.ts
  ├─ guard: an active, confirmed career_goal_constraints row must exist, else MatchingError("no_active_goal")
  ├─ insert matching_runs (startedAt)
  ├─ ensureGoalEmbedding(tx, env, constraintsId) → Voyage embedding call; ON FAILURE degrades to a
- │  null embedding rather than throwing (matches CLAUDE.md §6's "handle missing information")
+ │  null embedding rather than throwing (matches CLAUDE.md §6's "handle missing information").
+ │  Idempotent — a no-op if the row already has an embedding, which is the common case: the primary
+ │  call site is confirmCareerGoal's own second, post-commit withUserContext call (§5b, D55); this
+ │  call here is the lazy fallback for any row that reached a matching run still unembedded.
  ├─ fetchCandidateJobs(tx, goalEmbedding) → open jobs + cosine similarity to the goal embedding (if any)
  ├─ ensureJobEmbeddings(tx, env, jobIds) → Voyage per job missing one; same null-on-failure degrade;
  │  re-fetch candidates afterward so a job embedded just now has semantic similarity in THIS run
