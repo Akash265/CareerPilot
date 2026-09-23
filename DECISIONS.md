@@ -455,4 +455,12 @@ itself just these same table's ids, so nothing is gained by the extra hop.
 **Revisit if:** Voyage cost/latency in practice justifies the incremental version.
 **What it affects:** Task 8 implementation (scoreSemanticSimilarity.ts), Task 11's embedding and scoring pipeline.
 
+## 2026-09-23 — Phase 6 (ATS Resume Optimization) Task 10: computeOverallScore
+
+### D65. EVALUATION_WEIGHTS puts the most weight on requiredKeywordCoverage (0.3) and factualConsistency (0.2), mirroring matching's pattern
+**Decision:** The weighted-sum scoring for ATS resume optimization (`computeOverallScore`) uses `EVALUATION_WEIGHTS: Record<keyof EvaluationScores, number>` with requiredKeywordCoverage at 0.3 and factualConsistency at 0.2, totaling 1.0 across six factors (preferredKeywordCoverage: 0.15, semanticSimilarity: 0.2, actionVerbScore: 0.075, machineReadabilityScore: 0.075). Weights are versioned via `EVALUATOR_VERSION = "v1"` (same shape as `packages/matching`'s `FACTOR_WEIGHTS`), treating them as unmeasured starting values subject to refinement via empirical evaluation once sample data exists.
+**Alternatives considered:** Equal weighting across all factors (rejected: loses the explicit priority signal from the spec); LLM-based weight learning during Phase 6 (rejected: too early — no labeled training set yet; Phase 6 produces the labeled data that would later support such tuning).
+**Why:** Required-term coverage is spec §10.2's own leading example metric for ATS optimization, and factual consistency is principle #6 ("never hallucinate") made measurable — both outrank the two heuristic-only factors (action verbs, readability). The weight-redistribution logic for null `semanticSimilarity` (per D5's requirement to never estimate missing data) ensures the score remains valid even when job embeddings are unavailable.
+**What it affects:** `packages/resume-optimization/src/types.ts` (`EVALUATOR_VERSION`, `EvaluationScores`, `EVALUATION_WEIGHTS`), `packages/resume-optimization/src/evaluation/computeOverallScore.ts` (weighted sum with null-factor handling), `packages/resume-optimization/src/index.ts` (exports).
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

@@ -12,3 +12,5 @@ export { scoreKeywordCoverage, type RequirementTerm, type KeywordCoverageResult 
 export { cosineSimilarity, scoreSemanticSimilarity } from "./evaluation/scoreSemanticSimilarity";
 export { scoreFactualConsistency } from "./evaluation/scoreFactualConsistency";
 export { scoreActionVerbsAndReadability, type ReadabilityResult } from "./evaluation/scoreActionVerbsAndReadability";
+export { EVALUATOR_VERSION, EVALUATION_WEIGHTS, type EvaluationScores } from "./types";
+export { computeOverallScore } from "./evaluation/computeOverallScore";
