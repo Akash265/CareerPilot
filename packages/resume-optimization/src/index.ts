@@ -7,3 +7,4 @@ export { OptimizeResumeSchema, SelectedBulletSchema } from "./optimization/optim
 export type { OptimizeResumeDraft, SelectedBulletDraft } from "./optimization/optimizeResumeSchema";
 export { optimizeResume, OptimizeResumeValidationError } from "./optimization/optimizeResume";
 export type { RequirementForPrompt, OptimizeResumeInput } from "./optimization/optimizeResume";
+export { applyDeterministicGuard, type AppliedBullet, type RejectedClaim, type GuardResult } from "./optimization/applyDeterministicGuard";

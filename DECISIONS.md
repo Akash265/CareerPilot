@@ -436,4 +436,14 @@ itself just these same table's ids, so nothing is gained by the extra hop.
 **Alternatives considered:** A single fixed pair of delimiters (insufficient, vulnerable to escape). A shared random delimiter for both blocks (rejected: if one must be regenerated for a future reason, the pair loses independence).
 **What it affects:** optimizeResume (Task 5), the evidence catalog framing in the prompt, any future task that frames untrusted input.
 
+---
+
+## 2026-09-23 — Phase 6 (ATS Resume Optimization) Task 6: applyDeterministicGuard
+
+### D63. The guard is the sole authority on hallucination; it validates every citation against the actual passed catalog
+**Decision:** `applyDeterministicGuard` (packages/resume-optimization/src/optimization/) is a pure, side-effect-free function that accepts a catalog and a draft from `optimizeResume`. Every citation's `sourceFactId` is looked up against the actual catalog passed to *this specific call* — not a cached list, not "looks plausible," but exact match via a `Map` keyed on the sourceFactId itself. If the id is not in the catalog, the claim is rejected into `rejectedClaims` with the reason "sourceFactId does not match any evidence item in this user's profile". The `originalText` is ALWAYS read from the catalog entry, never echoed back from the model; this makes subtle alterations detectable even when the model marked the change "unchanged".
+**Alternatives considered:** (1) Trusting the optimizer's own `unsupportedClaimsDetected` self-report — rejected outright per CLAUDE.md §6 and D61: AI outputs must be validated by code, not trusted linguistically. (2) Merging facts from profile_facts table to verify the catalog — rejected per D60: the catalog is built directly from the source tables (work_experiences, skills, etc.), and an indirection through profile_facts would bypass the guard's authority by making the lookup non-deterministic (facts could be stale, deleted, or embedded differently).
+**Why:** This is the single line of defense between a hallucinated resume claim ("I led 1000 engineers at Acme!") and the user seeing it as "applied" and safe to send to an ATS. The guard must be absolutely deterministic and must rely only on the specific catalog passed to it. No async I/O, no database reads, no caching, no model participation — just a pure `Map` lookup for each claim and assembly of the result.
+**What it affects:** Task 6 implementation; the interface contract between Task 5 (optimizeResume) and Task 9 (presentOptimizations); test fixtures and evidence in D62's prompt-framing decisions (both untrusted-content delimiters are validated by Task 5/6 behavior now, not just prompt instruction).
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
