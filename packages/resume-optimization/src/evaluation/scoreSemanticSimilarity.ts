@@ -12,7 +12,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
- * Pure in-memory cosine, not a pgvector `<=>` query (D63): both vectors are already in hand by the
+ * Pure in-memory cosine, not a pgvector `<=>` query (D64): both vectors are already in hand by the
  * time Task 11 calls this (job.embedding from the row it already fetched, the resume embedding from
  * one embedTexts call), so a second DB round trip would add nothing. Cosine is in [-1, 1]; clamped
  * to [0, 1] for the 0-100 scorecard percentage, same convention as matching's scoreSemantic.
