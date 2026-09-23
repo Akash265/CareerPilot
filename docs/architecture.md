@@ -61,7 +61,7 @@ Career Goal + Candidate Profile
         │
         ▼
 Deterministic Eligibility Filter   (disallowed countries, hard experience mismatch,
-        │                           already-applied/dismissed, onsite-when-remote-required)
+        │                           dismissed, onsite-when-remote-required)
         ▼
 Full-Text/Trigram Retrieval  +  pgvector Semantic Retrieval  (hybrid — neither alone is sufficient)
         │
