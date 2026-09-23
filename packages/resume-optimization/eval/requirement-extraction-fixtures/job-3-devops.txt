@@ -1,0 +1,3 @@
+DevOps Engineer. Required: hands-on Kubernetes and Docker experience, Terraform for infrastructure
+as code, and a CI/CD platform (GitHub Actions, CircleCI, or similar). A Certified Kubernetes
+Administrator (CKA) certification is preferred but not required.

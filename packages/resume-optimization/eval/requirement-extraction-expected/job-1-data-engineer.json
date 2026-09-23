@@ -1,0 +1,4 @@
+{
+  "expectedRequiredTerms": ["SQL", "Python", "cloud data warehouse"],
+  "expectedPreferredTerms": ["dbt", "Airflow", "AWS certification"]
+}

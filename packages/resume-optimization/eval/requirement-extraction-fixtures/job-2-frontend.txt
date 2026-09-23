@@ -1,0 +1,3 @@
+Frontend Engineer role. Must have strong React and TypeScript experience. You should be comfortable
+with modern CSS and responsive design. Preferred: experience with Next.js, familiarity with
+accessibility (a11y) best practices, and a Figma-adjacent design sense.

@@ -1,0 +1,3 @@
+We're hiring a Data Engineer. Requirements: 3+ years of SQL, experience with Python, and familiarity
+with a cloud data warehouse (BigQuery, Snowflake, or Redshift). Nice to have: experience with dbt,
+Airflow, or a similar orchestration tool. AWS certification is a bonus.

@@ -1,0 +1,15 @@
+{
+  "jobTitle": "Data Engineer",
+  "companyName": "Acme",
+  "requirements": [
+    { "termText": "SQL", "requirementLevel": "required" },
+    { "termText": "Python", "requirementLevel": "required" },
+    { "termText": "dbt", "requirementLevel": "preferred" }
+  ],
+  "catalog": [
+    { "sourceFactId": "b1", "sourceType": "work_experience_bullet", "text": "Built and maintained data pipelines processing 10M records daily", "context": "Globex — Data Engineer" },
+    { "sourceFactId": "b2", "sourceType": "work_experience_bullet", "text": "Wrote complex queries to aggregate customer analytics", "context": "Globex — Data Engineer" },
+    { "sourceFactId": "s1", "sourceType": "skill", "text": "Python", "context": null },
+    { "sourceFactId": "s2", "sourceType": "skill", "text": "SQL", "context": null }
+  ]
+}

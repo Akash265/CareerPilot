@@ -1,0 +1,4 @@
+{
+  "expectedRequiredTerms": ["Kubernetes", "Docker", "Terraform", "CI/CD"],
+  "expectedPreferredTerms": ["CKA", "Certified Kubernetes Administrator"]
+}
