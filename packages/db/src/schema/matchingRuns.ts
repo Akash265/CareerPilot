@@ -20,4 +20,11 @@ export const matchingRuns = pgTable("matching_runs", {
   jobsEvaluated: integer("jobs_evaluated").notNull().default(0),
   jobsEligible: integer("jobs_eligible").notNull().default(0),
   jobsExplained: integer("jobs_explained").notNull().default(0),
+  // Nullable: older rows (written before this column existed) and any run that skipped embedding
+  // entirely (e.g. zero candidate jobs) leave these null rather than reporting a false 0. Populated by
+  // ensureJobEmbeddings' per-chunk counts (packages/matching/src/embeddings/ensureJobEmbeddings.ts) so
+  // a degraded semantic-matching path (Voyage chunk failures) is visible in the run record, not just
+  // in logs.
+  jobsEmbedded: integer("jobs_embedded"),
+  jobsEmbeddingFailed: integer("jobs_embedding_failed"),
 });

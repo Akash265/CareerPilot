@@ -60,6 +60,8 @@ export interface MatchingRunSummary {
   jobsEvaluated: number;
   jobsEligible: number;
   jobsExplained: number;
+  jobsEmbedded: number;
+  jobsEmbeddingFailed: number;
 }
 
 interface ScoredJob {
@@ -94,7 +96,7 @@ export async function runMatching(db: DbClient, opts: RunMatchingOptions): Promi
     tx.insert(matchingRuns).values({ careerGoalId: goal.id, startedAt }).returning({ id: matchingRuns.id })
   );
 
-  const counters = { evaluated: 0, eligible: 0, explained: 0 };
+  const counters = { evaluated: 0, eligible: 0, explained: 0, embedded: 0, embeddingFailed: 0 };
   const finish = (status: "completed" | "failed", errorClass: MatchingErrorClass | null) =>
     inUserContext((tx) =>
       tx
@@ -106,6 +108,8 @@ export async function runMatching(db: DbClient, opts: RunMatchingOptions): Promi
           jobsEvaluated: counters.evaluated,
           jobsEligible: counters.eligible,
           jobsExplained: counters.explained,
+          jobsEmbedded: counters.embedded,
+          jobsEmbeddingFailed: counters.embeddingFailed,
         })
         .where(eq(matchingRuns.id, run.id))
     );
@@ -124,7 +128,9 @@ export async function runMatching(db: DbClient, opts: RunMatchingOptions): Promi
     const goalEmbedding = await inUserContext((tx) => ensureGoalEmbedding(tx, env, constraints.id));
 
     const initialRows = await inUserContext((tx) => fetchCandidateJobs(tx, goalEmbedding));
-    await inUserContext((tx) => ensureJobEmbeddings(tx, env, initialRows.map((r) => r.id)));
+    const embeddingResult = await inUserContext((tx) => ensureJobEmbeddings(tx, env, initialRows.map((r) => r.id)));
+    counters.embedded = embeddingResult.embedded;
+    counters.embeddingFailed = embeddingResult.failed;
     // Re-fetch so a job embedded just now is reflected in this run's semantic similarity.
     const rows = goalEmbedding ? await inUserContext((tx) => fetchCandidateJobs(tx, goalEmbedding)) : initialRows;
 
@@ -230,7 +236,16 @@ export async function runMatching(db: DbClient, opts: RunMatchingOptions): Promi
     }
 
     await finish("completed", null);
-    return { runId: run.id, status: "completed", errorClass: null, jobsEvaluated: counters.evaluated, jobsEligible: counters.eligible, jobsExplained: counters.explained };
+    return {
+      runId: run.id,
+      status: "completed",
+      errorClass: null,
+      jobsEvaluated: counters.evaluated,
+      jobsEligible: counters.eligible,
+      jobsExplained: counters.explained,
+      jobsEmbedded: counters.embedded,
+      jobsEmbeddingFailed: counters.embeddingFailed,
+    };
   } catch (error) {
     const failure = error instanceof MatchingError ? error : new MatchingError("unknown");
     await finish("failed", failure.errorClass).catch(() => undefined);
