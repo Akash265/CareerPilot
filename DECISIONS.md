@@ -403,6 +403,18 @@ An audit of Phase 3 against the original spec (§6.2, §19, §21), the approved 
 **Known asymmetry, accepted as-is:** unlike D56's job-embedding counts, no `jobsExplanationFailed`-style counter was added here, so a *permanent* Anthropic misconfiguration (an expired key, a malformed tool schema) now degrades every run silently — `status: completed`, `jobsExplained: 0`, no counter, no log line. This is exactly what the design spec asks for (never block the list), and the fix instruction scoped this decision to the error-catching behavior only; a visibility counter here would be a reasonable follow-up but was judged not to block this merge, since the ranked list itself is never wrong or incomplete as a result — only its narrative explanations are silently absent, which is directly observable by any user looking at the `/matches` page (each row's explanation summary is simply missing).
 **What it affects:** `packages/matching/src/pipeline/runMatching.ts`.
 
+### D58. job_requirements is a per-term cache, not a version history
+**Decision:** One row per extracted (termText, termType, requirementLevel) triple, keyed for staleness by extractionSourceDescriptionHash against jobs.descriptionHash (same pattern as jobs.embeddingContentHash). Re-extraction deletes and replaces every row for the job rather than versioning them, unlike resume_optimizations.
+**Alternatives considered:** Versioning job requirements alongside the optimizations, to preserve historical requirements per job.
+**Why:** this table exists only to feed the optimizer and the keyword-coverage scorer with the CURRENT description's terms -- there is no product need to know what a job used to require, and versioning it would need its own staleness and cleanup logic for no benefit.
+**What it affects:** `packages/db/src/schema/jobRequirements.ts`, `packages/resume-optimization/src/extraction/ensureJobRequirements.ts` (Task 3).
+
+### D59. resume_optimizations is versioned and never overwritten; ats_evaluations is 1:1 with it
+**Decision:** version increments per (user_id, job_id) under a unique index. A fresh evaluation always accompanies a fresh optimization (Task 11 writes both in one transaction), so there is never an ats_evaluations row scoring a stale optimization.
+**Alternatives considered:** Overwriting the previous optimization on regenerate (losing history); making evaluations independent of optimizations (risking data integrity).
+**Why:** design doc §1 decision 3 (manual "Regenerate," full history kept) needs an audit trail the job_requirements cache-replace pattern deliberately does not provide.
+**What it affects:** `packages/db/src/schema/resumeOptimizations.ts` and `atsEvaluations.ts` (Task 1), Task 6's stored AppliedBullet/RejectedClaim JSON, Task 11's write transaction.
+
 ---
 
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
