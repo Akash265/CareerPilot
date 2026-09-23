@@ -105,6 +105,19 @@ describe("runResumeOptimization", () => {
     expect((result.optimization.rejectedClaims as unknown[]).length).toBe(1);
   });
 
+  it("sets requiresReview from unsupportedClaimsDetected even when the model inconsistently self-reports requiresReview: false", async () => {
+    const { jobId } = await seedFixture();
+    vi.mocked(optimizeResume).mockResolvedValue({
+      selectedBullets: [], addedTerms: [],
+      unsupportedClaimsDetected: ["Claimed 10 years of Rust experience with no supporting evidence"],
+      requiresReview: false,
+    });
+
+    const result = await runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicClient: FAKE_CLIENT, env: ENV });
+
+    expect(result.optimization.requiresReview).toBe(true);
+  });
+
   it("leaves semanticSimilarity null and does not fail the run when Voyage fails transiently", async () => {
     const { jobId } = await seedFixture();
     vi.mocked(optimizeResume).mockResolvedValue({

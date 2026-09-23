@@ -135,7 +135,7 @@ export async function runResumeOptimization(
         selectedBullets: guardResult.appliedBullets,
         addedTerms: draft.addedTerms,
         unsupportedClaimsDetected: draft.unsupportedClaimsDetected,
-        requiresReview: draft.requiresReview || guardResult.rejectedClaims.length > 0,
+        requiresReview: draft.unsupportedClaimsDetected.length > 0 || guardResult.rejectedClaims.length > 0,
         rejectedClaims: guardResult.rejectedClaims,
         generationModel: env.ANTHROPIC_MODEL_FAST,
       })
