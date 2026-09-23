@@ -417,4 +417,12 @@ An audit of Phase 3 against the original spec (§6.2, §19, §21), the approved 
 
 ---
 
+### D60. The evidence catalog is built directly from the six profile tables, not via profile_facts
+**Decision:** buildResumeSnapshot reads work_experience_bullets/achievements/projects/certifications/education/
+skills directly; a catalog entry's sourceFactId is therefore always a real primary key in one of
+these tables. **Why:** profile_facts (Phase 2) mirrors the same data for embeddings, but going
+through it would make applyDeterministicGuard's (Task 6) verification an indirection through a
+second cache instead of a direct check against the source of truth -- and profile_facts.sourceId is
+itself just these same table's ids, so nothing is gained by the extra hop.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
