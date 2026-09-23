@@ -34,12 +34,18 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
 
   const nameLower = input.companyName.toLowerCase();
 
-  const excludedCompany = input.excludedCompanies.find((c) => nameLower.includes(c.toLowerCase()));
+  // A blank/whitespace-only entry would otherwise match every company ("anything".includes("") is
+  // always true in JS). The normal UI path (GoalReviewForm's nonEmpty() filter) already prevents this,
+  // but the Zod schema doesn't enforce it, so it's reachable via direct API use -- filter defensively.
+  const excludedCompanies = input.excludedCompanies.filter((c) => c.trim().length > 0);
+  const excludedIndustries = input.excludedIndustries.filter((term) => term.trim().length > 0);
+
+  const excludedCompany = excludedCompanies.find((c) => nameLower.includes(c.toLowerCase()));
   if (excludedCompany) {
     return { eligible: false, reason: `${input.companyName} matches "${excludedCompany}" on your excluded-companies list.` };
   }
 
-  const excludedIndustry = input.excludedIndustries.find((term) => nameLower.includes(term.toLowerCase()));
+  const excludedIndustry = excludedIndustries.find((term) => nameLower.includes(term.toLowerCase()));
   if (excludedIndustry) {
     return { eligible: false, reason: `${input.companyName} matches your excluded industry "${excludedIndustry}".` };
   }

@@ -48,7 +48,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ jo
       if (!existing) return NextResponse.json({ error: "Match not found" }, { status: 404 });
       const [updated] = await tx
         .update(schema.jobMatches)
-        .set({ userAction: parsed.data.userAction, userActionAt: new Date() })
+        .set({
+          userAction: parsed.data.userAction,
+          // job_matches.user_action_at is documented as null when user_action = 'none' (design doc §3).
+          userActionAt: parsed.data.userAction === "none" ? null : new Date(),
+        })
         .where(eq(schema.jobMatches.jobId, jobId))
         .returning();
       return NextResponse.json({ match: toMatchView(updated) });

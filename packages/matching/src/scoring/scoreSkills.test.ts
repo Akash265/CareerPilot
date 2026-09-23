@@ -33,4 +33,17 @@ describe("scoreSkills", () => {
     expect(result.score).toBeLessThanOrEqual(1);
     expect(result.score).toBeGreaterThanOrEqual(0);
   });
+
+  it("ignores blank/whitespace-only skill entries instead of letting them inflate the hit rate", () => {
+    // haystack.includes("") is always true in JS -- a blank entry must not count as a free "found".
+    const result = scoreSkills(["Python", "", "   "], "Engineer", "no matching skills here", null);
+    expect(result.matches).toEqual([{ skill: "Python", found: false }]);
+    expect(result.lexicalHitRate).toBe(0);
+  });
+
+  it("gives full credit when every skill entry is blank", () => {
+    const result = scoreSkills(["", "  "], "Engineer", "irrelevant text", null);
+    expect(result.score).toBe(1);
+    expect(result.matches).toEqual([]);
+  });
 });

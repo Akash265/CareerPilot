@@ -86,4 +86,13 @@ describe("evaluateEligibility", () => {
     expect(result.eligible).toBe(false);
     expect(result.reason).toMatch(/dismissed/i);
   });
+
+  it("ignores a blank entry in excludedCompanies instead of excluding every company", () => {
+    // "anything".includes("") is always true in JS -- a blank entry must not become a wildcard.
+    expect(evaluateEligibility({ ...base, excludedCompanies: ["", "   "] }).eligible).toBe(true);
+  });
+
+  it("ignores a blank entry in excludedIndustries instead of excluding every company", () => {
+    expect(evaluateEligibility({ ...base, excludedIndustries: ["", "\t"] }).eligible).toBe(true);
+  });
 });

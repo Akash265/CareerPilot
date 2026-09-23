@@ -22,7 +22,7 @@ export function MatchRow({
           <Link href={`/matches/${item.jobId}`} className="font-medium underline">{item.jobTitle}</Link>
           <p className="text-sm text-gray-600">{item.companyName} · {item.locationRaw ?? "Location unknown"} · {item.workMode}</p>
         </div>
-        {match.overallScore !== null && (
+        {match.eligible && match.overallScore !== null && (
           <span className="shrink-0 rounded bg-black px-2 py-1 text-sm font-semibold text-white">{match.overallScore}/100</span>
         )}
       </div>

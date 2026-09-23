@@ -12,7 +12,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint src eval",
     "eval:explanation": "dotenv -e ../../.env -- tsx eval/scoreExplanationEval.ts"
   },
   "dependencies": {

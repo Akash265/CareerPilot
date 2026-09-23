@@ -68,6 +68,22 @@ describe("PATCH /api/matches/[jobId]", () => {
     expect(row.userActionAt).not.toBeNull();
   });
 
+  it("nulls userActionAt when userAction is set back to 'none'", async () => {
+    const goalId = await insertCareerGoal(admin, USER);
+    const jobId = await insertJob(admin, USER);
+    await insertMatch(admin, USER, jobId, goalId);
+    await patch(jobId, { userAction: "dismissed" });
+
+    const res = await patch(jobId, { userAction: "none" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.match.userAction).toBe("none");
+
+    const db = createDbClient({ DATABASE_URL: process.env.TEST_APP_DATABASE_URL ?? "postgres://career_intel_app:career_intel_app@localhost:5432/career_intel_test" });
+    const [row] = await withUserContext(db, USER, (tx) => tx.select().from(schema.jobMatches).where(eq(schema.jobMatches.jobId, jobId)));
+    expect(row.userActionAt).toBeNull();
+  });
+
   it("answers 400 on an invalid userAction value", async () => {
     const goalId = await insertCareerGoal(admin, USER);
     const jobId = await insertJob(admin, USER);
