@@ -38,10 +38,10 @@ export async function buildResumeSnapshot(tx: DbClient): Promise<ResumeSnapshot>
     tx.select().from(workExperiences).orderBy(asc(workExperiences.displayOrder)),
     tx.select().from(workExperienceBullets).orderBy(asc(workExperienceBullets.displayOrder)),
     tx.select().from(achievements).orderBy(asc(achievements.displayOrder)),
-    tx.select().from(projects),
-    tx.select().from(certifications),
+    tx.select().from(projects).orderBy(asc(projects.displayOrder)),
+    tx.select().from(certifications).orderBy(asc(certifications.displayOrder)),
     tx.select().from(education).orderBy(asc(education.displayOrder)),
-    tx.select().from(skills),
+    tx.select().from(skills).orderBy(asc(skills.displayOrder)),
   ]);
 
   const experienceById = new Map(expRows.map((e) => [e.id, e]));
