@@ -752,3 +752,36 @@ Verified for real (see task-16-report.md): all four processes (fake Anthropic, j
 matching worker, web) running against a scratch database, with placeholder `VOYAGE_API_KEY` — the
 Voyage calls in 7b fail and degrade to a null embedding as designed, and the run still completes with
 real, schema-validated explanations from the fake Anthropic server.
+
+---
+
+## 8. Phase 6 — ATS Resume Optimization
+
+User clicks "Optimize Resume" on an eligible job's match detail page
+(`apps/web/src/app/matches/[jobId]/ResumeOptimizationPanel.tsx`)
+  -> `POST /api/resume-optimizations/[jobId]/run`
+     (`apps/web/src/app/api/resume-optimizations/[jobId]/run/route.ts`)
+  -> `runResumeOptimization` (`packages/resume-optimization/src/pipeline/runResumeOptimization.ts`)
+     1. Verify job_matches row exists and is eligible; verify an active confirmed career goal exists.
+     2. `ensureJobRequirements` -- cache hit (job.descriptionHash unchanged) or a fresh
+        `extractJobRequirements` Anthropic call, replacing `job_requirements` rows for the job.
+     3. `buildResumeSnapshot` -- reads work_experience_bullets/achievements/projects/certifications/
+        education/skills directly into the evidence catalog.
+     4. `optimizeResume` -- Anthropic tool-use call proposing selected/reworded bullets.
+     5. `applyDeterministicGuard` -- verifies every cited sourceFactId against the catalog from step 3;
+        anything not found is dropped into rejectedClaims, never treated as applied.
+     6. `evaluation/*` scorers (keyword coverage, semantic similarity via embedTexts + cosine,
+        factual consistency from the guard's tally, action-verb/readability heuristics) ->
+        `computeOverallScore`.
+     7. One transaction inserts `resume_optimizations` (versioned) and `ats_evaluations` (1:1).
+  -> Route serializes via `lib/resumeOptimization/serializeOptimization.ts`'s `toOptimizationView`,
+     returns 201.
+  -> Panel re-fetches `GET /api/resume-optimizations/[jobId]`
+     (`lib/resumeOptimization/listOptimizations.ts`) and renders the new version.
+
+Modifying the optimizer's prompt/schema: `packages/resume-optimization/src/optimization/optimizeResume.ts`
++ `optimizeResumeSchema.ts` (keep the tool's JSON schema in lockstep, per the
+`optimizeResume.test.ts` lockstep test's pattern). Modifying the guard's rules:
+`applyDeterministicGuard.ts` alone -- nothing upstream or downstream needs to change. Modifying the
+scorecard's weights: `packages/resume-optimization/src/types.ts`'s `EVALUATION_WEIGHTS`, bump
+`EVALUATOR_VERSION`.

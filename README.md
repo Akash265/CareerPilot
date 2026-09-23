@@ -107,7 +107,18 @@ semantic similarity, nine weighted match factors with an explainable
 per-factor breakdown, and AI
 match reasoning (top-ranked jobs only, evidence-grounded, never given raw
 job text) via a separate matching-worker. The home page links every step
-(/profile, /career-goal, /sources, /jobs, /matches). Not built yet: ATS
-resume optimization (Phase 6), structured job-requirement extraction, an
+(/profile, /career-goal, /sources, /jobs, /matches). Not built yet: an
 `industry` field (industry matching is a company-name heuristic), and
 auto-triggered recomputes.
+
+Phase 6 (ATS Resume Optimization) complete: structured job-requirement
+extraction cached per job (`job_requirements`), an evidence-bound resume
+optimizer whose selected/reworded bullets must each trace back to a real
+row in the candidate's own profile data (a deterministic guard, not the
+model's self-report, is the sole authority), and a deterministic ATS
+scorecard (`ats_evaluations`) covering keyword coverage, semantic
+similarity, factual consistency and action-verb/readability heuristics.
+Runs synchronously inside the API route -- no new worker. Available from
+the "Optimize Resume" button on a job's match detail page
+(`/matches/[jobId]`). `job_requirements` deliberately does not yet feed
+Phase 5's matching factors (see docs/architecture.md §13).
