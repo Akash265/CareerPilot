@@ -33,6 +33,7 @@ export function applyDeterministicGuard(catalog: EvidenceCatalogEntry[], draft: 
   const byId = new Map(catalog.map((entry) => [entry.sourceFactId, entry]));
   const appliedBullets: AppliedBullet[] = [];
   const rejectedClaims: RejectedClaim[] = [];
+  const seenFactIds = new Set<string>();
 
   for (const bullet of draft.selectedBullets) {
     const entry = byId.get(bullet.sourceFactId);
@@ -43,6 +44,17 @@ export function applyDeterministicGuard(catalog: EvidenceCatalogEntry[], draft: 
       });
       continue;
     }
+    // A duplicate citation is a real problem, not just a test-fixture artifact: it would produce two
+    // applied bullets sharing one sourceFactId, breaking the UI's `key={b.sourceFactId}` and skewing
+    // scoreActionVerbsAndReadability's denominators. Only the first citation of a given id is applied.
+    if (seenFactIds.has(bullet.sourceFactId)) {
+      rejectedClaims.push({
+        sourceFactId: bullet.sourceFactId,
+        reason: "sourceFactId was already cited by an earlier entry in this response",
+      });
+      continue;
+    }
+    seenFactIds.add(bullet.sourceFactId);
     appliedBullets.push({
       sourceFactId: entry.sourceFactId,
       sourceType: entry.sourceType,

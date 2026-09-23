@@ -63,4 +63,22 @@ describe("applyDeterministicGuard", () => {
     const result = applyDeterministicGuard([], draft([]));
     expect(result).toEqual({ appliedBullets: [], rejectedClaims: [] });
   });
+
+  it("rejects a repeated citation of a sourceFactId that was already applied, instead of applying it twice", () => {
+    const result = applyDeterministicGuard(
+      catalog,
+      draft([
+        { sourceFactId: "b1", optimizedText: "Built a SQL pipeline", changeType: "reworded", justification: "first citation" },
+        { sourceFactId: "b1", optimizedText: "Built an ETL pipeline", changeType: "reworded", justification: "second citation" },
+      ])
+    );
+    expect(result.appliedBullets).toHaveLength(1);
+    expect(result.appliedBullets[0]).toEqual({
+      sourceFactId: "b1", sourceType: "work_experience_bullet", originalText: "Built a data pipeline",
+      optimizedText: "Built a SQL pipeline", changeType: "reworded", justification: "first citation",
+    });
+    expect(result.rejectedClaims).toEqual([
+      { sourceFactId: "b1", reason: "sourceFactId was already cited by an earlier entry in this response" },
+    ]);
+  });
 });
