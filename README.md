@@ -102,8 +102,9 @@ behind a consent gate, a BullMQ ingestion worker, deterministic normalization
 deduplication and a Sources page and read-only Jobs browser.
 
 Phase 5 (Hybrid Matching) complete: deterministic eligibility filtering,
-PostgreSQL/pg_trgm lexical + pgvector semantic hybrid retrieval, nine
-weighted match factors with an explainable per-factor breakdown, and AI
+hybrid retrieval blending a JS-side lexical keyword hit-rate with pgvector
+semantic similarity, nine weighted match factors with an explainable
+per-factor breakdown, and AI
 match reasoning (top-ranked jobs only, evidence-grounded, never given raw
 job text) via a separate matching-worker. The home page links every step
 (/profile, /career-goal, /sources, /jobs, /matches). Not built yet: ATS
