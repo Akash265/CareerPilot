@@ -55,7 +55,7 @@ export function toMatchView(row: MatchRow): MatchView {
           semantic: pct(row.semanticScore),
         }
       : null,
-    explanation: (row.explanation as MatchExplanationView | null) ?? null,
+    explanation: row.eligible ? ((row.explanation as MatchExplanationView | null) ?? null) : null,
     userAction: row.userAction,
     computedAt: row.computedAt.toISOString(),
   };
