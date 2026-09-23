@@ -2507,7 +2507,6 @@ Run: `git add packages/resume-optimization DECISIONS.md && git commit -m "feat(r
 - Test: `apps/web/src/app/api/resume-optimizations/[jobId]/route.test.ts`
 - Create: `apps/web/src/app/api/resume-optimizations/[jobId]/run/route.ts`
 - Test: `apps/web/src/app/api/resume-optimizations/[jobId]/run/route.test.ts`
-- Modify: `apps/web/src/test/jobsDb.ts` (add `insertWorkExperienceBullet`, extend `wipeMatchingData`)
 - Modify: `apps/web/package.json` (add `@ai-career/resume-optimization` dependency)
 
 **Interfaces:**
@@ -2678,38 +2677,9 @@ export async function listOptimizations(tx: DbClient, jobId: string): Promise<Op
 }
 ```
 
-- [ ] **Step 7: Extend the test DB helpers**
+- [ ] **Step 7: Write the failing test for GET /api/resume-optimizations/[jobId]**
 
-Modify `apps/web/src/test/jobsDb.ts`, adding after `insertMatch`:
-
-```typescript
-export async function insertWorkExperienceBullet(adminSql: postgres.Sql, userId: string, text = "Built a data pipeline"): Promise<string> {
-  const [exp] = await adminSql`
-    INSERT INTO work_experiences (user_id, company, title, display_order) VALUES (${userId}, 'Acme', 'Engineer', 0) RETURNING id`;
-  const [bullet] = await adminSql`
-    INSERT INTO work_experience_bullets (user_id, work_experience_id, text, display_order)
-    VALUES (${userId}, ${exp.id}, ${text}, 0) RETURNING id`;
-  return bullet.id as string;
-}
-```
-
-Modify `wipeMatchingData` to also clean the new tables and the profile tables `insertWorkExperienceBullet` writes to:
-
-```typescript
-export async function wipeMatchingData(adminSql: postgres.Sql, userId: string): Promise<void> {
-  await adminSql`DELETE FROM ats_evaluations WHERE user_id = ${userId}`;
-  await adminSql`DELETE FROM resume_optimizations WHERE user_id = ${userId}`;
-  await adminSql`DELETE FROM job_requirements WHERE user_id = ${userId}`;
-  await adminSql`DELETE FROM job_matches WHERE user_id = ${userId}`;
-  await adminSql`DELETE FROM matching_runs WHERE user_id = ${userId}`;
-  await adminSql`DELETE FROM career_goals WHERE user_id = ${userId}`;
-  await adminSql`DELETE FROM work_experience_bullets WHERE user_id = ${userId}`;
-  await adminSql`DELETE FROM work_experiences WHERE user_id = ${userId}`;
-  await wipeJobData(adminSql, userId);
-}
-```
-
-- [ ] **Step 8: Write the failing test for GET /api/resume-optimizations/[jobId]**
+Note: `wipeMatchingData` (`apps/web/src/test/jobsDb.ts`) needs no changes for this task. `job_requirements` and `resume_optimizations` both have `ON DELETE CASCADE` on `job_id` (Task 1), and `ats_evaluations` cascades from `resume_optimizations` in turn — so `wipeJobData`'s existing `DELETE FROM jobs WHERE user_id = ...` (which `wipeMatchingData` already calls) cascades through all three new tables automatically. None of this task's tests reach far enough into the pipeline to write profile data (`work_experience_bullets` etc.) either, so no new seeding helper is needed here.
 
 ```typescript
 // apps/web/src/app/api/resume-optimizations/[jobId]/route.test.ts
@@ -2754,12 +2724,12 @@ describe("GET /api/resume-optimizations/[jobId]", () => {
 });
 ```
 
-- [ ] **Step 9: Run the test to verify it fails**
+- [ ] **Step 8: Run the test to verify it fails**
 
 Run: `pnpm --filter web test -- resume-optimizations`
 Expected: FAIL with a module-not-found error for `./route`.
 
-- [ ] **Step 10: Implement GET /api/resume-optimizations/[jobId]**
+- [ ] **Step 9: Implement GET /api/resume-optimizations/[jobId]**
 
 ```typescript
 // apps/web/src/app/api/resume-optimizations/[jobId]/route.ts
@@ -2785,12 +2755,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ job
 }
 ```
 
-- [ ] **Step 11: Run the test to verify it passes**
+- [ ] **Step 10: Run the test to verify it passes**
 
 Run: `pnpm --filter web test -- resume-optimizations`
 Expected: PASS (2 tests).
 
-- [ ] **Step 12: Write the failing test for POST /api/resume-optimizations/[jobId]/run**
+- [ ] **Step 11: Write the failing test for POST /api/resume-optimizations/[jobId]/run**
 
 ```typescript
 // apps/web/src/app/api/resume-optimizations/[jobId]/run/route.test.ts
@@ -2811,7 +2781,7 @@ vi.mock("@ai-career/config", () => ({
 }));
 
 // These 3 tests deliberately only exercise the pre-LLM error paths (below), so the Anthropic SDK is
-// never actually called and needs no mock here -- see the note after this test's Step 12 listing.
+// never actually called and needs no mock here -- see the note after this test's Step 11 listing.
 
 const USER = "00000000-0000-0000-0000-0000000000fb";
 let admin: postgres.Sql;
@@ -2852,12 +2822,12 @@ describe("POST /api/resume-optimizations/[jobId]/run", () => {
 
 Note: this test suite deliberately covers only the pre-LLM error paths (no active match / ineligible / bad id) without mocking the Anthropic SDK, since a real `ANTHROPIC_API_KEY` is not available in CI — the success path is covered by `runResumeOptimization.test.ts` (Task 11) with `optimizeResume` mocked, and manually/via eval (Task 14) against a real model.
 
-- [ ] **Step 13: Run the test to verify it fails**
+- [ ] **Step 12: Run the test to verify it fails**
 
 Run: `pnpm --filter web test -- resume-optimizations`
 Expected: FAIL with a module-not-found error for `./route` (the `run` subpath).
 
-- [ ] **Step 14: Implement POST /api/resume-optimizations/[jobId]/run**
+- [ ] **Step 13: Implement POST /api/resume-optimizations/[jobId]/run**
 
 ```typescript
 // apps/web/src/app/api/resume-optimizations/[jobId]/run/route.ts
@@ -2898,12 +2868,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ jo
 }
 ```
 
-- [ ] **Step 15: Run the test to verify it passes**
+- [ ] **Step 14: Run the test to verify it passes**
 
 Run: `pnpm --filter web test -- resume-optimizations`
 Expected: PASS (3 new tests, 5 total in this file group).
 
-- [ ] **Step 16: Commit**
+- [ ] **Step 15: Commit**
 
 ```bash
 git add apps/web

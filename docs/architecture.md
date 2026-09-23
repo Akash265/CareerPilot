@@ -1,6 +1,6 @@
 # Architecture — AI Career Intelligence & Application Platform
 
-Status: **Phases 0–5 are implemented** (foundation, candidate profile, career goal, job intelligence, hybrid matching); application generation onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
+Status: **Phases 0–6 are implemented** (foundation, candidate profile, career goal, job intelligence, hybrid matching, ATS resume optimization); application generation onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
 
 ## 1. Product framing
 
@@ -79,7 +79,7 @@ Ranking weights (initial, tunable, see spec §8): skills/requirements 30%, exper
 
 Salary and location values entering this pipeline are always deterministically parsed ([D6](../DECISIONS.md)) — the LLM never extracts or estimates numeric salary data.
 
-Implemented in Phase 5: eligibility (`packages/matching/src/eligibility`), hybrid retrieval (`packages/matching/src/retrieval/fetchCandidateJobs.ts` -- lexical keyword hit-rate computed in TS, semantic similarity via pgvector `<=>`), the nine weighted factors (`packages/matching/src/scoring`), and AI match reasoning bounded to the top `MATCHING_EXPLAIN_TOP_N` jobs per run (`packages/matching/src/explanation`). No structured `job_requirements` table exists yet -- skill matching reads `jobs.descriptionText` directly (D49); that extraction is Phase 6's job. See D49–D55.
+Implemented in Phase 5: eligibility (`packages/matching/src/eligibility`), hybrid retrieval (`packages/matching/src/retrieval/fetchCandidateJobs.ts` -- lexical keyword hit-rate computed in TS, semantic similarity via pgvector `<=>`), the nine weighted factors (`packages/matching/src/scoring`), and AI match reasoning bounded to the top `MATCHING_EXPLAIN_TOP_N` jobs per run (`packages/matching/src/explanation`). No structured `job_requirements` table feeds skill matching -- skill matching still reads `jobs.descriptionText` directly (D49); Phase 6 added `job_requirements` (`packages/resume-optimization`) but deliberately scoped it to the resume optimizer only, not to `scoreSkills` (design doc decision 2; D49's own "Phase 6 adds job_requirements as new data, not a replacement" anticipated exactly this boundary). See D49–D55, D58–D67.
 
 ## 5. Application generation & hallucination guardrail ([D5](../DECISIONS.md))
 
@@ -214,3 +214,38 @@ job_matches  (read by GET /api/matches, GET /api/matches/[jobId]; PATCH sets use
 - **Process model.** Mirrors D32: domain logic in `packages/matching`, `services/matching-worker` is BullMQ glue only. No compose service or Dockerfile (same as `job-ingestion`); started with `pnpm --filter @ai-career/matching-worker start`.
 - **Cost control.** Embeddings are permanent, content-hash-keyed caches (`jobs.embedding_content_hash`, mirrors `profile_facts`). Explanations are capped per run and invalidated only on real change, not a blind re-run (D54).
 - **Known gaps carried into Phase 6+.** No structured `industry` field, so industry preference/exclusion is a company-name-substring heuristic (weak signal, never a hard block on a non-match). "Already applied" is not an eligibility rule (no applications table until Phase 9). No auto-trigger on goal confirm or ingestion completion -- "Find Matches" is manual. `MATCHING_EXPLAIN_TOP_N`, `MATCHING_EXPERIENCE_GRACE_YEARS`, `MATCHING_FRESHNESS_HALF_LIFE_HOURS` are unmeasured starting defaults.
+
+## 13. ATS Resume Optimization (Phase 6)
+
+```
+job_matches (must be eligible) + an active, confirmed career goal
+  │
+  ▼
+ensureJobRequirements  -- cached per (job, jobs.description_hash); a stale/missing cache re-runs
+                           extractJobRequirements (Anthropic) and replaces job_requirements for the job
+  │
+  ▼
+buildResumeSnapshot  -- an evidence catalog assembled directly from work_experiences/bullets,
+                         achievements, projects, certifications, education and skills
+  │
+  ▼
+optimizeResume  (Anthropic tool-use)  -- proposes selected/reworded bullets citing catalog entries
+  │
+  ▼
+applyDeterministicGuard  -- the sole authority on hallucination: every cited source fact is checked
+                             against the catalog built above; anything unverifiable is dropped into
+                             rejectedClaims, never stored as an applied bullet
+  │
+  ▼
+evaluation/*  (keyword coverage, semantic similarity, factual consistency from the guard's own tally,
+               action-verb/readability heuristics) -> computeOverallScore
+  │
+  ▼
+one transaction: resume_optimizations (versioned, never overwritten) + ats_evaluations (1:1)
+```
+
+- **Package boundary.** All of the above lives in `packages/resume-optimization` (`requirements/`, `optimization/`, `evaluation/`, `pipeline/`), consumed by `apps/web`'s `POST /api/resume-optimizations/[jobId]/run` and `GET /api/resume-optimizations/[jobId]` routes and the `ResumeOptimizationPanel` on the job match detail page.
+- **Deterministic guard boundary.** `optimizeResume`'s prompt is instruction, not enforcement (D61); `applyDeterministicGuard` is the only code path allowed to mark a bullet as applied, and it is re-checked against the evidence catalog independently of anything the model claims about itself (D63) -- the model's own `unsupportedClaimsDetected` self-report is never trusted in place of it.
+- **Three new tables.** `job_requirements` (a per-term cache keyed by description hash, replaced wholesale on re-extraction -- D58), `resume_optimizations` (versioned per job, one row per "Optimize"/"Regenerate" -- D59), `ats_evaluations` (1:1 with an optimization, written in the same transaction -- D59/D66).
+- **Execution model.** Runs synchronously inside the API route -- no new BullMQ worker, unlike ingestion (D32) or matching (D50). It is a single user-triggered action on one job (not a batch job over many jobs), so there is nothing to hold a worker queue open for; extraction/optimization failures propagate to the route rather than being swallowed (D66).
+- Full rationale, alternatives considered, and the complete decision set: `docs/superpowers/specs/2026-09-23-phase-6-ats-resume-optimization-design.md` and DECISIONS.md D58–D67.

@@ -18,3 +18,6 @@ export * from "./jobPostings";
 export * from "./jobDuplicateCandidates";
 export * from "./jobMatches";
 export * from "./matchingRuns";
+export * from "./jobRequirements";
+export * from "./resumeOptimizations";
+export * from "./atsEvaluations";

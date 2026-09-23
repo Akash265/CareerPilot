@@ -403,6 +403,78 @@ An audit of Phase 3 against the original spec (§6.2, §19, §21), the approved 
 **Known asymmetry, accepted as-is:** unlike D56's job-embedding counts, no `jobsExplanationFailed`-style counter was added here, so a *permanent* Anthropic misconfiguration (an expired key, a malformed tool schema) now degrades every run silently — `status: completed`, `jobsExplained: 0`, no counter, no log line. This is exactly what the design spec asks for (never block the list), and the fix instruction scoped this decision to the error-catching behavior only; a visibility counter here would be a reasonable follow-up but was judged not to block this merge, since the ranked list itself is never wrong or incomplete as a result — only its narrative explanations are silently absent, which is directly observable by any user looking at the `/matches` page (each row's explanation summary is simply missing).
 **What it affects:** `packages/matching/src/pipeline/runMatching.ts`.
 
+### D58. job_requirements is a per-term cache, not a version history
+**Decision:** One row per extracted (termText, termType, requirementLevel) triple, keyed for staleness by extractionSourceDescriptionHash against jobs.descriptionHash (same pattern as jobs.embeddingContentHash). Re-extraction deletes and replaces every row for the job rather than versioning them, unlike resume_optimizations.
+**Alternatives considered:** Versioning job requirements alongside the optimizations, to preserve historical requirements per job.
+**Why:** this table exists only to feed the optimizer and the keyword-coverage scorer with the CURRENT description's terms -- there is no product need to know what a job used to require, and versioning it would need its own staleness and cleanup logic for no benefit.
+**What it affects:** `packages/db/src/schema/jobRequirements.ts`, `packages/resume-optimization/src/extraction/ensureJobRequirements.ts` (Task 3).
+
+### D59. resume_optimizations is versioned and never overwritten; ats_evaluations is 1:1 with it
+**Decision:** version increments per (user_id, job_id) under a unique index. A fresh evaluation always accompanies a fresh optimization (Task 11 writes both in one transaction), so there is never an ats_evaluations row scoring a stale optimization.
+**Alternatives considered:** Overwriting the previous optimization on regenerate (losing history); making evaluations independent of optimizations (risking data integrity).
+**Why:** design doc §1 decision 3 (manual "Regenerate," full history kept) needs an audit trail the job_requirements cache-replace pattern deliberately does not provide.
+**What it affects:** `packages/db/src/schema/resumeOptimizations.ts` and `atsEvaluations.ts` (Task 1), Task 6's stored AppliedBullet/RejectedClaim JSON, Task 11's write transaction.
+
 ---
+
+### D60. The evidence catalog is built directly from the six profile tables, not via profile_facts
+**Decision:** buildResumeSnapshot reads work_experience_bullets/achievements/projects/certifications/education/
+skills directly; a catalog entry's sourceFactId is therefore always a real primary key in one of
+these tables. **Why:** profile_facts (Phase 2) mirrors the same data for embeddings, but going
+through it would make applyDeterministicGuard's (Task 6) verification an indirection through a
+second cache instead of a direct check against the source of truth -- and profile_facts.sourceId is
+itself just these same table's ids, so nothing is gained by the extra hop.
+
+### D61. The optimizer prompt is instruction, not enforcement; applyDeterministicGuard is the actual authority (Task 6)
+**Decision:** optimizeResume's system prompt tells the model it may only cite catalog ids and must never invent a fact, but nothing in this task verifies that happened -- the guard does, in a separate step the model cannot influence.
+**Why:** CLAUDE.md §6 requires that AI outputs be validated, not linguistically trusted. The prompt's instructions are guidance; the deterministic guard (Task 6) is what's actually trusted.
+**What it affects:** Task 5 (optimizeResume), Task 6 (applyDeterministicGuard), the contract between them.
+
+### D62. Both the job context and the evidence catalog get their own untrusted-content delimiter
+**Decision:** Each of jobContext and the evidence catalog gets its own random per-request delimiter (e.g., `job_context_a1b2c3d4`, `evidence_catalog_e5f6g7h8`), not a single fixed delimiter or a shared one. CLAUDE.md §9 names resumes explicitly alongside job descriptions as content needing prompt-injection defense; the evidence catalog is the user's own data but was originally extracted from a resume, so it gets the same D20-style random delimiter as the job context block, not an exemption for "already reviewed once" in Phase 2.
+**Why:** Prompt-injection defense (D20 / §9) depends on delimiters being unguessable. A resume containing the literal string `</job_context>` could close that tag early and place attacker-controlled text outside the block the system prompt says to distrust -- the standard delimiter-escape bypass. Random, per-request tags prevent this.
+**Alternatives considered:** A single fixed pair of delimiters (insufficient, vulnerable to escape). A shared random delimiter for both blocks (rejected: if one must be regenerated for a future reason, the pair loses independence).
+**What it affects:** optimizeResume (Task 5), the evidence catalog framing in the prompt, any future task that frames untrusted input.
+
+---
+
+## 2026-09-23 — Phase 6 (ATS Resume Optimization) Task 6: applyDeterministicGuard
+
+### D63. The guard is the sole authority on hallucination; it validates every citation against the actual passed catalog
+**Decision:** `applyDeterministicGuard` (packages/resume-optimization/src/optimization/) is a pure, side-effect-free function that accepts a catalog and a draft from `optimizeResume`. Every citation's `sourceFactId` is looked up against the actual catalog passed to *this specific call* — not a cached list, not "looks plausible," but exact match via a `Map` keyed on the sourceFactId itself. If the id is not in the catalog, the claim is rejected into `rejectedClaims` with the reason "sourceFactId does not match any evidence item in this user's profile". The `originalText` is ALWAYS read from the catalog entry, never echoed back from the model; this makes subtle alterations detectable even when the model marked the change "unchanged".
+**Alternatives considered:** (1) Trusting the optimizer's own `unsupportedClaimsDetected` self-report — rejected outright per CLAUDE.md §6 and D61: AI outputs must be validated by code, not trusted linguistically. (2) Merging facts from profile_facts table to verify the catalog — rejected per D60: the catalog is built directly from the source tables (work_experiences, skills, etc.), and an indirection through profile_facts would bypass the guard's authority by making the lookup non-deterministic (facts could be stale, deleted, or embedded differently).
+**Why:** This is the single line of defense between a hallucinated resume claim ("I led 1000 engineers at Acme!") and the user seeing it as "applied" and safe to send to an ATS. The guard must be absolutely deterministic and must rely only on the specific catalog passed to it. No async I/O, no database reads, no caching, no model participation — just a pure `Map` lookup for each claim and assembly of the result.
+**What it affects:** Task 6 implementation; the interface contract between Task 5 (optimizeResume) and Task 9 (presentOptimizations); test fixtures and evidence in D62's prompt-framing decisions (both untrusted-content delimiters are validated by Task 5/6 behavior now, not just prompt instruction).
+
+## 2026-09-23 — Phase 6 (ATS Resume Optimization) Task 8: scoreSemanticSimilarity
+
+### D64. semantic similarity is a pure in-memory cosine over already-fetched vectors, and the optimized-resume embedding is computed once over the whole combined text.
+**Decision:** Task 11 embeds `appliedBullets.map(b => b.optimizedText).join("\n")` as a single embedTexts call rather than re-embedding only the bullets whose changeType is "reworded" and reusing profile_facts embeddings for the rest.
+**Alternatives considered:** (1) An incremental-reuse approach, re-embedding only bullets that changed and pulling cached embeddings from profile_facts for unchanged bullets. This was flagged in the design doc §10 as unmeasured.
+**Why:** The simpler whole-text approach is one Voyage call per optimization (bounded, user-triggered, same cost class as one embedTexts call in ensureGoalEmbedding) and is easier to reason about and test. A pure, in-memory cosine is used instead of a pgvector `<=>` query because both vectors are already in hand by the time Task 11 calls this (job.embedding from the row it already fetched, the resume embedding from one embedTexts call), so a second DB round trip would add nothing. Cosine is in [-1, 1]; clamped to [0, 1] for the 0-100 scorecard percentage, same convention as matching's scoreSemantic.
+**Revisit if:** Voyage cost/latency in practice justifies the incremental version.
+**What it affects:** Task 8 implementation (scoreSemanticSimilarity.ts), Task 11's embedding and scoring pipeline.
+
+## 2026-09-23 — Phase 6 (ATS Resume Optimization) Task 10: computeOverallScore
+
+### D65. EVALUATION_WEIGHTS puts the most weight on requiredKeywordCoverage (0.3) and factualConsistency (0.2), mirroring matching's pattern
+**Decision:** The weighted-sum scoring for ATS resume optimization (`computeOverallScore`) uses `EVALUATION_WEIGHTS: Record<keyof EvaluationScores, number>` with requiredKeywordCoverage at 0.3 and factualConsistency at 0.2, totaling 1.0 across six factors (preferredKeywordCoverage: 0.15, semanticSimilarity: 0.2, actionVerbScore: 0.075, machineReadabilityScore: 0.075). Weights are versioned via `EVALUATOR_VERSION = "v1"` (same shape as `packages/matching`'s `FACTOR_WEIGHTS`), treating them as unmeasured starting values subject to refinement via empirical evaluation once sample data exists.
+**Alternatives considered:** Equal weighting across all factors (rejected: loses the explicit priority signal from the spec); LLM-based weight learning during Phase 6 (rejected: too early — no labeled training set yet; Phase 6 produces the labeled data that would later support such tuning).
+**Why:** Required-term coverage is spec §10.2's own leading example metric for ATS optimization, and factual consistency is principle #6 ("never hallucinate") made measurable — both outrank the two heuristic-only factors (action verbs, readability). The weight-redistribution logic for null `semanticSimilarity` (per D5's requirement to never estimate missing data) ensures the score remains valid even when job embeddings are unavailable.
+**What it affects:** `packages/resume-optimization/src/types.ts` (`EVALUATOR_VERSION`, `EvaluationScores`, `EVALUATION_WEIGHTS`), `packages/resume-optimization/src/evaluation/computeOverallScore.ts` (weighted sum with null-factor handling), `packages/resume-optimization/src/index.ts` (exports).
+
+## 2026-09-23 — Phase 6 (ATS Resume Optimization) Task 11: runResumeOptimization
+
+### D66. runResumeOptimization writes resume_optimizations and ats_evaluations in one transaction, and does not swallow extraction/optimization errors
+**Decision:** Unlike runMatching's per-job "skip and keep going" rule, a failure anywhere in this single-job pipeline aborts the whole attempt — there is no batch to keep going through, and the write is atomic so a partial optimization row can never exist without its evaluation. **Why:** design doc §4 requires the two rows to always accompany each other; a single-job, user-triggered action has no meaningful "partial success" to report back.
+**What it affects:** `packages/resume-optimization/src/pipeline/runResumeOptimization.ts` (final `withUserContext` block wraps both inserts, itself already a `db.transaction`), `packages/resume-optimization/src/index.ts` (exports).
+
+**Note on decision numbering:** this entry is D66, not D65 — D65 was already used by Task 10's `computeOverallScore` entry above, so this continues the sequence from there rather than colliding with it.
+
+### D67. Task 11's test mocks `extractJobRequirements` directly (Task 3's own module), not only `optimizeResume`/`embedTexts`
+**Decision:** `runResumeOptimization.test.ts` mocks `../requirements/extractJobRequirements` (returning `{ requirements: [] }` by default in `beforeEach`), in addition to `optimizeResume` and `embedTexts`, using the identical technique `ensureJobRequirements.test.ts` (Task 3) already established.
+**Alternatives considered:** Seeding a fresh `job_requirements` row per test fixture so `ensureJobRequirements`'s freshness check (D58) short-circuits before calling `extractJobRequirements` — rejected as more fixture code for the same effect, and it would silently depend on `ensureJobRequirements`'s internal caching behavior rather than isolating this task's own new code.
+**Why:** `ensureJobRequirements` (Task 3) always calls the real `extractJobRequirements` when no fresh row exists for the job, and the test fixture seeds no `job_requirements` row. The provided `FAKE_CLIENT` (`{} as Pick<Anthropic, "messages">`) has no `messages` property, so an unmocked `extractJobRequirements` throws `TypeError: Cannot read properties of undefined (reading 'create')` on every test past the early-return eligibility checks. This was caught empirically: the pipeline as implemented (matching earlier tasks' modules exactly) fails 4 of 6 tests without this additional mock. It is a gap in the task brief's stated test file, not a signature mismatch in any Task 1-10 module — all of those matched the brief exactly.
+**What it affects:** `packages/resume-optimization/src/pipeline/runResumeOptimization.test.ts` only; no application code (`runResumeOptimization.ts`) was changed to accommodate this — it is purely a test-fixture completeness fix.
 
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

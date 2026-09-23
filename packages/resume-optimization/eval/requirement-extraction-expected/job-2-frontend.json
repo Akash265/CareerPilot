@@ -1,0 +1,4 @@
+{
+  "expectedRequiredTerms": ["React", "TypeScript", "CSS"],
+  "expectedPreferredTerms": ["Next.js", "accessibility", "Figma"]
+}

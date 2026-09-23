@@ -1,0 +1,14 @@
+{
+  "jobTitle": "Frontend Engineer",
+  "companyName": "Acme",
+  "requirements": [
+    { "termText": "React", "requirementLevel": "required" },
+    { "termText": "TypeScript", "requirementLevel": "required" },
+    { "termText": "accessibility", "requirementLevel": "preferred" }
+  ],
+  "catalog": [
+    { "sourceFactId": "b1", "sourceType": "work_experience_bullet", "text": "Built reusable UI components used across 5 product teams", "context": "Initech — Software Engineer" },
+    { "sourceFactId": "b2", "sourceType": "work_experience_bullet", "text": "Migrated a legacy JavaScript codebase to a typed language", "context": "Initech — Software Engineer" },
+    { "sourceFactId": "s1", "sourceType": "skill", "text": "React", "context": null }
+  ]
+}
