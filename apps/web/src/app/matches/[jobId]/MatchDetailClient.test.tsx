@@ -11,8 +11,16 @@ const match = {
   userAction: "none", computedAt: "2026-09-22T00:00:00Z",
 };
 
-function mockFetch(body: unknown, status = 200) {
-  vi.stubGlobal("fetch", vi.fn(async () => ({ ok: status < 400, status, json: async () => body }) as Response));
+function mockFetch(matchBody: unknown, matchStatus = 200) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url.includes("/api/resume-optimizations/")) {
+        return { ok: true, status: 200, json: async () => ({ optimizations: [] }) } as Response;
+      }
+      return { ok: matchStatus < 400, status: matchStatus, json: async () => matchBody } as Response;
+    })
+  );
 }
 beforeEach(() => vi.unstubAllGlobals());
 

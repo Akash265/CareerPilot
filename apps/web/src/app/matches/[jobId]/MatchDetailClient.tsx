@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ResumeOptimizationPanel } from "./ResumeOptimizationPanel";
 
 interface JobView {
   id: string;
@@ -119,6 +120,8 @@ export function MatchDetailClient({ jobId }: { jobId: string }) {
           )}
         </section>
       )}
+
+      {match.eligible && <ResumeOptimizationPanel jobId={jobId} />}
 
       <section aria-labelledby="description-heading">
         <h2 id="description-heading" className="mb-2 font-medium">Job description</h2>
