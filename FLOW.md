@@ -780,8 +780,9 @@ User clicks "Optimize Resume" on an eligible job's match detail page
      (`lib/resumeOptimization/listOptimizations.ts`) and renders the new version.
 
 Modifying the optimizer's prompt/schema: `packages/resume-optimization/src/optimization/optimizeResume.ts`
-+ `optimizeResumeSchema.ts` (keep the tool's JSON schema in lockstep, per the
-`optimizeResume.test.ts` lockstep test's pattern). Modifying the guard's rules:
++ `optimizeResumeSchema.ts` (unlike `extractJobRequirements`, there is currently no automated
+test asserting `optimizeResume`'s tool JSON schema stays in lockstep with `OptimizeResumeSchema`
+-- keep them manually in sync if you change one). Modifying the guard's rules:
 `applyDeterministicGuard.ts` alone -- nothing upstream or downstream needs to change. Modifying the
 scorecard's weights: `packages/resume-optimization/src/types.ts`'s `EVALUATION_WEIGHTS`, bump
 `EVALUATOR_VERSION`.
