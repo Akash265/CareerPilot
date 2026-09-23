@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { schema, withUserContext } from "@ai-career/db";
 import { openTestDb, wipeUser, type TestDb } from "../testing/db";
 import { runMatching, MatchingError } from "./runMatching";
@@ -24,6 +24,16 @@ const ENV = {
 
 function fakeAnthropic(explanation: unknown = { strongMatches: ["x"], partialMatches: [], gaps: [], summary: "s" }): Pick<Anthropic, "messages"> {
   return { messages: { create: async () => ({ content: [{ type: "tool_use", id: "t1", name: "record_match_explanation", input: explanation }] }) } as unknown as Anthropic["messages"] };
+}
+
+function erroringAnthropic(error: Error): Pick<Anthropic, "messages"> {
+  return {
+    messages: {
+      create: async () => {
+        throw error;
+      },
+    } as unknown as Anthropic["messages"],
+  };
 }
 
 beforeAll(async () => {
@@ -118,5 +128,31 @@ describe("runMatching", () => {
     const rows = await withUserContext(testDb.db, USER, (tx) => tx.select().from(schema.jobMatches));
     expect(rows[0].eligible).toBe(true);
     expect(rows[0].explanation).toBeNull();
+  });
+
+  it("does not fail the run when the explanation call throws a transient Anthropic API error -- the job keeps its scores", async () => {
+    await seedGoalAndProfile();
+    await seedJob({ title: "Data Engineer" });
+    const rateLimited = new Anthropic.RateLimitError(429, { type: "rate_limit_error", message: "slow down" }, "Rate limited", undefined);
+    const failingClient = erroringAnthropic(rateLimited);
+
+    const summary = await runMatching(testDb.db, { userId: USER, anthropicClient: failingClient, env: ENV });
+
+    expect(summary.status).toBe("completed");
+    expect(summary.jobsExplained).toBe(0);
+    const rows = await withUserContext(testDb.db, USER, (tx) => tx.select().from(schema.jobMatches));
+    expect(rows[0].eligible).toBe(true);
+    expect(rows[0].overallScore).not.toBeNull();
+    expect(rows[0].explanation).toBeNull();
+  });
+
+  it("still fails the run on a genuinely unexpected error from explanation generation", async () => {
+    await seedGoalAndProfile();
+    await seedJob({ title: "Data Engineer" });
+    const failingClient = erroringAnthropic(new TypeError("something the design doesn't anticipate"));
+
+    await expect(
+      runMatching(testDb.db, { userId: USER, anthropicClient: failingClient, env: ENV })
+    ).rejects.toMatchObject({ errorClass: "unknown" });
   });
 });

@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { evaluateEligibility } from "../eligibility/evaluateEligibility";
 import { scoreSkills } from "../scoring/scoreSkills";
@@ -228,10 +228,12 @@ export async function runMatching(db: DbClient, opts: RunMatchingOptions): Promi
         );
         counters.explained++;
       } catch (error) {
-        // A malformed response leaves the row's deterministic scores intact -- never blocks the run.
-        // Anything else (e.g. a network error) is unexpected and does fail the run, same as
-        // runIngestion's "anything not IngestError is wrapped as unknown" rule.
-        if (!(error instanceof MatchExplanationValidationError)) throw error;
+        // A malformed response (MatchExplanationValidationError) or a transient Anthropic API failure
+        // (rate limit, 5xx, network -- Anthropic.APIError) leaves the row's deterministic scores intact
+        // and moves on to the next job -- never blocks the run (design doc §4 step 6). Anything else is
+        // a genuine, unexpected bug and does fail the run, same as runIngestion's "anything not
+        // IngestError is wrapped as unknown" rule.
+        if (!(error instanceof MatchExplanationValidationError) && !(error instanceof Anthropic.APIError)) throw error;
       }
     }
 
