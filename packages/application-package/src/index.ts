@@ -21,3 +21,4 @@ export {
   runPitchGeneration, PitchGenerationError,
   type PitchGenerationErrorClass, type RunPitchGenerationEnv, type RunPitchGenerationOptions, type RunPitchGenerationResult,
 } from "./pipeline/runPitchGeneration";
+export { createEditedPitch, EditPitchBodySchema, PitchEditError, type EditPitchBody } from "./pipeline/createEditedPitch";

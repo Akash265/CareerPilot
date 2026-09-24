@@ -559,4 +559,10 @@ Files changed to satisfy the new types (all type-only, zero runtime behavior cha
 **Alternatives considered:** Researching first so the research is warm for later (rejected: spends money for users who cannot yet use it); a background worker (rejected, spec decision 6).
 **What it affects:** `packages/application-package/src/pipeline/{insertPitchVersion,runPitchGeneration}.ts`.
 
+### D77. A user edit is a new `user_edited` version that keeps the base's evidence but drops the guard verdict
+**Decision:** `createEditedPitch` validates `{ baseVersionId, bullets: [company, role, candidate] }` (strict; each trimmed, 1-600 chars, `hasUnsafeText`-clean), requires the base to belong to the same job (else `PitchEditError` → 400), and inserts the next version via the shared locked `insertPitchVersion` with `origin: user_edited`, `parentPitchId`, the base's research snapshot and evidence, `supported`/`unsupportedReason: null`, `requiresReview: false`, no model.
+**Why:** The guard's verdict applied to the model's wording; re-labeling the user's own wording as "supported" or "unsupported" would be false either way. Keeping the evidence preserves what the pitch was grounded in. Phase 9 can then link whichever version was actually sent.
+**Alternatives considered:** Editing in place (rejected: destroys the audit trail); re-running the guard on edited text (rejected: the guard checks citations, and a user edit has none of its own).
+**What it affects:** `packages/application-package/src/pipeline/createEditedPitch.ts`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
