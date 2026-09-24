@@ -54,8 +54,8 @@ export async function runCompanyResearch(
     (input.postingUrl ? `Job posting URL: ${input.postingUrl}\n` : "") +
     `</${delimiter}>`;
 
-  const tools: Anthropic.WebSearchTool20260209[] = [
-    { type: "web_search_20260209", name: "web_search", max_uses: env.COMPANY_RESEARCH_MAX_SEARCHES },
+  const tools: Anthropic.WebSearchTool20250305[] = [
+    { type: "web_search_20250305", name: "web_search", max_uses: env.COMPANY_RESEARCH_MAX_SEARCHES },
   ];
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
   const collected: Anthropic.ContentBlock[] = [];

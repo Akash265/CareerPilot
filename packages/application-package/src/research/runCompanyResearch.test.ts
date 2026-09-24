@@ -33,7 +33,7 @@ describe("runCompanyResearch", () => {
     const call = create.mock.calls[0][0];
     expect(Object.keys(call).sort()).toEqual(["max_tokens", "messages", "model", "system", "tools"]);
     expect(call.model).toBe("research-model");
-    expect(call.tools).toEqual([{ type: "web_search_20260209", name: "web_search", max_uses: 4 }]);
+    expect(call.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 4 }]);
     expect(call.messages).toHaveLength(1);
     const content = call.messages[0].content as string;
     expect(content).toMatch(/<company_[0-9a-f]{16}>/);
