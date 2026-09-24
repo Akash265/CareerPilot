@@ -13,6 +13,7 @@
     "db:generate:custom": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=candidate_profile_rls",
     "db:generate:custom:career-goal-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=career_goal_rls",
     "db:generate:custom:resume-optimization-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=resume_optimization_rls",
+    "db:generate:custom:application-package-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=application_package_rls",
     "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate"
   },
   "dependencies": {
