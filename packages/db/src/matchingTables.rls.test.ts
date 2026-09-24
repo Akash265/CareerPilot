@@ -20,6 +20,9 @@ const db = createDbClient({ DATABASE_URL: APP_URL });
 const USER_A = "00000000-0000-0000-0000-0000000000f5";
 const USER_B = "00000000-0000-0000-0000-0000000000f6";
 const TABLES = ["job_matches", "matching_runs"] as const;
+// Same lock id as every other suite's migrate(): parallel migrate() on an empty DB races
+// (packages/db/src/applicationPackageTables.rls.test.ts's beforeAll).
+const MIGRATION_LOCK = 7420001;
 
 async function wipe() {
   await adminSql`DELETE FROM job_matches WHERE user_id IN (${USER_A}, ${USER_B})`;
@@ -29,9 +32,16 @@ async function wipe() {
 }
 
 beforeAll(async () => {
-  await migrate(drizzle(adminSql), { migrationsFolder: MIGRATIONS_FOLDER });
-  await adminSql.unsafe("GRANT USAGE ON SCHEMA public TO career_intel_app");
-  await adminSql.unsafe("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO career_intel_app");
+  const lock = await adminSql.reserve();
+  try {
+    await lock`SELECT pg_advisory_lock(${MIGRATION_LOCK})`;
+    await migrate(drizzle(adminSql), { migrationsFolder: MIGRATIONS_FOLDER });
+    await adminSql.unsafe("GRANT USAGE ON SCHEMA public TO career_intel_app");
+    await adminSql.unsafe("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO career_intel_app");
+  } finally {
+    await lock`SELECT pg_advisory_unlock(${MIGRATION_LOCK})`;
+    lock.release();
+  }
   await wipe();
 });
 

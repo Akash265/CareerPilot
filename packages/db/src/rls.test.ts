@@ -49,38 +49,48 @@ const db = createDbClient({ DATABASE_URL: APP_DATABASE_URL });
 
 const USER_A = "00000000-0000-0000-0000-00000000000a";
 const USER_B = "00000000-0000-0000-0000-00000000000b";
+// Same lock id as every other suite's migrate(): parallel migrate() on an empty DB races
+// (packages/db/src/applicationPackageTables.rls.test.ts's beforeAll).
+const MIGRATION_LOCK = 7420001;
 
 beforeAll(async () => {
-  // Apply the actual shipped migrations to the test database. This is what
-  // makes this test a genuine regression test for
-  // packages/db/migrations/0001_users_rls.sql's real policy
-  // (`id = current_setting('app.current_user_id')::uuid`) against the real
-  // `users` table shape (packages/db/src/schema/users.ts) -- not a
-  // hand-rolled table with a different column/policy shape that would prove
-  // nothing about the artifact actually being shipped.
-  await migrate(adminDb, { migrationsFolder: MIGRATIONS_FOLDER });
+  const lock = await adminSql.reserve();
+  try {
+    await lock`SELECT pg_advisory_lock(${MIGRATION_LOCK})`;
+    // Apply the actual shipped migrations to the test database. This is what
+    // makes this test a genuine regression test for
+    // packages/db/migrations/0001_users_rls.sql's real policy
+    // (`id = current_setting('app.current_user_id')::uuid`) against the real
+    // `users` table shape (packages/db/src/schema/users.ts) -- not a
+    // hand-rolled table with a different column/policy shape that would prove
+    // nothing about the artifact actually being shipped.
+    await migrate(adminDb, { migrationsFolder: MIGRATIONS_FOLDER });
 
-  // Idempotently (re-)provision the least-privilege role used to prove
-  // isolation, explicit about every attribute (matching init.sql) so a
-  // pre-existing role -- created by hand, or by a future infra change --
-  // can never silently leave this role with elevated privileges.
-  await adminSql.unsafe(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN
-        CREATE ROLE ${APP_ROLE} WITH LOGIN PASSWORD '${APP_ROLE_PASSWORD}'
-          NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-      ELSE
-        ALTER ROLE ${APP_ROLE} WITH LOGIN PASSWORD '${APP_ROLE_PASSWORD}'
-          NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-      END IF;
-    END
-    $$;
-  `);
-  await adminSql.unsafe(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
-  await adminSql.unsafe(
-    `GRANT SELECT, INSERT, UPDATE, DELETE ON users TO ${APP_ROLE}`
-  );
+    // Idempotently (re-)provision the least-privilege role used to prove
+    // isolation, explicit about every attribute (matching init.sql) so a
+    // pre-existing role -- created by hand, or by a future infra change --
+    // can never silently leave this role with elevated privileges.
+    await adminSql.unsafe(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN
+          CREATE ROLE ${APP_ROLE} WITH LOGIN PASSWORD '${APP_ROLE_PASSWORD}'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+        ELSE
+          ALTER ROLE ${APP_ROLE} WITH LOGIN PASSWORD '${APP_ROLE_PASSWORD}'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+        END IF;
+      END
+      $$;
+    `);
+    await adminSql.unsafe(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
+    await adminSql.unsafe(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON users TO ${APP_ROLE}`
+    );
+  } finally {
+    await lock`SELECT pg_advisory_unlock(${MIGRATION_LOCK})`;
+    lock.release();
+  }
 
   // Guard rail: fail loudly, before running any isolation assertion, if the
   // role this test depends on ever ends up with elevated privileges. If this

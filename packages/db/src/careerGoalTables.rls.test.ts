@@ -27,13 +27,23 @@ const db = createDbClient({ DATABASE_URL: APP_DATABASE_URL });
 
 const USER_A = "00000000-0000-0000-0000-00000000000d";
 const USER_B = "00000000-0000-0000-0000-00000000000e";
+// Same lock id as every other suite's migrate(): parallel migrate() on an empty DB races
+// (packages/db/src/applicationPackageTables.rls.test.ts's beforeAll).
+const MIGRATION_LOCK = 7420001;
 
 beforeAll(async () => {
-  await migrate(adminDb, { migrationsFolder: MIGRATIONS_FOLDER });
-  await adminSql.unsafe(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
-  await adminSql.unsafe(
-    `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`
-  );
+  const lock = await adminSql.reserve();
+  try {
+    await lock`SELECT pg_advisory_lock(${MIGRATION_LOCK})`;
+    await migrate(adminDb, { migrationsFolder: MIGRATIONS_FOLDER });
+    await adminSql.unsafe(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
+    await adminSql.unsafe(
+      `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`
+    );
+  } finally {
+    await lock`SELECT pg_advisory_unlock(${MIGRATION_LOCK})`;
+    lock.release();
+  }
   // Scoped to this file's own USER_A/USER_B (rather than a blanket DELETE)
   // because turbo/vitest run packages/db and apps/web's test suites
   // concurrently against the same shared local/CI test database -- an
