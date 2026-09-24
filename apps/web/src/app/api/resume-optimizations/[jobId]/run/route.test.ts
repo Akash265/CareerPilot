@@ -9,6 +9,7 @@ vi.mock("@ai-career/config", () => ({
     DATABASE_URL: process.env.TEST_APP_DATABASE_URL ?? "postgres://career_intel_app:career_intel_app@localhost:5432/career_intel_test",
     ANTHROPIC_API_KEY: "sk-ant-test",
     ANTHROPIC_MODEL_FAST: "test-model",
+    ANTHROPIC_MODEL_RESEARCH: "test-model",
     EMBEDDING_PROVIDER: "voyage",
     VOYAGE_API_KEY: "voyage-test",
     VOYAGE_EMBEDDING_MODEL: "voyage-3.5",

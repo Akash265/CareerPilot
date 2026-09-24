@@ -19,6 +19,9 @@ const envSchema = z
     EMBEDDING_PROVIDER: z.enum(["voyage", "self-hosted"]),
     VOYAGE_API_KEY: z.string().min(1).optional(),
     ANTHROPIC_MODEL_FAST: z.string().min(1),
+    // Phase 7a company research. A separate role/tier (D7): the current web search tool version
+    // (web_search_20260209) is not supported on the fast-tier Haiku model.
+    ANTHROPIC_MODEL_RESEARCH: z.string().min(1),
     VOYAGE_EMBEDDING_MODEL: z.string().min(1),
     // Phase 4 ingestion. The API bases are operator-controlled (never user
     // input), which is what keeps the adapters SSRF-safe; overriding them is how
@@ -31,6 +34,8 @@ const envSchema = z
     MATCHING_EXPERIENCE_GRACE_YEARS: z.coerce.number().min(0).max(10).default(1),
     MATCHING_FRESHNESS_HALF_LIFE_HOURS: z.coerce.number().min(1).default(168),
     MATCHING_EXPLANATION_TTL_DAYS: z.coerce.number().min(1).default(7),
+    // Phase 7a: web searches allowed per company-research call (the tool's max_uses). Bounds cost.
+    COMPANY_RESEARCH_MAX_SEARCHES: z.coerce.number().int().min(1).max(20).default(5),
   })
   .superRefine((val, ctx) => {
     if (val.EMBEDDING_PROVIDER === "voyage" && !val.VOYAGE_API_KEY) {

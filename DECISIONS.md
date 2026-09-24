@@ -517,4 +517,10 @@ Files changed to satisfy the new types (all type-only, zero runtime behavior cha
 
 **What it affects:** the four package.json files, `pnpm-lock.yaml`, the five type-only source files listed above.
 
+### D70. Company research runs on a new `ANTHROPIC_MODEL_RESEARCH` tier, bounded by `COMPANY_RESEARCH_MAX_SEARCHES`
+**Decision:** A third role-based model setting, required like `ANTHROPIC_MODEL_FAST` (no hardcoded default in code, per D7); `.env.example` and CI use `claude-sonnet-5`. `COMPANY_RESEARCH_MAX_SEARCHES` (int 1-20, default 5) becomes the web search tool's `max_uses`.
+**Why:** `web_search_20260209` (dynamic filtering) requires a Sonnet/Opus 4.6-generation-or-later model; the fast tier is Haiku 4.5, which only supports the older basic tool. The pitch itself stays on the fast tier (architecture doc §7).
+**Alternatives considered:** Running research on the fast tier with `web_search_20250305` (rejected: older tool, no dynamic filtering, weaker results for the one call whose output quality the pitch depends on); a code-level default model string (rejected: D7).
+**What it affects:** `packages/config/src/env.ts`, `.env.example`, `.github/workflows/ci.yml`; every developer's local `.env` needs the new line.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

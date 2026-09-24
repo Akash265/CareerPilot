@@ -14,6 +14,7 @@ const validSource = {
   EMBEDDING_PROVIDER: "voyage",
   VOYAGE_API_KEY: "voyage-test-key",
   ANTHROPIC_MODEL_FAST: "claude-haiku-4-5-20251001",
+  ANTHROPIC_MODEL_RESEARCH: "claude-sonnet-5",
   VOYAGE_EMBEDDING_MODEL: "voyage-3.5",
 };
 
@@ -63,6 +64,21 @@ describe("loadEnv", () => {
   it("rejects a missing ANTHROPIC_MODEL_FAST", () => {
     const { ANTHROPIC_MODEL_FAST, ...rest } = validSource;
     expect(() => loadEnv(rest)).toThrow(/ANTHROPIC_MODEL_FAST/);
+  });
+
+  it("rejects a missing ANTHROPIC_MODEL_RESEARCH", () => {
+    const { ANTHROPIC_MODEL_RESEARCH, ...rest } = validSource;
+    expect(() => loadEnv(rest)).toThrow(/ANTHROPIC_MODEL_RESEARCH/);
+  });
+
+  it("defaults COMPANY_RESEARCH_MAX_SEARCHES to 5", () => {
+    expect(loadEnv(validSource).COMPANY_RESEARCH_MAX_SEARCHES).toBe(5);
+  });
+
+  it("coerces COMPANY_RESEARCH_MAX_SEARCHES and rejects values outside 1-20", () => {
+    expect(loadEnv({ ...validSource, COMPANY_RESEARCH_MAX_SEARCHES: "3" }).COMPANY_RESEARCH_MAX_SEARCHES).toBe(3);
+    expect(() => loadEnv({ ...validSource, COMPANY_RESEARCH_MAX_SEARCHES: "0" })).toThrow(/COMPANY_RESEARCH_MAX_SEARCHES/);
+    expect(() => loadEnv({ ...validSource, COMPANY_RESEARCH_MAX_SEARCHES: "21" })).toThrow(/COMPANY_RESEARCH_MAX_SEARCHES/);
   });
 
   it("rejects a missing VOYAGE_EMBEDDING_MODEL", () => {
