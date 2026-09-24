@@ -21,7 +21,8 @@ const envSchema = z
     ANTHROPIC_MODEL_FAST: z.string().min(1),
     // Phase 7a company research. A separate role/tier (D7): research uses the basic
     // `web_search_20250305` tool (D79 -- the newer 20260209 tool's dynamic filtering strips
-    // citations, producing 0 facts), which is not supported on the fast-tier Haiku model.
+    // citations, producing 0 facts). A separate tier is kept for research quality, not because
+    // the fast-tier Haiku model can't run this tool -- it can.
     ANTHROPIC_MODEL_RESEARCH: z.string().min(1),
     VOYAGE_EMBEDDING_MODEL: z.string().min(1),
     // Phase 4 ingestion. The API bases are operator-controlled (never user
