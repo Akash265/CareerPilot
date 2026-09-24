@@ -12,7 +12,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src"
+    "lint": "eslint src eval",
+    "eval:pitch": "dotenv -e ../../.env -- tsx eval/scorePitchGroundingEval.ts",
+    "eval:research": "dotenv -e ../../.env -- tsx eval/researchSmokeEval.ts"
   },
   "dependencies": {
     "@ai-career/ai": "workspace:*",
