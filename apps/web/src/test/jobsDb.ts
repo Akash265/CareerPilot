@@ -41,6 +41,8 @@ export async function wipeMatchingData(adminSql: postgres.Sql, userId: string): 
   await adminSql`DELETE FROM job_matches WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM matching_runs WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM career_goals WHERE user_id = ${userId}`;
+  // Phase 7a: company_research is keyed by company, not job, so it does not cascade from jobs.
+  await adminSql`DELETE FROM company_research WHERE user_id = ${userId}`;
   await wipeJobData(adminSql, userId);
 }
 
@@ -151,6 +153,54 @@ export async function insertPosting(
     INSERT INTO job_postings (user_id, job_id, source_id, external_id, url, fingerprint, content_hash, normalized, status, first_seen_at, last_seen_at)
     VALUES (${userId}, ${jobId}, ${sourceId}, ${externalId}, ${opts.url ?? null}, ${"fp-" + externalId}, 'h', '{}'::jsonb,
             ${opts.status ?? "open"}, ${opts.firstSeenAt ?? "2026-09-01T00:00:00Z"}::timestamptz, '2026-09-02T00:00:00Z'::timestamptz)
+    RETURNING id`;
+  return row.id as string;
+}
+
+export const DEFAULT_PITCH_BULLETS = [
+  { kind: "company", text: "Acme's rocket work matches my interests.", supported: true, unsupportedReason: null,
+    evidence: [{ id: "r:1", kind: "research", text: "Acme builds rockets.", sourceUrl: "https://acme.example" }] },
+  { kind: "role", text: "The role centres on SQL.", supported: true, unsupportedReason: null,
+    evidence: [{ id: "q:1", kind: "requirement", text: "[required] SQL", sourceUrl: null }] },
+  { kind: "candidate", text: "I built SQL pipelines.", supported: true, unsupportedReason: null,
+    evidence: [{ id: "p:1", kind: "profile", text: "Built SQL pipelines", sourceUrl: null }] },
+];
+
+export async function insertCompanyResearch(
+  adminSql: postgres.Sql,
+  userId: string,
+  opts: {
+    companyKey?: string;
+    companyName?: string;
+    status?: "ok" | "no_results" | "failed";
+    facts?: { sourceKind?: "web" | "internal"; factText: string; sourceUrl?: string | null; sourceTitle?: string | null }[];
+  } = {}
+): Promise<string> {
+  const [row] = await adminSql`
+    INSERT INTO company_research (user_id, company_key, company_name, status, research_model, search_count, researched_at)
+    VALUES (${userId}, ${opts.companyKey ?? "acme"}, ${opts.companyName ?? "Acme"}, ${opts.status ?? "ok"}, 'test-model', 1, now())
+    RETURNING id`;
+  for (const [i, f] of (opts.facts ?? []).entries()) {
+    await adminSql`
+      INSERT INTO company_research_facts (user_id, research_id, source_kind, fact_text, source_url, source_title, display_order)
+      VALUES (${userId}, ${row.id}, ${f.sourceKind ?? "web"}, ${f.factText}, ${f.sourceUrl ?? null}, ${f.sourceTitle ?? null}, ${i})`;
+  }
+  return row.id as string;
+}
+
+export async function insertPitch(
+  adminSql: postgres.Sql,
+  userId: string,
+  jobId: string,
+  opts: { version?: number; origin?: "generated" | "user_edited"; companyResearchId?: string | null; requiresReview?: boolean; bullets?: object[] } = {}
+): Promise<string> {
+  const origin = opts.origin ?? "generated";
+  const [row] = await adminSql`
+    INSERT INTO application_pitches (user_id, job_id, version, origin, company_research_id, research_status_snapshot,
+                                     researched_at_snapshot, bullets, requires_review, generation_model)
+    VALUES (${userId}, ${jobId}, ${opts.version ?? 1}, ${origin}, ${opts.companyResearchId ?? null}, 'ok', now(),
+            ${JSON.stringify(opts.bullets ?? DEFAULT_PITCH_BULLETS)}::jsonb, ${opts.requiresReview ?? false},
+            ${origin === "generated" ? "test-model" : null})
     RETURNING id`;
   return row.id as string;
 }

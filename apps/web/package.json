@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@ai-career/ai": "workspace:*",
+    "@ai-career/application-package": "workspace:*",
     "@ai-career/config": "workspace:*",
     "@ai-career/db": "workspace:*",
     "@ai-career/ingestion": "workspace:*",

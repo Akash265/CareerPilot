@@ -20,6 +20,9 @@ importers:
       '@ai-career/ai':
         specifier: workspace:*
         version: link:../../packages/ai
+      '@ai-career/application-package':
+        specifier: workspace:*
+        version: link:../../packages/application-package
       '@ai-career/config':
         specifier: workspace:*
         version: link:../../packages/config
