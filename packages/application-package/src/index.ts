@@ -15,3 +15,4 @@ export {
 } from "./pitch/buildEvidenceIndex";
 export { PitchDraftSchema, PitchDraftBulletSchema, type PitchDraft, type PitchDraftBullet } from "./pitch/pitchSchema";
 export { generatePitch, PitchGenerationValidationError, type GeneratePitchInput } from "./pitch/generatePitch";
+export { applyPitchGuard, REQUIRED_EVIDENCE_KIND, type PitchGuardResult } from "./pitch/applyPitchGuard";

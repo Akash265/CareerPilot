@@ -547,4 +547,10 @@ Files changed to satisfy the new types (all type-only, zero runtime behavior cha
 **Alternatives considered:** A per-company advisory lock around the whole call (rejected: holds a lock/connection across the network call); caching `failed` rows like any other (rejected: one outage would stick for that company until a manual refresh); re-reading `existing` a second time just before the write without `setWhere` (rejected: still a race between that second read and the write — only a database-enforced condition inside the same statement is actually atomic).
 **What it affects:** `packages/application-package/src/research/ensureCompanyResearch.ts`, `src/testing/*`.
 
+### D75. Pitch grounding: each bullet must cite existing evidence of its own kind; failures are flagged, never dropped
+**Decision:** `applyPitchGuard` resolves every cited id against the evidence index passed to that call (ids prefixed `r:` research / `q:` requirement / `p:` profile), rejects repeated ids, and requires the company bullet to cite ≥1 `r:`, the role bullet ≥1 `q:`, the candidate bullet ≥1 `p:`. A failing bullet keeps its text with `supported: false` and a reason (model-supplied ids quoted and capped at 60 chars). Evidence text is snapshotted from the index, never from the model. `requiresReview = anyUnsupported || draft.requiresReview`.
+**Why:** Same principle as D61/D63 — the prompt asks, the guard enforces. Dropping a failing bullet would silently produce a two-bullet pitch; flagging lets the user see and edit it. The duplicate-id rule carries forward Phase 6's final-review finding.
+**Alternatives considered:** A second LLM entailment check per bullet (rejected for the same reason as Phase 6 decision 4: extra cost, and a model grading a model is not a deterministic guarantee); dropping unsupported bullets (rejected above).
+**What it affects:** `packages/application-package/src/pitch/applyPitchGuard.ts`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
