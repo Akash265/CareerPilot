@@ -131,5 +131,6 @@ versioned and editable. Requires `ANTHROPIC_MODEL_RESEARCH` in `.env`
 (see `.env.example`).
 
 **Upgrading an existing checkout:** `ANTHROPIC_MODEL_RESEARCH` is required
-by `loadEnv` — without it the web app, both workers and `db:migrate` all
-fail to start. Add `ANTHROPIC_MODEL_RESEARCH=claude-sonnet-5` to `.env`.
+by `loadEnv` — without it, every web API route returns a 500 (the app itself
+starts), and both workers and `db:migrate` fail to start. Add
+`ANTHROPIC_MODEL_RESEARCH=claude-sonnet-5` to `.env`.
