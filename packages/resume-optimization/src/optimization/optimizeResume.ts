@@ -25,7 +25,7 @@ const OPTIMIZE_TOOL_INPUT_SCHEMA = {
     unsupportedClaimsDetected: { type: "array", items: { type: "string" } },
     requiresReview: { type: "boolean" },
   },
-  required: ["selectedBullets", "addedTerms", "unsupportedClaimsDetected", "requiresReview"],
+  required: ["selectedBullets", "addedTerms", "unsupportedClaimsDetected", "requiresReview"] as string[],
 } as const;
 
 export class OptimizeResumeValidationError extends Error {}

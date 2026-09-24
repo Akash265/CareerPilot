@@ -499,4 +499,22 @@ itself just these same table's ids, so nothing is gained by the extra hop.
 
 **What it affects:** `packages/db/src/schema/atsEvaluations.ts`, `packages/db/migrations/0016_rare_sharon_ventura.sql`, `packages/resume-optimization/src/pipeline/runResumeOptimization.ts`, `packages/resume-optimization/src/optimization/buildResumeSnapshot.ts` (+ its test), `apps/web/src/app/matches/[jobId]/ResumeOptimizationPanel.test.tsx`, `DECISIONS.md` (D58/D63 citation fixes, this entry), `packages/resume-optimization/eval/` (2 files deleted).
 
+### D69. `@anthropic-ai/sdk` upgraded from ^0.32.1 to ^0.128.0 before any Phase 7a code
+**Decision:** All four consumers (`packages/ai`, `packages/matching`, `packages/resume-optimization`, `services/matching-worker`) move to ^0.128.0 in one isolated change, verified by the full test suite (identical per-package counts before/after: config 12, storage 1, ai 137, matching-worker 2, job-ingestion 10, db 19, resume-optimization 64, web 294, matching 95, ingestion 331 — 10/10 packages green) and by re-running all five real-model evals:
+- Resume extraction (`eval:accuracy`): 97% (baseline ≈97%).
+- Career-goal parsing (`eval:career-goal-accuracy`): 96% (baseline ≈96%).
+- Match explanation (`eval:explanation`): 100% (baseline 100%).
+- Requirement-extraction recall (`eval:requirements`): 86-94% across 5 runs on the new SDK vs 96-100% across 3 runs on the old SDK; request bodies verified byte-identical between versions (modulo the random delimiter) with a local echo server, so the spread is sampling variance on a 3-fixture eval, not an SDK effect.
+- Optimization citation guard (`eval:optimization`): 0 legitimate citations rejected on both fixtures (baseline 0).
+
+Files changed to satisfy the new types (all type-only, zero runtime behavior change — no prompt, model name, `tool_choice`, or `max_tokens` was touched):
+- `packages/ai/src/extractCareerGoal.ts`, `packages/ai/src/extractProfile.ts`, `packages/matching/src/explanation/generateMatchExplanation.ts`, `packages/resume-optimization/src/optimization/optimizeResume.ts`, `packages/resume-optimization/src/requirements/extractJobRequirements.ts` — each tool's top-level `input_schema.required` array is `as const`-inferred to a readonly tuple, but the new SDK's `Tool.InputSchema.required` type is a mutable `Array<string> | null` and is checked strictly (nested schema `properties` are typed `unknown`, so only the outermost `required` array is actually type-checked); added `as string[]` to each outermost `required` array only, leaving the surrounding `as const` intact.
+- `packages/matching/src/pipeline/runMatching.test.ts` — `new Anthropic.RateLimitError(429, {...}, "Rate limited", undefined)` no longer typechecks: `RateLimitError extends APIError<429, Headers>` fixes the `headers` constructor parameter to `Headers` (not `Headers | undefined`) for this specific subclass, unlike the generic `APIError` (whose default type params still allow `undefined`, which is why the equivalent line in `runResumeOptimization.test.ts` needed no change). Replaced `undefined` with `new Headers()`; nothing in the test reads `.headers`.
+
+**Why:** 0.32.1 predates the server-side web search tool — it has no `WebSearchTool20260209`, `server_tool_use`, `web_search_tool_result` or `web_search_result_location` citation types, which Phase 7a's research call depends on. Doing it first and alone means any regression is attributable to the SDK, not to new feature code.
+
+**Alternatives considered:** Casting untyped request/response shapes onto 0.32.1 (rejected: loses type safety exactly where untrusted web content is parsed); upgrading only the new package (rejected: two SDK majors in one workspace, and `Anthropic.APIError` `instanceof` checks across packages would compare different classes).
+
+**What it affects:** the four package.json files, `pnpm-lock.yaml`, the five type-only source files listed above.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

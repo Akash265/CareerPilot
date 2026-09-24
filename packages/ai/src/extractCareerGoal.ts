@@ -32,7 +32,7 @@ const EXTRACTION_TOOL_INPUT_SCHEMA = {
     "employmentType", "salaryFloorRaw", "salaryTargetRaw", "visaSponsorshipRequired", "skills",
     "preferredIndustries", "excludedIndustries", "preferredCompanies",
     "excludedCompanies", "hardConstraints",
-  ],
+  ] as string[],
 } as const;
 
 export class CareerGoalExtractionValidationError extends Error {}
