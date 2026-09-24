@@ -60,6 +60,7 @@ export async function runCompanyResearch(
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
   const collected: Anthropic.ContentBlock[] = [];
   let searchCount = 0;
+  let lastStopReason: Anthropic.Message["stop_reason"] = null;
 
   try {
     for (let turn = 0; turn <= MAX_PAUSE_CONTINUATIONS; turn++) {
@@ -74,6 +75,7 @@ export async function runCompanyResearch(
       if (message.stop_reason === "refusal") {
         return { status: "failed", errorCode: "refusal", researchModel: env.ANTHROPIC_MODEL_RESEARCH, searchCount, webFacts: [] };
       }
+      lastStopReason = message.stop_reason;
       collected.push(...message.content);
       if (message.stop_reason !== "pause_turn") break;
       // pause_turn: the server-side tool loop hit its iteration limit. Re-send the conversation with the
@@ -92,6 +94,12 @@ export async function runCompanyResearch(
   const webFacts = extractCitedFacts(collected);
   if (webFacts.length > 0) {
     return { status: "ok", errorCode: null, researchModel: env.ANTHROPIC_MODEL_RESEARCH, searchCount, webFacts };
+  }
+  // A response truncated by max_tokens with nothing cited is an incomplete answer, not a genuine "no
+  // results" -- ensureCompanyResearch caches "no_results" forever but retries "failed" automatically,
+  // so this must come back as failed to get retried on the next request.
+  if (lastStopReason === "max_tokens") {
+    return { status: "failed", errorCode: "max_tokens", researchModel: env.ANTHROPIC_MODEL_RESEARCH, searchCount, webFacts: [] };
   }
   const searchError = collected.find(
     (b): b is Anthropic.WebSearchToolResultBlock => b.type === "web_search_tool_result" && !Array.isArray(b.content)

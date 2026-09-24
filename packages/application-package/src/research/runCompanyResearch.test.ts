@@ -23,7 +23,7 @@ describe("runCompanyResearch", () => {
     const result = await runCompanyResearch(client, ENV, INPUT);
     expect(result).toEqual({
       status: "ok", errorCode: null, researchModel: "research-model", searchCount: 3,
-      webFacts: [expect.objectContaining({ factText: "Acme builds rockets.", sourceUrl: "https://acme.example" })],
+      webFacts: [expect.objectContaining({ factText: "Acme builds rockets.", sourceUrl: "https://acme.example/" })],
     });
   });
 
@@ -80,6 +80,19 @@ describe("runCompanyResearch", () => {
     const { client } = clientReturning(response([{ type: "text", text: "I could not identify this company.", citations: null }]));
     const result = await runCompanyResearch(client, ENV, INPUT);
     expect(result).toMatchObject({ status: "no_results", errorCode: null, webFacts: [] });
+  });
+
+  it("returns failed/max_tokens (not no_results) when the response was truncated and nothing was cited, so it is retried", async () => {
+    const { client } = clientReturning(response([{ type: "text", text: "Acme is a compan", citations: null }], "max_tokens"));
+    const result = await runCompanyResearch(client, ENV, INPUT);
+    expect(result).toMatchObject({ status: "failed", errorCode: "max_tokens", webFacts: [] });
+  });
+
+  it("keeps ok when the response was truncated but cited facts were already extracted", async () => {
+    const { client } = clientReturning(response([citedText("Acme builds rockets.")], "max_tokens"));
+    const result = await runCompanyResearch(client, ENV, INPUT);
+    expect(result).toMatchObject({ status: "ok", errorCode: null });
+    expect(result.webFacts.map((f) => f.factText)).toEqual(["Acme builds rockets."]);
   });
 
   it("returns failed with the web search error code when a search errored and nothing was cited", async () => {
