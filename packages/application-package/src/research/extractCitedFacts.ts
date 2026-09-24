@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { hasUnsafeText } from "@ai-career/ingestion/text";
 import type { ResearchFactDraft } from "../types";
-import { capText, isHttpUrl } from "./text";
+import { capText, normalizeHttpUrl } from "./text";
 
 export const MAX_WEB_FACTS = 15;
 export const MAX_FACT_CHARS = 500;
@@ -24,17 +24,22 @@ export function extractCitedFacts(content: Anthropic.ContentBlock[]): ResearchFa
     const citation = block.citations.find(
       (c): c is Anthropic.CitationsWebSearchResultLocation => c.type === "web_search_result_location"
     );
-    if (!citation || !isHttpUrl(citation.url)) continue;
+    if (!citation) continue;
+    const sourceUrl = normalizeHttpUrl(citation.url);
+    if (!sourceUrl) continue;
 
     const factText = capText(block.text.trim(), MAX_FACT_CHARS);
     if (factText.length === 0 || seen.has(factText)) continue;
 
+    // Citation fields are API response data (typed, but not guaranteed present -- a malformed or
+    // future-shaped citation must degrade to null, never throw: a research failure must never fail
+    // the whole pitch.
     const fact: ResearchFactDraft = {
       sourceKind: "web",
       factText,
-      sourceUrl: citation.url,
-      sourceTitle: citation.title === null ? null : capText(citation.title, MAX_TITLE_CHARS),
-      citedText: capText(citation.cited_text, MAX_FACT_CHARS),
+      sourceUrl,
+      sourceTitle: typeof citation.title === "string" ? capText(citation.title, MAX_TITLE_CHARS) : null,
+      citedText: typeof citation.cited_text === "string" ? capText(citation.cited_text, MAX_FACT_CHARS) : null,
     };
     // D44 choke point: one check on the assembled record covers every field (NUL / lone surrogate).
     if (hasUnsafeText(fact)) continue;

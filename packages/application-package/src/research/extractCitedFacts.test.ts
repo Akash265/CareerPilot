@@ -72,6 +72,16 @@ describe("extractCitedFacts", () => {
     expect(facts.map((f) => f.factText)).toEqual(["Good."]);
   });
 
+  it("stores the normalized href for a non-canonical http(s) citation URL, not the raw string", () => {
+    const facts = extractCitedFacts(blocks(cited("Odd form.", "https:evil.com")));
+    expect(facts[0].sourceUrl).toBe("https://evil.com/");
+  });
+
+  it("drops a citation URL carrying embedded credentials", () => {
+    const facts = extractCitedFacts(blocks(cited("Sneaky.", "https://user:pw@host")));
+    expect(facts).toEqual([]);
+  });
+
   it("drops facts containing a NUL byte or a lone surrogate anywhere (text, title or cited text)", () => {
     const facts = extractCitedFacts(
       blocks(
@@ -101,5 +111,20 @@ describe("extractCitedFacts", () => {
   it("keeps a null citation title as null", () => {
     const [fact] = extractCitedFacts(blocks({ type: "text", text: "No title.", citations: [citation("https://ok.example", null)] }));
     expect(fact.sourceTitle).toBeNull();
+  });
+
+  it("does not throw and keeps nulls when a citation is missing title/cited_text entirely", () => {
+    const badCitation = { type: "web_search_result_location", url: "https://ok.example", encrypted_index: "e" };
+    expect(() =>
+      extractCitedFacts(blocks({ type: "text", text: "No title or cited_text key.", citations: [badCitation] }))
+    ).not.toThrow();
+    const [fact] = extractCitedFacts(blocks({ type: "text", text: "No title or cited_text key.", citations: [badCitation] }));
+    expect(fact).toEqual({
+      sourceKind: "web",
+      factText: "No title or cited_text key.",
+      sourceUrl: "https://ok.example/",
+      sourceTitle: null,
+      citedText: null,
+    });
   });
 });

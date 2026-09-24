@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { hasUnsafeText } from "@ai-career/ingestion/text";
-import { capText, isHttpUrl } from "./text";
+import { capText, isHttpUrl, normalizeHttpUrl } from "./text";
 
 describe("capText", () => {
   it("returns text unchanged when within the limit", () => {
@@ -35,5 +35,36 @@ describe("isHttpUrl", () => {
     expect(isHttpUrl("ftp://acme.example")).toBe(false);
     expect(isHttpUrl("not a url")).toBe(false);
     expect(isHttpUrl("")).toBe(false);
+  });
+
+  it("rejects http(s) URLs carrying embedded credentials", () => {
+    expect(isHttpUrl("https://user:pw@host")).toBe(false);
+    expect(isHttpUrl("http://user@host/path")).toBe(false);
+  });
+});
+
+describe("normalizeHttpUrl", () => {
+  it("returns the canonical href for an ordinary http/https URL", () => {
+    expect(normalizeHttpUrl("https://acme.example/about")).toBe("https://acme.example/about");
+    expect(normalizeHttpUrl("http://acme.example")).toBe("http://acme.example/");
+  });
+
+  it("canonicalizes non-canonical http(s) forms instead of storing them raw", () => {
+    expect(normalizeHttpUrl("http:/x")).toBe("http://x/");
+    expect(normalizeHttpUrl("https:evil.com")).toBe("https://evil.com/");
+    expect(normalizeHttpUrl("http:\\\\evil.com")).toBe("http://evil.com/");
+  });
+
+  it("rejects a URL carrying embedded credentials", () => {
+    expect(normalizeHttpUrl("https://user:pw@host")).toBeNull();
+    expect(normalizeHttpUrl("http://user@host/path")).toBeNull();
+  });
+
+  it("rejects other schemes and non-URLs", () => {
+    expect(normalizeHttpUrl("javascript:alert(1)")).toBeNull();
+    expect(normalizeHttpUrl("data:text/html,<b>x</b>")).toBeNull();
+    expect(normalizeHttpUrl("ftp://acme.example")).toBeNull();
+    expect(normalizeHttpUrl("not a url")).toBeNull();
+    expect(normalizeHttpUrl("")).toBeNull();
   });
 });
