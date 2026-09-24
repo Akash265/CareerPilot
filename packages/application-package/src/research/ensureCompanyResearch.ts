@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, isNotNull, or, sql } from "drizzle-orm";
 import type Anthropic from "@anthropic-ai/sdk";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { runCompanyResearch, type CompanyResearchEnv } from "./runCompanyResearch";
@@ -49,8 +49,14 @@ export async function loadCompanyResearch(tx: DbClient, companyKey: string): Pro
  * - The paid, slow research call runs OUTSIDE any transaction; only the write is transactional.
  * - Write: upsert on (user_id, company_key) + delete-and-reinsert facts, in one short transaction, so
  *   concurrent first-time calls end with exactly one row and one fact set (last writer wins).
- * - A forceRefresh that comes back "failed" while non-failed research exists writes nothing and throws
- *   CompanyResearchRefreshFailedError: a transient error must never replace good research.
+ * - "A failure must never replace good research" is enforced ATOMICALLY AT WRITE TIME, not from the
+ *   stale `existing` read taken before the 30-90s research call: when the new result is "failed", the
+ *   upsert's `onConflictDoUpdate` only fires if the row's CURRENT status (as of the write, inside the
+ *   same transaction) is also "failed" (`setWhere`). If that guard blocks the update (a concurrent
+ *   caller already committed non-failed research), `returning()` comes back empty and we re-read
+ *   whatever is now stored: a plain call returns it; a forceRefresh throws
+ *   CompanyResearchRefreshFailedError instead of overwriting it. A first-ever write for a company has no
+ *   conflict at all, so it always succeeds even when it is a "failed" result.
  */
 export async function ensureCompanyResearch(
   db: DbClient,
@@ -69,7 +75,13 @@ export async function ensureCompanyResearch(
     tx
       .select({ url: jobPostings.url })
       .from(jobPostings)
-      .where(and(eq(jobPostings.jobId, job.id), isNotNull(jobPostings.url)))
+      .where(
+        and(
+          eq(jobPostings.jobId, job.id),
+          isNotNull(jobPostings.url),
+          sql`${jobPostings.url} ~* '^https?://'`
+        )
+      )
       .orderBy(asc(jobPostings.firstSeenAt))
       .limit(1)
   );
@@ -90,12 +102,9 @@ export async function ensureCompanyResearch(
     postingUrl,
   });
 
-  if (opts.forceRefresh && result.status === "failed" && existing && existing.research.status !== "failed") {
-    throw new CompanyResearchRefreshFailedError();
-  }
-
   const facts = [...result.webFacts, ...deriveInternalFacts(job.companyName, companyJobs)];
   const now = new Date();
+  const isFailedWrite = result.status === "failed";
 
   return inUserContext(async (tx) => {
     const fields = {
@@ -106,11 +115,27 @@ export async function ensureCompanyResearch(
       searchCount: result.searchCount,
       researchedAt: now,
     };
+    // A "failed" result is only allowed to overwrite a row whose CURRENT stored status is also
+    // "failed" -- checked atomically here, not from the stale `existing` read above. A first-ever
+    // insert for this company never conflicts, so it is unaffected by setWhere either way.
     const [research] = await tx
       .insert(companyResearch)
       .values({ companyKey: job.companyKey, ...fields })
-      .onConflictDoUpdate({ target: [companyResearch.userId, companyResearch.companyKey], set: { ...fields, updatedAt: now } })
+      .onConflictDoUpdate({
+        target: [companyResearch.userId, companyResearch.companyKey],
+        set: { ...fields, updatedAt: now },
+        ...(isFailedWrite ? { setWhere: eq(companyResearch.status, "failed") } : {}),
+      })
       .returning();
+
+    if (!research) {
+      // The guard blocked the update: a concurrent caller already committed non-failed research.
+      // Never touch its facts -- just report what is now actually stored.
+      const current = await loadCompanyResearch(tx, job.companyKey);
+      if (opts.forceRefresh || !current) throw new CompanyResearchRefreshFailedError();
+      return current;
+    }
+
     await tx.delete(companyResearchFacts).where(eq(companyResearchFacts.researchId, research.id));
     const factRows =
       facts.length === 0
