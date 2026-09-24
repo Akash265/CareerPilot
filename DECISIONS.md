@@ -553,4 +553,10 @@ Files changed to satisfy the new types (all type-only, zero runtime behavior cha
 **Alternatives considered:** A second LLM entailment check per bullet (rejected for the same reason as Phase 6 decision 4: extra cost, and a model grading a model is not a deterministic guarantee); dropping unsupported bullets (rejected above).
 **What it affects:** `packages/application-package/src/pitch/applyPitchGuard.ts`.
 
+### D76. Pitch pipeline order: gates → profile check → research → requirements → generate → guard → locked insert
+**Decision:** `runPitchGeneration` checks the match (404/400) and builds the evidence catalog *before* researching, failing `no_profile` (409) without any paid call. Research degrades rather than fails. `Anthropic.APIError`, `JobRequirementExtractionValidationError` and `PitchGenerationValidationError` map to `unknown` (502); a `hasUnsafeText` hit on the guarded bullets also maps to `unknown` rather than letting jsonb reject the insert. Versions are allocated by `insertPitchVersion` under a per-(user, job) transaction advisory lock, shared with user edits. Runs synchronously in the API route (spec decision 6).
+**Why:** Profile-first ordering avoids paying for web research that could never produce a pitch. Sharing one insert helper between generation and editing means both paths serialize on the same lock.
+**Alternatives considered:** Researching first so the research is warm for later (rejected: spends money for users who cannot yet use it); a background worker (rejected, spec decision 6).
+**What it affects:** `packages/application-package/src/pipeline/{insertPitchVersion,runPitchGeneration}.ts`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
