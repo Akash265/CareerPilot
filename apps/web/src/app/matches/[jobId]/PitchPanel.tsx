@@ -87,13 +87,17 @@ export function PitchPanel({ jobId }: { jobId: string }) {
   // out from under an in-progress read. Only generate() and a successful save() pass
   // { selectNewest: true } to explicitly jump to the newest version. The initial mount has no prior
   // selection (state.kind is "loading", not "ready"), so it naturally falls through to newest too.
-  const load = (opts: { selectNewest?: boolean } = {}) =>
+  // `isStale` lets a caller opt out of applying a response that is no longer relevant (the load
+  // effect below uses it to guard against a jobId change racing an in-flight fetch); other callers
+  // (post()'s reload, the initial synchronous call) omit it and always apply their response.
+  const load = (opts: { selectNewest?: boolean; isStale?: () => boolean } = {}) =>
     fetch(base)
       .then((res) => {
         if (!res.ok) throw new Error("load failed");
         return res.json();
       })
       .then((body) => {
+        if (opts.isStale?.()) return;
         const versions = body.versions as PitchView[];
         const research = (body.research as ResearchView | null) ?? null;
         setState((prev) => {
@@ -104,10 +108,17 @@ export function PitchPanel({ jobId }: { jobId: string }) {
           return { kind: "ready", versions, research, selectedId };
         });
       })
-      .catch(() => setState({ kind: "error" }));
+      .catch(() => {
+        if (opts.isStale?.()) return;
+        setState({ kind: "error" });
+      });
 
   useEffect(() => {
-    load();
+    let ignore = false;
+    load({ isStale: () => ignore });
+    return () => {
+      ignore = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
@@ -139,7 +150,16 @@ export function PitchPanel({ jobId }: { jobId: string }) {
   };
 
   if (state.kind === "loading") return <p>Loading pitch...</p>;
-  if (state.kind === "error") return <p role="alert" className="text-red-600">Could not load the pitch.</p>;
+  if (state.kind === "error") {
+    return (
+      <p role="alert" className="text-red-600">
+        Could not load the pitch.{" "}
+        <button type="button" onClick={() => load()} className="underline">
+          Retry
+        </button>
+      </p>
+    );
+  }
 
   const selected = state.versions.find((v) => v.id === state.selectedId) ?? null;
   const unsupported = selected?.bullets.filter((b) => b.supported === false) ?? [];

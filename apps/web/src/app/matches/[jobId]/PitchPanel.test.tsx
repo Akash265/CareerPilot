@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within, act } from "@testing-library/react";
 import { PitchPanel, researchAgeLabel } from "./PitchPanel";
 
 const NOW_ISO = new Date().toISOString();
@@ -39,6 +39,51 @@ describe("researchAgeLabel", () => {
 });
 
 describe("PitchPanel", () => {
+  it("shows a Retry button on load failure and recovers when clicked", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: {}, status: 500 },
+      { body: { versions: [pitch], research } },
+    ]);
+    render(<PitchPanel jobId="j1" />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/could not load the pitch/i);
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Acme's rocket work excites me.")).toBeInTheDocument();
+  });
+
+  it("ignores a stale load response for a jobId that is no longer current", async () => {
+    let resolveFirst: (value: unknown) => void = () => {};
+    const firstPromise = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => firstPromise)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ versions: [{ ...pitch, id: "p-j2" }], research }),
+      } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { rerender } = render(<PitchPanel jobId="j1" />);
+    rerender(<PitchPanel jobId="j2" />);
+
+    expect(await screen.findByText("Acme's rocket work excites me.")).toBeInTheDocument();
+
+    // The stale j1 fetch resolves after j2's request already settled -- it must be ignored, not
+    // revert the panel to j1's (empty) state.
+    await act(async () => {
+      resolveFirst({ ok: true, status: 200, json: async () => ({ versions: [], research: null }) } as Response);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText(/no pitch generated yet/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Acme's rocket work excites me.")).toBeInTheDocument();
+  });
+
   it("shows an empty state and a Generate Pitch button", async () => {
     mockFetchSequence([{ body: { versions: [], research: null } }]);
     render(<PitchPanel jobId="j1" />);
