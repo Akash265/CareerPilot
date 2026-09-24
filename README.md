@@ -129,3 +129,7 @@ match, "Generate Pitch" researches the company with Anthropic web search
 three-bullet pitch whose every bullet must cite real evidence. Pitches are
 versioned and editable. Requires `ANTHROPIC_MODEL_RESEARCH` in `.env`
 (see `.env.example`).
+
+**Upgrading an existing checkout:** `ANTHROPIC_MODEL_RESEARCH` is required
+by `loadEnv` — without it the web app, both workers and `db:migrate` all
+fail to start. Add `ANTHROPIC_MODEL_RESEARCH=claude-sonnet-5` to `.env`.

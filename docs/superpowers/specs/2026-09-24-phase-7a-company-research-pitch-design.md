@@ -245,3 +245,10 @@ Serialization in `apps/web/src/lib/applicationPitch/serializePitch.ts` (mirrors 
 - **Cost:** each first-time research costs up to `COMPANY_RESEARCH_MAX_SEARCHES` searches plus research-tier tokens. Mitigation: per-company caching, manual refresh only, `searchCount` stored.
 - **Latency:** first pitch for a company may take up to ~90s in a synchronous request. Accepted for a single-user local app (decision 6); revisit with a worker if it proves painful.
 - **companyKey collisions** share research across distinct companies — accepted limitation (§1).
+
+## 10. Post-implementation notes
+
+- **§4.1's tool is `web_search_20250305`, not `web_search_20260209`.** The newer tool's server-side "dynamic filtering" (code execution over raw search results) produced text with zero `web_search_result_location` citations, so `extractCitedFacts` (correctly) discarded everything and every research call came back `no_results`. Replaced per D79; see D79 for the measured before/after.
+- **§4.3's "in the system's job data" wording deliberately includes the triggering job even if it is closed.** `deriveInternalFacts`'s caller (`ensureCompanyResearch`) selects this company's `open` jobs **or** the triggering job by id, specifically so a real call never yields zero internal facts even when the job the pitch is for has since closed.
+- **§4.1/§5's "failed never overwrites good research" is enforced atomically at write time (D74), not from the pre-call read.** `ensureCompanyResearch`'s upsert carries `setWhere: status = 'failed'` on a failed write, so it only overwrites a row whose *currently stored* status is still `failed`; if a concurrent caller already committed non-failed research, the guarded update is skipped and the code re-reads what is actually stored instead of blindly writing over it.
+- **A response truncated by `stop_reason: "max_tokens"` with nothing cited is stored as `failed` (`errorCode: "max_tokens"`), not `no_results`.** `no_results` is treated by `ensureCompanyResearch` as a genuine, permanently-cached answer; a truncated response is an incomplete one and must be retried on the next request, which only happens for `failed`.

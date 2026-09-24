@@ -810,7 +810,10 @@ User clicks "Generate Pitch" / "Regenerate" on an eligible job's match detail pa
           in ~16-22s) -- inputs are company name, job title, posting URL ONLY -- following `pause_turn`
           up to 2 times; `extractCitedFacts` keeps only API-cited text blocks; `deriveInternalFacts` adds
           deterministic facts; one transaction upserts `company_research` and replaces
-          `company_research_facts`. Failure is stored as status `failed`, never thrown. "A failed result
+          `company_research_facts`. Failure is stored as status `failed`, never thrown. A response that
+          stops on `stop_reason: "max_tokens"` with nothing cited is also stored as `failed`
+          (`errorCode: "max_tokens"`), not `no_results`, so it gets retried on the next call instead of
+          being cached forever. "A failed result
           never replaces good research" is enforced atomically at write time, not from the stale
           pre-call read: the upsert's `ON CONFLICT ... DO UPDATE` carries `setWhere: status = 'failed'`,
           so a failed write only overwrites a row whose stored status is *still* `failed` at the moment
