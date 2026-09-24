@@ -535,4 +535,10 @@ Files changed to satisfy the new types (all type-only, zero runtime behavior cha
 **Alternatives considered:** Asking the model to return structured facts with URLs via a tool (rejected: URL would be model self-report, not an API citation); moving `hasUnsafeText` to a new shared package (rejected: a one-line subpath export achieves the same isolation without moving tested code).
 **What it affects:** `packages/application-package/src/research/{extractCitedFacts,text}.ts`, `packages/ingestion/package.json`.
 
+### D73. The research call never sees candidate data, and its failure is a stored status, not an exception
+**Decision:** `runCompanyResearch` sends only company name, job title and posting URL (inside a D20 random delimiter) with `web_search_20260209` (`max_uses = COMPANY_RESEARCH_MAX_SEARCHES`). It follows `pause_turn` by re-sending the conversation (at most 2 continuations, then keeps what it has), sums `usage.server_tool_use.web_search_requests` into `searchCount`, and returns `failed` (`refusal` / `api_error` / the web-search `error_code`) or `no_results` instead of throwing. Non-API errors are rethrown.
+**Why:** Keeping profile data out of this call makes it impossible for resume details to reach a web search query (spec decision 5). Returning a status lets the pitch degrade to internal facts rather than fail (spec §5). Server-tool errors arrive as HTTP 200 content, not exceptions, so they must be read from the response.
+**Alternatives considered:** Throwing on research failure (rejected: one flaky search would block every pitch); unlimited `pause_turn` continuation (rejected: unbounded cost/latency in a synchronous request).
+**What it affects:** `packages/application-package/src/research/runCompanyResearch.ts`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
