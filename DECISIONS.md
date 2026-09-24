@@ -541,4 +541,10 @@ Files changed to satisfy the new types (all type-only, zero runtime behavior cha
 **Alternatives considered:** Throwing on research failure (rejected: one flaky search would block every pitch); unlimited `pause_turn` continuation (rejected: unbounded cost/latency in a synchronous request).
 **What it affects:** `packages/application-package/src/research/runCompanyResearch.ts`.
 
+### D74. Company research: reuse unless failed; research outside the transaction; upsert-and-replace writes; failed refreshes keep good research
+**Decision:** `ensureCompanyResearch` returns the stored row unless `forceRefresh` or its status is `failed` (failed attempts retry on the next pitch; `no_results` is reused). The research API call runs outside any transaction; the write is one short transaction (`ON CONFLICT (user_id, company_key) DO UPDATE` + delete/reinsert facts). A `forceRefresh` whose call returns `failed` while non-failed research exists writes nothing and throws `CompanyResearchRefreshFailedError` (route → 502). Internal facts cover the company's open jobs plus the triggering job even if it is closed.
+**Why:** Holding a transaction open across a 30-90s web search would pin a connection idle-in-transaction far longer than Phase 6's accepted trade-off. The unique index makes concurrent first-time research converge on one row without a lock held across the network call; the cost of that race is at most one duplicate paid search (accepted). Never overwriting good research with a transient failure was found during planning (spec §3 updated).
+**Alternatives considered:** A per-company advisory lock around the whole call (rejected: holds a lock/connection across the network call); caching `failed` rows like any other (rejected: one outage would stick for that company until a manual refresh).
+**What it affects:** `packages/application-package/src/research/ensureCompanyResearch.ts`, `src/testing/*`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

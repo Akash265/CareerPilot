@@ -6,3 +6,7 @@ export {
   runCompanyResearch, MAX_PAUSE_CONTINUATIONS,
   type CompanyResearchInput, type CompanyResearchResult, type CompanyResearchEnv,
 } from "./research/runCompanyResearch";
+export {
+  ensureCompanyResearch, loadCompanyResearch, CompanyResearchRefreshFailedError,
+  type CompanyResearchRow, type CompanyResearchFactRow, type CompanyResearchWithFacts, type JobForResearch,
+} from "./research/ensureCompanyResearch";
