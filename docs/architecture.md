@@ -152,7 +152,7 @@ Caching: embedding cache (permanent, content-hash keyed), match-reason cache (7-
 - `career_goal_constraints` is the single source of truth for search-relevant preferences. `candidate_profiles` therefore keeps only contact fields, `years_of_experience` and `work_authorization_notes`; its earlier work-mode, salary-expectation, visa, preferred-role and industry columns and the `company_preferences` table were dropped ([D21](../DECISIONS.md)).
 - `job_sources`, `ingestion_runs`, `raw_job_postings`, `jobs`, `job_postings`, `job_duplicate_candidates` (Phase 4, [D35](../DECISIONS.md)/[D36](../DECISIONS.md)). `jobs` is derived from its postings by a pure merge; salary uses the D6 raw + normalized + currency + period + `is_parsed` shape (implemented as `salary_raw`, `salary_min`, `salary_max`, `salary_currency`, `salary_period`, `salary_is_parsed`, with the min/max annualized).
 
-Everything else (job_requirements, resume_optimizations, ats_evaluations, application_pitches, application_outcomes, learning_features, plus the original core tables) follows spec §19 as written.
+Everything else (job_requirements, resume_optimizations, ats_evaluations, application_outcomes, learning_features, plus the original core tables) follows spec §19 as written. `application_pitches` deviates from spec §19's one-line description; see §14 and [D71](../DECISIONS.md).
 
 ## 9. Security & privacy
 
@@ -276,5 +276,5 @@ application_pitches (versioned; generated or user_edited; evidence snapshotted p
 - **Grounding.** Web facts are grounded by API citations (D72); pitch bullets by `applyPitchGuard` (D75). Unsupported bullets are shown, flagged, never dropped.
 - **Three new tables.** `company_research`, `company_research_facts`, `application_pitches` (D71).
 - **Execution model.** Synchronous API routes, like Phase 6. Research uses the basic `web_search_20250305` tool (D79); the first pitch for a company waits for web research, typically ~16-22s, not the ~a minute originally estimated with the newer tool.
-- **Known gaps.** No research history; `company_key` collisions share research; no domain allow/block list for search; no export (7b), interview prep or cover letter (7c).
+- **Known gaps.** No research history; `company_key` collisions share research; no domain allow/block list for search; no export (7b), interview prep or cover letter (7c). Cached internal facts ("Company has N roles…") reflect jobs at research time until Refresh; a company whose search hits `max_uses` with nothing cited is stored as `failed` and re-searched on every pitch request (a cost follow-up, not fixed here); the internal-facts query caps at 50 jobs.
 - Full rationale: `docs/superpowers/specs/2026-09-24-phase-7a-company-research-pitch-design.md` and DECISIONS.md D69–D79.
