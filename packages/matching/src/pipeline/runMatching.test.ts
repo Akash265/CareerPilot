@@ -133,7 +133,7 @@ describe("runMatching", () => {
   it("does not fail the run when the explanation call throws a transient Anthropic API error -- the job keeps its scores", async () => {
     await seedGoalAndProfile();
     await seedJob({ title: "Data Engineer" });
-    const rateLimited = new Anthropic.RateLimitError(429, { type: "rate_limit_error", message: "slow down" }, "Rate limited", undefined);
+    const rateLimited = new Anthropic.RateLimitError(429, { type: "rate_limit_error", message: "slow down" }, "Rate limited", new Headers());
     const failingClient = erroringAnthropic(rateLimited);
 
     const summary = await runMatching(testDb.db, { userId: USER, anthropicClient: failingClient, env: ENV });

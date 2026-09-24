@@ -1,0 +1,5 @@
+[
+  { "companyName": "GitLab", "jobTitle": "Backend Engineer", "postingUrl": null, "officialDomains": ["gitlab.com", "about.gitlab.com"] },
+  { "companyName": "Monzo", "jobTitle": "Data Scientist", "postingUrl": null, "officialDomains": ["monzo.com"] },
+  { "companyName": "Stripe", "jobTitle": "Software Engineer", "postingUrl": null, "officialDomains": ["stripe.com"] }
+]

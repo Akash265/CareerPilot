@@ -790,3 +790,51 @@ test asserting `optimizeResume`'s tool JSON schema stays in lockstep with `Optim
 `applyDeterministicGuard.ts` alone -- nothing upstream or downstream needs to change. Modifying the
 scorecard's weights: `packages/resume-optimization/src/types.ts`'s `EVALUATION_WEIGHTS`, bump
 `EVALUATOR_VERSION`.
+
+---
+
+## 9. Phase 7a — Company Research & Hiring Manager Pitch
+
+User clicks "Generate Pitch" / "Regenerate" on an eligible job's match detail page
+(`apps/web/src/app/matches/[jobId]/PitchPanel.tsx`)
+  -> `POST /api/application-pitches/[jobId]/run` (`apps/web/src/app/api/application-pitches/[jobId]/run/route.ts`)
+  -> `runPitchGeneration` (`packages/application-package/src/pipeline/runPitchGeneration.ts`)
+     1. job_matches row exists (else 404) and is eligible (else 400).
+     2. `buildResumeSnapshot` (Phase 6) -- empty catalog -> `no_profile` -> 409, BEFORE any paid call.
+     3. `ensureCompanyResearch` (`research/ensureCompanyResearch.ts`), keyed by `jobs.company_key`:
+        - stored row with status ok/no_results -> reused as-is;
+        - otherwise: posting URL (`job_postings.url`, http(s) only) + this company's open jobs are read, then
+          `runCompanyResearch` (`research/runCompanyResearch.ts`) calls the research-tier model with the
+          basic `web_search_20250305` tool (D79 -- the newer `web_search_20260209` tool's dynamic
+          filtering produced uncited text and 0 facts; the basic tool gives ~15 cited facts per company
+          in ~16-22s) -- inputs are company name, job title, posting URL ONLY -- following `pause_turn`
+          up to 2 times; `extractCitedFacts` keeps only API-cited text blocks; `deriveInternalFacts` adds
+          deterministic facts; one transaction upserts `company_research` and replaces
+          `company_research_facts`. Failure is stored as status `failed`, never thrown. A response that
+          stops on `stop_reason: "max_tokens"` with nothing cited is also stored as `failed`
+          (`errorCode: "max_tokens"`), not `no_results`, so it gets retried on the next call instead of
+          being cached forever. "A failed result
+          never replaces good research" is enforced atomically at write time, not from the stale
+          pre-call read: the upsert's `ON CONFLICT ... DO UPDATE` carries `setWhere: status = 'failed'`,
+          so a failed write only overwrites a row whose stored status is *still* `failed` at the moment
+          of the write; if that guard blocks the update, the code re-reads what is actually stored
+          instead (D74, as amended).
+     4. `ensureJobRequirements` (Phase 6) -> `buildEvidenceIndex` (`r:` research, `q:` requirement, `p:` profile ids).
+     5. `generatePitch` -- fast-tier forced tool call `record_pitch` -> Zod `PitchDraftSchema`.
+     6. `applyPitchGuard` -- every cited id must exist, no repeats, each bullet must cite its own kind;
+        failures kept with supported=false; evidence text snapshotted from the index.
+     7. `hasUnsafeText` choke point, then `insertPitchVersion` under
+        `pg_advisory_xact_lock(hashtext('application_pitches'), hashtext(userId || ':' || jobId))`.
+  -> Route serializes via `lib/applicationPitch/serializePitch.ts` (URLs re-validated), returns 201.
+  -> Panel re-fetches `GET /api/application-pitches/[jobId]` (`listPitches` + `loadResearchForJob`).
+
+Edit: "Edit" -> "Save as new version" -> `POST …/edit` -> `EditPitchBodySchema` -> `createEditedPitch`
+(`pipeline/createEditedPitch.ts`): base must belong to the job; new `user_edited` version via the same
+`insertPitchVersion`, evidence copied, supported=null, requiresReview=false.
+
+Refresh: "Refresh" -> `POST …/research/refresh` -> `ensureCompanyResearch(…, { forceRefresh: true })`;
+a `failed` result over good research writes nothing and returns 502 (`CompanyResearchRefreshFailedError`).
+
+Changing the pitch prompt/schema: `pitch/generatePitch.ts` + `pitch/pitchSchema.ts` (keep the tool JSON
+schema and the Zod schema in lockstep by hand; re-run `eval:pitch`). Changing grounding rules:
+`pitch/applyPitchGuard.ts` only. Changing what counts as a web fact: `research/extractCitedFacts.ts` only.

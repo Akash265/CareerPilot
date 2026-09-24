@@ -83,7 +83,7 @@ const EXTRACTION_TOOL_INPUT_SCHEMA = {
     },
     achievements: { type: "array", items: { type: "string" } },
   },
-  required: ["contact", "education", "workExperiences", "skills", "projects", "certifications", "achievements"],
+  required: ["contact", "education", "workExperiences", "skills", "projects", "certifications", "achievements"] as string[],
 } as const;
 
 export class ExtractionValidationError extends Error {}

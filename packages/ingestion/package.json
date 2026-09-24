@@ -7,6 +7,7 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./text": "./src/normalize/text.ts",
     "./testing": "./src/testing/index.ts"
   },
   "scripts": {

@@ -19,7 +19,7 @@ const REQUIREMENT_ITEM_SCHEMA = {
 const EXTRACTION_TOOL_INPUT_SCHEMA = {
   type: "object",
   properties: { requirements: { type: "array", items: REQUIREMENT_ITEM_SCHEMA } },
-  required: ["requirements"],
+  required: ["requirements"] as string[],
 } as const;
 
 export class JobRequirementExtractionValidationError extends Error {}

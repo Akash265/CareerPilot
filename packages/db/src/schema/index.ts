@@ -21,3 +21,6 @@ export * from "./matchingRuns";
 export * from "./jobRequirements";
 export * from "./resumeOptimizations";
 export * from "./atsEvaluations";
+export * from "./companyResearch";
+export * from "./companyResearchFacts";
+export * from "./applicationPitches";

@@ -14,7 +14,7 @@ const EXPLANATION_TOOL_INPUT_SCHEMA = {
     gaps: stringArray,
     summary: { type: "string" },
   },
-  required: ["strongMatches", "partialMatches", "gaps", "summary"],
+  required: ["strongMatches", "partialMatches", "gaps", "summary"] as string[],
 } as const;
 
 export class MatchExplanationValidationError extends Error {}

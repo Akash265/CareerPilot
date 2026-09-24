@@ -1,0 +1,15 @@
+{
+  "jobTitle": "Senior Data Engineer",
+  "companyName": "Northwind Logistics",
+  "evidence": [
+    { "id": "r:n1", "kind": "research", "text": "Northwind Logistics operates a freight-matching platform used by mid-sized European carriers.", "sourceUrl": "https://northwind.example/about" },
+    { "id": "r:n2", "kind": "research", "text": "Northwind raised a Series B round in 2025 to expand its routing analytics.", "sourceUrl": "https://news.example/northwind-series-b" },
+    { "id": "r:n3", "kind": "research", "text": "Northwind Logistics has 3 roles in your job data: Data Analyst, Senior Data Engineer, Platform Engineer.", "sourceUrl": null },
+    { "id": "q:r1", "kind": "requirement", "text": "[required] Apache Spark", "sourceUrl": null },
+    { "id": "q:r2", "kind": "requirement", "text": "[required] SQL", "sourceUrl": null },
+    { "id": "q:r3", "kind": "requirement", "text": "[preferred] Airflow", "sourceUrl": null },
+    { "id": "p:b1", "kind": "profile", "text": "Globex — Data Engineer: Built Spark batch pipelines processing 2 TB of shipment events per day", "sourceUrl": null },
+    { "id": "p:b2", "kind": "profile", "text": "Globex — Data Engineer: Migrated 40 cron jobs to Airflow DAGs with alerting", "sourceUrl": null },
+    { "id": "p:s1", "kind": "profile", "text": "SQL", "sourceUrl": null }
+  ]
+}

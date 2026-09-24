@@ -19,7 +19,7 @@
     "@ai-career/ai": "workspace:*",
     "@ai-career/config": "workspace:*",
     "@ai-career/db": "workspace:*",
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "^0.128.0",
     "drizzle-orm": "^0.36.0",
     "zod": "^3.24.0"
   },
