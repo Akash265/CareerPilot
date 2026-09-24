@@ -19,8 +19,9 @@ const envSchema = z
     EMBEDDING_PROVIDER: z.enum(["voyage", "self-hosted"]),
     VOYAGE_API_KEY: z.string().min(1).optional(),
     ANTHROPIC_MODEL_FAST: z.string().min(1),
-    // Phase 7a company research. A separate role/tier (D7): the current web search tool version
-    // (web_search_20260209) is not supported on the fast-tier Haiku model.
+    // Phase 7a company research. A separate role/tier (D7): research uses the basic
+    // `web_search_20250305` tool (D79 -- the newer 20260209 tool's dynamic filtering strips
+    // citations, producing 0 facts), which is not supported on the fast-tier Haiku model.
     ANTHROPIC_MODEL_RESEARCH: z.string().min(1),
     VOYAGE_EMBEDDING_MODEL: z.string().min(1),
     // Phase 4 ingestion. The API bases are operator-controlled (never user

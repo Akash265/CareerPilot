@@ -1,6 +1,6 @@
 # Architecture — AI Career Intelligence & Application Platform
 
-Status: **Phases 0–6 are implemented** (foundation, candidate profile, career goal, job intelligence, hybrid matching, ATS resume optimization); application generation onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
+Status: **Phases 0–6 and 7a are implemented** (foundation, candidate profile, career goal, job intelligence, hybrid matching, ATS resume optimization, company research + Hiring Manager Pitch); document export (7b) onward is designed but not yet built. This document describes the agreed architecture as of 2026-09-06. See `DECISIONS.md` for the rationale behind each choice. Update this file as implementation reveals deviations — it must describe what's actually built, not an aspiration.
 
 ## 1. Product framing
 
@@ -136,7 +136,8 @@ Task-to-tier mapping (model **version resolved by role via env var, not hardcode
 | Matching / ranking | Voyage embeddings + pgvector | cached permanently |
 | Match explanation | Anthropic, fast/cheap tier | on ranking |
 | Resume optimization + entailment check | Anthropic, deep-reasoning tier | on-demand (shortlist action) |
-| Hiring Manager Pitch | Anthropic, fast/cheap tier | on-demand (shortlist action) |
+| Company research | Anthropic research tier (`ANTHROPIC_MODEL_RESEARCH`) + server-side web search; only API-cited text kept | on-demand, cached per company, manual refresh |
+| Hiring Manager Pitch | Anthropic, fast/cheap tier + deterministic citation guard | on-demand (user action on a match) |
 
 Caching: embedding cache (permanent, content-hash keyed), match-reason cache (7-day TTL, job+resume-version keyed), optimized resume/pitch (generated once, lazily, only when the user acts). Monthly spend ceiling enforced via Langfuse alerting.
 
@@ -249,3 +250,31 @@ one transaction: resume_optimizations (versioned, never overwritten) + ats_evalu
 - **Three new tables.** `job_requirements` (a per-term cache keyed by description hash, replaced wholesale on re-extraction -- D58), `resume_optimizations` (versioned per job, one row per "Optimize"/"Regenerate" -- D59), `ats_evaluations` (1:1 with an optimization, written in the same transaction -- D59/D66).
 - **Execution model.** Runs synchronously inside the API route -- no new BullMQ worker, unlike ingestion (D32) or matching (D50). It is a single user-triggered action on one job (not a batch job over many jobs), so there is nothing to hold a worker queue open for; extraction/optimization failures propagate to the route rather than being swallowed (D66).
 - Full rationale, alternatives considered, and the complete decision set: `docs/superpowers/specs/2026-09-23-phase-6-ats-resume-optimization-design.md` and DECISIONS.md D58–D67.
+
+## 14. Company Research & Hiring Manager Pitch (Phase 7a)
+
+```
+eligible job_matches row + non-empty evidence catalog (profile)
+  │
+  ▼
+ensureCompanyResearch  -- cached per (user, jobs.company_key); failed attempts retried, refresh is manual
+  │   runCompanyResearch: research tier + web_search_20250305 (D79); input = company name, job title, posting URL only
+  │   extractCitedFacts: a web fact exists only if the API attached a web_search_result_location citation
+  │   deriveInternalFacts: deterministic facts from this company's jobs rows
+  ▼
+ensureJobRequirements (Phase 6) + buildResumeSnapshot (Phase 6) -> buildEvidenceIndex (r:/q:/p: ids)
+  │
+  ▼
+generatePitch (fast tier, forced tool call) -> applyPitchGuard (each bullet must cite its own kind)
+  │
+  ▼
+application_pitches (versioned; generated or user_edited; evidence snapshotted per bullet)
+```
+
+- **Package boundary.** `packages/application-package` (`research/`, `pitch/`, `pipeline/`), consumed by `apps/web`'s four `/api/application-pitches/[jobId]` routes and `PitchPanel`. No BullMQ; `hasUnsafeText` comes through the `@ai-career/ingestion/text` subpath.
+- **Privacy boundary.** The research call never receives profile, resume, goal or requirement data (D73).
+- **Grounding.** Web facts are grounded by API citations (D72); pitch bullets by `applyPitchGuard` (D75). Unsupported bullets are shown, flagged, never dropped.
+- **Three new tables.** `company_research`, `company_research_facts`, `application_pitches` (D71).
+- **Execution model.** Synchronous API routes, like Phase 6. Research uses the basic `web_search_20250305` tool (D79); the first pitch for a company waits for web research, typically ~16-22s, not the ~a minute originally estimated with the newer tool.
+- **Known gaps.** No research history; `company_key` collisions share research; no domain allow/block list for search; no export (7b), interview prep or cover letter (7c).
+- Full rationale: `docs/superpowers/specs/2026-09-24-phase-7a-company-research-pitch-design.md` and DECISIONS.md D69–D79.

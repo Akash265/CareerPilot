@@ -122,3 +122,10 @@ Runs synchronously inside the API route -- no new worker. Available from
 the "Optimize Resume" button on a job's match detail page
 (`/matches/[jobId]`). `job_requirements` deliberately does not yet feed
 Phase 5's matching factors (see docs/architecture.md §13).
+
+Phase 7a (Company Research & Hiring Manager Pitch) complete: on an eligible
+match, "Generate Pitch" researches the company with Anthropic web search
+(only API-cited facts are kept; no personal data is sent), then writes a
+three-bullet pitch whose every bullet must cite real evidence. Pitches are
+versioned and editable. Requires `ANTHROPIC_MODEL_RESEARCH` in `.env`
+(see `.env.example`).
