@@ -1,5 +1,5 @@
 {
-  "name": "@ai-career/ingestion",
+  "name": "@ai-career/application-package",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,24 +7,26 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./text": "./src/normalize/text.ts",
     "./testing": "./src/testing/index.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src eval",
-    "eval:extraction": "tsx eval/scoreExtraction.ts"
+    "lint": "eslint src"
   },
   "dependencies": {
+    "@ai-career/ai": "workspace:*",
     "@ai-career/config": "workspace:*",
     "@ai-career/db": "workspace:*",
-    "csv-parse": "^5.6.0",
+    "@ai-career/ingestion": "workspace:*",
+    "@ai-career/resume-optimization": "workspace:*",
+    "@anthropic-ai/sdk": "^0.128.0",
     "drizzle-orm": "^0.36.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "dotenv-cli": "^7.4.0",
     "eslint": "^9.0.0",
     "postgres": "^3.4.0",
     "tsx": "^4.19.0",

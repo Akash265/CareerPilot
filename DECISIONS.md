@@ -529,4 +529,10 @@ Files changed to satisfy the new types (all type-only, zero runtime behavior cha
 **Alternatives considered:** Research version history (rejected: YAGNI — the pitch snapshot already preserves what each pitch used); FKs from pitch bullets to fact rows (rejected: bullets are jsonb, and refresh must be free to delete facts); a `companies` table (rejected, spec §1).
 **What it affects:** `packages/db/src/schema/{companyResearch,companyResearchFacts,applicationPitches}.ts`, migrations `0017_gray_ma_gnuci.sql` and `0018_application_package_rls.sql`, `packages/db/src/applicationPackageTables.rls.test.ts`.
 
+### D72. Web research facts are exactly the API-cited text blocks; everything else the research model writes is discarded in code
+**Decision:** `extractCitedFacts` keeps a text block only if it carries a `web_search_result_location` citation with an `http(s)` URL, stores that URL/title/`cited_text` alongside it, trims/caps it on a surrogate-safe boundary, de-duplicates, keeps at most 15, and drops any record `hasUnsafeText` rejects (D44). `hasUnsafeText` is imported through a new `@ai-career/ingestion/text` subpath export.
+**Why:** The citation is attached by the API from an actual search result, so "every web fact has a real source" becomes a property of the code, not of the prompt. The subpath keeps the new package free of BullMQ, which the ingestion root index re-exports.
+**Alternatives considered:** Asking the model to return structured facts with URLs via a tool (rejected: URL would be model self-report, not an API citation); moving `hasUnsafeText` to a new shared package (rejected: a one-line subpath export achieves the same isolation without moving tested code).
+**What it affects:** `packages/application-package/src/research/{extractCitedFacts,text}.ts`, `packages/ingestion/package.json`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
