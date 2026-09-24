@@ -18,6 +18,9 @@ function mockFetch(matchBody: unknown, matchStatus = 200) {
       if (url.includes("/api/resume-optimizations/")) {
         return { ok: true, status: 200, json: async () => ({ optimizations: [] }) } as Response;
       }
+      if (url.includes("/api/application-pitches/")) {
+        return { ok: true, status: 200, json: async () => ({ versions: [], research: null }) } as Response;
+      }
       return { ok: matchStatus < 400, status: matchStatus, json: async () => matchBody } as Response;
     })
   );
