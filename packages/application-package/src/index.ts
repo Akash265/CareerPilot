@@ -10,3 +10,8 @@ export {
   ensureCompanyResearch, loadCompanyResearch, CompanyResearchRefreshFailedError,
   type CompanyResearchRow, type CompanyResearchFactRow, type CompanyResearchWithFacts, type JobForResearch,
 } from "./research/ensureCompanyResearch";
+export {
+  buildEvidenceIndex, type PitchEvidenceItem, type ResearchFactForEvidence, type RequirementForEvidence,
+} from "./pitch/buildEvidenceIndex";
+export { PitchDraftSchema, PitchDraftBulletSchema, type PitchDraft, type PitchDraftBullet } from "./pitch/pitchSchema";
+export { generatePitch, PitchGenerationValidationError, type GeneratePitchInput } from "./pitch/generatePitch";
