@@ -81,7 +81,13 @@ export function PitchPanel({ jobId }: { jobId: string }) {
 
   // A promise chain (state set inside callbacks), matching ResumeOptimizationPanel: the React lint rule
   // react-hooks/set-state-in-effect rejects setState calls in an async function an effect invokes directly.
-  const load = () =>
+  //
+  // By default a reload keeps whatever version is currently selected (if it still exists in the
+  // reloaded list) -- a plain Refresh must never silently jump the selection to a different version
+  // out from under an in-progress read. Only generate() and a successful save() pass
+  // { selectNewest: true } to explicitly jump to the newest version. The initial mount has no prior
+  // selection (state.kind is "loading", not "ready"), so it naturally falls through to newest too.
+  const load = (opts: { selectNewest?: boolean } = {}) =>
     fetch(base)
       .then((res) => {
         if (!res.ok) throw new Error("load failed");
@@ -89,7 +95,14 @@ export function PitchPanel({ jobId }: { jobId: string }) {
       })
       .then((body) => {
         const versions = body.versions as PitchView[];
-        setState({ kind: "ready", versions, research: (body.research as ResearchView | null) ?? null, selectedId: versions[0]?.id ?? null });
+        const research = (body.research as ResearchView | null) ?? null;
+        setState((prev) => {
+          let selectedId = versions[0]?.id ?? null;
+          if (!opts.selectNewest && prev.kind === "ready" && prev.selectedId !== null) {
+            if (versions.some((v) => v.id === prev.selectedId)) selectedId = prev.selectedId;
+          }
+          return { kind: "ready", versions, research, selectedId };
+        });
       })
       .catch(() => setState({ kind: "error" }));
 
@@ -98,7 +111,13 @@ export function PitchPanel({ jobId }: { jobId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  const post = async (kind: "generate" | "refresh" | "save", url: string, init: RequestInit, fallback: string): Promise<boolean> => {
+  const post = async (
+    kind: "generate" | "refresh" | "save",
+    url: string,
+    init: RequestInit,
+    fallback: string,
+    loadOpts: { selectNewest?: boolean } = {}
+  ): Promise<boolean> => {
     setBusy(kind);
     setActionError(null);
     setCopied(false);
@@ -109,7 +128,7 @@ export function PitchPanel({ jobId }: { jobId: string }) {
         setActionError(body?.error ?? fallback);
         return false;
       }
-      await load();
+      await load(loadOpts);
       return true;
     } catch {
       setActionError(fallback);
@@ -125,7 +144,7 @@ export function PitchPanel({ jobId }: { jobId: string }) {
   const selected = state.versions.find((v) => v.id === state.selectedId) ?? null;
   const unsupported = selected?.bullets.filter((b) => b.supported === false) ?? [];
 
-  const generate = () => post("generate", `${base}/run`, {}, "Could not generate a pitch.");
+  const generate = () => post("generate", `${base}/run`, {}, "Could not generate a pitch.", { selectNewest: true });
   const refresh = () => post("refresh", `${base}/research/refresh`, {}, "Could not refresh company research.");
   const save = async () => {
     if (!selected || !draft) return;
@@ -133,7 +152,8 @@ export function PitchPanel({ jobId }: { jobId: string }) {
       "save",
       `${base}/edit`,
       { headers: { "Content-Type": "application/json" }, body: JSON.stringify({ baseVersionId: selected.id, bullets: draft }) },
-      "Could not save your edit."
+      "Could not save your edit.",
+      { selectNewest: true }
     );
     if (ok) setDraft(null);
   };
@@ -152,7 +172,7 @@ export function PitchPanel({ jobId }: { jobId: string }) {
         <button
           type="button"
           onClick={generate}
-          disabled={busy !== null}
+          disabled={busy !== null || draft !== null}
           className="rounded bg-black px-3 py-1.5 text-sm text-white disabled:opacity-50"
         >
           {busy === "generate" ? "Generating..." : selected ? "Regenerate" : "Generate Pitch"}
@@ -166,11 +186,16 @@ export function PitchPanel({ jobId }: { jobId: string }) {
       {state.research && (
         <p className="text-sm text-gray-600">
           <span>
-            {state.research.status === "ok"
+            {/* Whether to show the age or the "unavailable" note is driven by the SELECTED pitch's own
+                researchStatus snapshot (the research that pitch was actually generated with) when a pitch
+                is selected, falling back to the current research's status only when there is none. The
+                age value itself always comes from the current research (state.research), never the pitch's
+                snapshot timestamp. */}
+            {(selected ? selected.researchStatus : state.research.status) === "ok"
               ? `Company researched ${researchAgeLabel(state.research.researchedAt)}`
               : "Web research unavailable — the company bullet is based on posting data only"}
           </span>{" "}
-          <button type="button" onClick={refresh} disabled={busy !== null} className="underline disabled:opacity-50">
+          <button type="button" onClick={refresh} disabled={busy !== null || draft !== null} className="underline disabled:opacity-50">
             {busy === "refresh" ? "Refreshing..." : "Refresh"}
           </button>
         </p>

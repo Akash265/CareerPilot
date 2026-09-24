@@ -73,10 +73,29 @@ describe("PitchPanel", () => {
     expect(screen.getByRole("combobox")).toHaveDisplayValue(/v2 · edited/);
   });
 
-  it("says web research is unavailable when research failed", async () => {
-    mockFetchSequence([{ body: { versions: [pitch], research: { ...research, status: "failed" } } }]);
+  it("says web research is unavailable when the selected pitch's own research failed", async () => {
+    mockFetchSequence([{ body: { versions: [{ ...pitch, researchStatus: "failed" }], research: { ...research, status: "failed" } } }]);
     render(<PitchPanel jobId="j1" />);
     expect(await screen.findByText(/web research unavailable/i)).toBeInTheDocument();
+  });
+
+  it("shows the posting-data-only note when the selected pitch's own research failed, even if current research is ok", async () => {
+    mockFetchSequence([{ body: { versions: [{ ...pitch, researchStatus: "failed" }], research } }]);
+    render(<PitchPanel jobId="j1" />);
+    expect(await screen.findByText(/web research unavailable/i)).toBeInTheDocument();
+  });
+
+  it("shows the research age when the selected pitch's own research succeeded, even if current research failed", async () => {
+    mockFetchSequence([{ body: { versions: [{ ...pitch, researchStatus: "ok" }], research: { ...research, status: "failed" } } }]);
+    render(<PitchPanel jobId="j1" />);
+    expect(await screen.findByText(/company researched today/i)).toBeInTheDocument();
+  });
+
+  it("keeps the age text and Refresh button driven by current research when there is no selected pitch", async () => {
+    mockFetchSequence([{ body: { versions: [], research } }]);
+    render(<PitchPanel jobId="j1" />);
+    await screen.findByText(/no pitch generated yet/i);
+    expect(screen.getByText(/company researched today/i)).toBeInTheDocument();
   });
 
   it("links only http(s) evidence sources, with safe rel attributes", async () => {
@@ -157,5 +176,56 @@ describe("PitchPanel", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(
       "• Acme's rocket work excites me.\n• The role centres on SQL.\n• I built SQL pipelines."
     ));
+  });
+
+  it("disables Regenerate and Refresh while editing", async () => {
+    mockFetchSequence([{ body: { versions: [pitch], research } }]);
+    render(<PitchPanel jobId="j1" />);
+    await screen.findByText("Acme's rocket work excites me.");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("button", { name: "Regenerate" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
+  });
+
+  it("keeps the previously selected (non-newest) version selected after a Refresh reload", async () => {
+    const v2 = { ...pitch, id: "p2", version: 2, bullets: bullets.map((b) => ({ ...b, text: `${b.text} v2` })) };
+    const fetchMock = mockFetchSequence([
+      { body: { versions: [v2, pitch], research } },
+      { body: { research } },
+      { body: { versions: [v2, pitch], research } },
+    ]);
+    render(<PitchPanel jobId="j1" />);
+    await screen.findByText("Acme's rocket work excites me. v2");
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "p1" } });
+    await screen.findByText("Acme's rocket work excites me.");
+    const line = screen.getByText(/company researched today/i);
+    fireEvent.click(within(line.parentElement!).getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(screen.getByText("Acme's rocket work excites me.")).toBeInTheDocument();
+    expect(screen.queryByText("Acme's rocket work excites me. v2")).not.toBeInTheDocument();
+  });
+
+  it("selects the newest version and closes edit mode after Save", async () => {
+    const fetchMock = mockFetchSequence([
+      { body: { versions: [pitch], research } },
+      { body: { pitch: { ...pitch, id: "p2", version: 2, origin: "user_edited" } }, status: 201 },
+      {
+        body: {
+          versions: [
+            { ...pitch, id: "p2", version: 2, origin: "user_edited", bullets: bullets.map((b) => ({ ...b, supported: null })) },
+            pitch,
+          ],
+          research,
+        },
+      },
+    ]);
+    render(<PitchPanel jobId="j1" />);
+    await screen.findByText("Acme's rocket work excites me.");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save as new version" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getAllByText("your wording")).toHaveLength(3);
   });
 });
