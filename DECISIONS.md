@@ -1393,4 +1393,9 @@ Minor fixes: concurrent spacing and a 10 s Retry-After cap in the polite fetch (
 **Found by a flaky test:** `recordBoardsFromRun` read a run's raw records without an order, so when two records linked one board in different cases the stored spelling depended on Postgres's row order (it changed under the load of the full parallel suite) -- and slugs can be case-sensitive (Lever). Records are now read by fetch time, then id; the test inserts them out of order, failing 3/3 without the fix.
 **What it affects:** `packages/ingestion/src/{normalize/salary,discovery/discover,discovery/boardLinks,adapters/politeFetch,adapters/boards,adapters/search,pipeline/runIngestion}.ts`, `apps/web/src/app/api/job-sources/[id]/route.ts`, `apps/web/src/lib/discovery/discovery.ts`, `services/job-ingestion/src/main.ts`.
 
+### D191. The web build clears Next.js's runtime route cache
+**Decision:** `apps/web`'s `build` script deletes `.next/server/route-cache` before `next build`; `src/lib/http/buildScript.test.ts` pins it.
+**Why:** Next.js 16.3 (the 11c upgrade) promotes rendered pages into `.next/server/route-cache` while `next start` runs, and `next build` does not clear that folder -- so after a rebuild the server kept serving pages cached under the previous build. Found when the merged Phase 12 `main` served the old `/sources` page (cached on 7 October) while its API ran the new code; the branch had passed only because its `.next` was new. Anyone pulling an update and rebuilding would have hit it. CI is unaffected (fresh checkout).
+**What it affects:** `apps/web/package.json`, `apps/web/src/lib/http/buildScript.test.ts`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

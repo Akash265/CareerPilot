@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "dotenv -e ../../.env -- sh -c 'next dev -H \"${APP_HOST:-127.0.0.1}\"'",
-    "build": "NODE_ENV=production dotenv -e ../../.env -- next build",
+    "build": "node -e \"require('fs').rmSync('.next/server/route-cache', { recursive: true, force: true })\" && NODE_ENV=production dotenv -e ../../.env -- next build",
     "start": "NODE_ENV=production dotenv -e ../../.env -- sh -c 'next start -H \"${APP_HOST:-127.0.0.1}\"'",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

@@ -63,3 +63,5 @@ The web app listens on `127.0.0.1` only. To open it to other devices set `APP_HO
 - **`403 Cross-site request blocked`**: a write came from another origin (or a proxy rewrote `Host`).
 - **`429`** on an AI route: the per-minute limit (`RATE_LIMIT_*`) or the monthly budget (`code: "ai_budget_exceeded"`).
 - **A worker shows "stale" on `/status`**: it stopped beating for `STATUS_STALE_AFTER_MS`; check its log.
+- **A page looks out of date after rebuilding**: build with `pnpm build` (or `pnpm --filter web build`), which clears Next.js's runtime route cache; running `next build` directly does not ([D191](../DECISIONS.md)).
+- **`TurbopackInternalError` during a build**: a one-off fault in Turbopack's incremental cache; run the build again (or delete `apps/web/.next/cache`).
