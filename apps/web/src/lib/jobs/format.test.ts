@@ -55,3 +55,12 @@ describe("safeHttpUrl", () => {
     }
   });
 });
+
+describe("formatErrorClass — Phase 12 search classes", () => {
+  it("explains each new class in words", async () => {
+    const { formatErrorClass } = await import("./format");
+    expect(formatErrorClass("no_active_goal")).toMatch(/confirm a career goal/i);
+    expect(formatErrorClass("no_search_terms")).toMatch(/target roles/i);
+    expect(formatErrorClass("missing_api_key")).toMatch(/\.env/);
+  });
+});

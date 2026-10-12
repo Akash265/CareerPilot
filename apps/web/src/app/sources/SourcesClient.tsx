@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { JobSourceView } from "../../lib/job-sources/serializeSource";
 import { AddBoardForm } from "./AddBoardForm";
+import { DiscoveryPanel } from "./DiscoveryPanel";
 import { SourceRow } from "./SourceRow";
 import { UploadJobsForm } from "./UploadJobsForm";
 
@@ -80,6 +81,24 @@ export function SourcesClient() {
       void load();
     });
 
+  // Phase 12: sources the user added, the search providers they switched on, and boards discovery added (up to 300).
+  const mine = (sources ?? []).filter((s) => s.origin === "manual");
+  const search = (sources ?? []).filter((s) => s.origin === "search");
+  const discovered = (sources ?? []).filter((s) => s.origin === "discovered");
+  const renderList = (label: string, list: JobSourceView[]) => (
+    <ul className="flex flex-col gap-3" aria-label={label}>
+      {list.map((source) => (
+        <SourceRow
+          key={source.id}
+          source={source}
+          busy={busyId === source.id}
+          onToggle={(enabled, consent) => void toggle(source, enabled, consent)}
+          onRun={() => void run(source)}
+        />
+      ))}
+    </ul>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 md:grid-cols-2">
@@ -104,22 +123,24 @@ export function SourcesClient() {
       )}
 
       {sources === null && !loadFailed && <p>Loading...</p>}
-      {sources !== null && sources.length === 0 && (
-        <p className="text-sm text-gray-600">No sources yet. Add a company board or upload a job export above.</p>
+      {sources !== null && mine.length === 0 && (
+        <p className="text-sm text-gray-600">No sources of your own yet. Add a company board or upload a job export above.</p>
       )}
-      {sources !== null && sources.length > 0 && (
-        <ul className="flex flex-col gap-3" aria-label="Job sources">
-          {sources.map((source) => (
-            <SourceRow
-              key={source.id}
-              source={source}
-              busy={busyId === source.id}
-              onToggle={(enabled, consent) => void toggle(source, enabled, consent)}
-              onRun={() => void run(source)}
-            />
-          ))}
-        </ul>
+      {sources !== null && mine.length > 0 && renderList("Job sources", mine)}
+      {search.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-sm font-medium">Search providers</h2>
+          {renderList("Search providers", search)}
+        </div>
       )}
+      {discovered.length > 0 && (
+        <details className="flex flex-col gap-2">
+          <summary className="cursor-pointer text-sm font-medium">Discovered boards ({discovered.length})</summary>
+          {renderList("Discovered boards", discovered)}
+        </details>
+      )}
+
+      <DiscoveryPanel onChanged={() => void load()} />
 
       <p className="text-sm">
         <Link href="/jobs" className="underline">Browse ingested jobs →</Link>

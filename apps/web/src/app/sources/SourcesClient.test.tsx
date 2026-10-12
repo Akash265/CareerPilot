@@ -6,7 +6,7 @@ import { SourcesClient } from "./SourcesClient";
 const source = (over: Record<string, unknown> = {}) => ({
   id: "s1", kind: "greenhouse", label: "GitLab", slug: "gitlab", companyName: "GitLab", enabled: false,
   consentConfirmedAt: null, lastRunAt: null, lastRunStatus: null, lastErrorClass: null, lastRun: null,
-  createdAt: "2026-09-01T00:00:00Z", ...over,
+  createdAt: "2026-09-01T00:00:00Z", origin: "manual", ...over,
 });
 
 type Handler = (init?: RequestInit) => { status?: number; body: unknown };
@@ -20,7 +20,14 @@ function mockFetch(handlers: Record<string, Handler>) {
   vi.stubGlobal("fetch", fn);
   return fn;
 }
-const list = (sources: unknown[]) => ({ "GET /api/job-sources": () => ({ body: { sources } }) });
+const DISCOVERY = {
+  settings: { consentedAt: null, autoDiscover: false }, providers: [],
+  boards: { counts: { pending: 0, enabled: 0, rejected: 0, gone: 0 }, recent: [] },
+};
+const list = (sources: unknown[]) => ({
+  "GET /api/job-sources": () => ({ body: { sources } }),
+  "GET /api/discovery": () => ({ body: DISCOVERY }),
+});
 const calls = (fn: ReturnType<typeof mockFetch>, key: string) =>
   fn.mock.calls.filter(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}` === key);
 
@@ -30,7 +37,7 @@ describe("SourcesClient", () => {
   it("shows a helpful empty state", async () => {
     mockFetch(list([]));
     render(<SourcesClient />);
-    expect(await screen.findByText(/No sources yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No sources of your own yet/)).toBeInTheDocument();
   });
 
   it("lists sources with their status and last run, and explains failures in words", async () => {
@@ -161,5 +168,21 @@ describe("SourcesClient", () => {
     render(<SourcesClient />);
     expect(await screen.findByText(/Could not load your sources/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("groups sources: yours, search providers, and discovered boards in a collapsed list (Phase 12)", async () => {
+    mockFetch(list([
+      source({ id: "m", label: "GitLab" }),
+      source({ id: "s", kind: "remotive", origin: "search", label: "Remotive", slug: null, lastErrorClass: "no_active_goal", lastRunStatus: "failed", lastRunAt: "2026-10-12T09:00:00Z" }),
+      source({ id: "d1", kind: "ashby", origin: "discovered", label: "Linear", slug: "linear" }),
+      source({ id: "d2", kind: "workable", origin: "discovered", label: "Hugging Face", slug: "huggingface" }),
+    ]));
+    render(<SourcesClient />);
+    const yours = await screen.findByRole("list", { name: "Job sources" });
+    expect(yours).toHaveTextContent("GitLab");
+    expect(yours).not.toHaveTextContent("Linear");
+    expect(screen.getByRole("list", { name: "Search providers" })).toHaveTextContent(/Remotive.*Confirm a career goal first/);
+    expect(screen.getByText(/Discovered boards \(2\)/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Discovered boards" })).toHaveTextContent(/Linear.*Hugging Face/);
   });
 });
