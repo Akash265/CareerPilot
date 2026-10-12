@@ -55,7 +55,10 @@ export async function recordBoardsFromRun(
     const rows = await tx
       .select({ payload: rawJobPostings.payload })
       .from(rawJobPostings)
-      .where(and(eq(rawJobPostings.sourceId, opts.sourceId), gte(rawJobPostings.fetchedAt, opts.since)));
+      .where(and(eq(rawJobPostings.sourceId, opts.sourceId), gte(rawJobPostings.fetchedAt, opts.since)))
+      // A fixed order: when two records link one board in different cases ("linear", "Linear"), the first spelling
+      // is the one kept -- and slugs can be case-sensitive (Lever) -- so it must not depend on the query plan.
+      .orderBy(asc(rawJobPostings.fetchedAt), asc(rawJobPostings.externalId));
     // Boards the user already has as sources (added by hand, discovered, or this run's own) are not new.
     const known = new Set(
       (await tx.select({ kind: jobSources.kind, config: jobSources.config }).from(jobSources))

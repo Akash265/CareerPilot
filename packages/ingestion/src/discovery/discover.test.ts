@@ -51,8 +51,10 @@ describe("recordBoardsFromRun (Phase 12, D186)", () => {
     await consent();
     const hn = await insertSource(t.adminSql, USER, { kind: "hn_hiring", label: "HN" });
     const own = await insertSource(t.adminSql, USER, { kind: "ashby", slug: "self" });
-    await storeRaw(hn, "1", { text: 'Apply <a href="https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;linear">here</a> or https://apply.workable.com/huggingface/' });
+    // Inserted out of fetch order on purpose: the first-fetched spelling ("linear") must win however the rows are stored.
     await storeRaw(hn, "2", { text: "Also https://jobs.ashbyhq.com/Linear and https://jobs.ashbyhq.com/self" });
+    await storeRaw(hn, "1", { text: 'Apply <a href="https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;linear">here</a> or https://apply.workable.com/huggingface/' },
+      new Date(NOW.getTime() - 60_000));
     await storeRaw(hn, "3", { text: "old https://jobs.lever.co/old" }, new Date("2026-10-01T00:00:00Z"));
     expect(await recordBoardsFromRun(t.db, { userId: USER, sourceId: hn, since: new Date("2026-10-12T00:00:00Z") })).toBe(2);
     expect(await recordBoardsFromRun(t.db, { userId: USER, sourceId: hn, since: new Date("2026-10-12T00:00:00Z") })).toBe(0);
