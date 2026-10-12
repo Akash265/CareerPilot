@@ -1,7 +1,15 @@
 import { sql } from "drizzle-orm";
 import { pgTable, pgEnum, uuid, text, jsonb, boolean, timestamp } from "drizzle-orm/pg-core";
 
-export const jobSourceKindEnum = pgEnum("job_source_kind", ["greenhouse", "lever", "upload"]);
+export const jobSourceKindEnum = pgEnum("job_source_kind", [
+  "greenhouse", "lever", "upload",
+  // Phase 12 (D184): more ATS boards (config.slug) ...
+  "ashby", "workable", "smartrecruiters", "recruitee",
+  // ... and goal-driven search providers (no config; the query comes from the active career goal).
+  "adzuna", "jooble", "usajobs", "themuse", "remotive", "remoteok", "arbeitnow", "hn_hiring",
+]);
+/** How a source came to exist: added by the user, created by discovery, or a search provider the user enabled. */
+export const jobSourceOriginEnum = pgEnum("job_source_origin", ["manual", "discovered", "search"]);
 export const ingestionRunStatusEnum = pgEnum("ingestion_run_status", ["running", "succeeded", "failed"]);
 
 // The watch-list. `consent_confirmed_at` is the D3 gate: the worker refuses to
@@ -13,6 +21,7 @@ export const jobSources = pgTable("job_sources", {
     .notNull()
     .default(sql`current_setting('app.current_user_id')::uuid`),
   kind: jobSourceKindEnum("kind").notNull(),
+  origin: jobSourceOriginEnum("origin").notNull().default("manual"),
   label: text("label").notNull(),
   config: jsonb("config").$type<{ slug?: string; companyName?: string }>().notNull().default(sql`'{}'::jsonb`),
   enabled: boolean("enabled").notNull().default(false),

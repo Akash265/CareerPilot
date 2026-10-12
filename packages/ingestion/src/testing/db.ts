@@ -4,6 +4,7 @@ import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { closeDbClient, createDbClient, type DbClient } from "@ai-career/db";
+import { isSearchKind, type SourceKind } from "../types";
 
 // packages/ingestion/src/testing -> packages/db/migrations
 const MIGRATIONS_FOLDER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../db/migrations");
@@ -57,13 +58,14 @@ export async function wipeUser(adminSql: postgres.Sql, userId: string): Promise<
 export async function insertSource(
   adminSql: postgres.Sql,
   userId: string,
-  opts: { kind?: "greenhouse" | "lever" | "upload"; label?: string; slug?: string; enabled?: boolean; consent?: boolean } = {}
+  opts: { kind?: SourceKind; label?: string; slug?: string; enabled?: boolean; consent?: boolean } = {}
 ): Promise<string> {
   const kind = opts.kind ?? "greenhouse";
-  const config = kind === "upload" ? {} : { slug: opts.slug ?? `board-${Math.random().toString(36).slice(2, 10)}` };
+  const search = isSearchKind(kind);
+  const config = kind === "upload" || search ? {} : { slug: opts.slug ?? `board-${Math.random().toString(36).slice(2, 10)}` };
   const [row] = await adminSql`
-    INSERT INTO job_sources (user_id, kind, label, config, enabled, consent_confirmed_at)
-    VALUES (${userId}, ${kind}, ${opts.label ?? "Acme"}, ${JSON.stringify(config)}::jsonb,
+    INSERT INTO job_sources (user_id, kind, origin, label, config, enabled, consent_confirmed_at)
+    VALUES (${userId}, ${kind}, ${search ? "search" : "manual"}, ${opts.label ?? "Acme"}, ${JSON.stringify(config)}::jsonb,
             ${opts.enabled ?? true}, ${(opts.consent ?? true) ? new Date().toISOString() : null}::timestamptz)
     RETURNING id`;
   return row.id as string;

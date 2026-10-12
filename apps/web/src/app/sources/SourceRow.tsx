@@ -3,8 +3,9 @@
 import { useState } from "react";
 import type { JobSourceView } from "../../lib/job-sources/serializeSource";
 import { formatDate, formatErrorClass } from "../../lib/jobs/format";
+import { SOURCE_KIND_LABELS } from "../../lib/job-sources/kindLabels";
 
-const KIND: Record<JobSourceView["kind"], string> = { greenhouse: "Greenhouse", lever: "Lever", upload: "File upload" };
+const KIND = SOURCE_KIND_LABELS;
 
 function lastRunText(source: JobSourceView): string {
   if (source.lastRunStatus === "running") return "Running…";

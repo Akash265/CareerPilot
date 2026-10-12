@@ -2,13 +2,15 @@ import { randomBytes } from "node:crypto";
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from "vitest";
 import { withUserContext } from "@ai-career/db";
 import { runIngestion, type RunSummary } from "./runIngestion";
-import { createAdapterFor } from "./adapterFor";
+import { createAdapterFor, type ProviderConfig } from "./adapterFor";
 import { storeUpload } from "./storeUpload";
 import { insertSource, openTestDb, wipeUser, type TestDb } from "../testing/db";
 import { greenhouseJobFixture } from "../fixtures";
 import { IngestError, type RawRecord, type SourceAdapter } from "../types";
 
 const USER = "00000000-0000-0000-0000-0000000000a2";
+// Uploads read back stored records; no provider is ever called, so every base points nowhere.
+const UNUSED_PROVIDERS = { boards: new Proxy({}, { get: () => "http://unused.test" }), search: { bases: new Proxy({}, { get: () => "http://unused.test" }), keys: { adzunaCountries: [] } } } as unknown as ProviderConfig;
 const OTHER_USER = "00000000-0000-0000-0000-0000000000e2";
 const TITLES: Record<number, string> = { 1: "Data Engineer", 2: "Product Designer", 3: "Security Analyst" };
 let t: TestDb;
@@ -376,7 +378,7 @@ describe("runIngestion — uploads", () => {
   });
 
   it("processes a stored upload and never closes anything, even when a later run has fewer records", async () => {
-    const uploadAdapterFor = createAdapterFor({ db: t.db, userId: USER, greenhouseBaseUrl: "http://unused.test", leverBaseUrl: "http://unused.test" });
+    const uploadAdapterFor = createAdapterFor({ db: t.db, userId: USER, providers: UNUSED_PROVIDERS });
     const records: RawRecord[] = [
       { externalId: "u1", payload: { title: "Data Analyst", company: "Acme" } },
       { externalId: "u2", payload: { title: "Site Reliability Engineer", company: "Acme" } },

@@ -1,0 +1,44 @@
+{
+  "page": 1,
+  "page_count": 1,
+  "total": 1,
+  "results": [
+    {
+      "contents": "<div><p>SpaceX was founded under the belief that a future where humanity is out exploring the stars is fundamentally more exciting than one where we are not. Today SpaceX is actively developing the technologies to make this possible, with the ultimate goal of&nbsp;enabling human life on Mars.</p></div>\n\n<p><strong>EDA ENGINEER (RFIC ENGINEERING)</strong>&nbsp;</p>\n\n<div>\n<p>At SpaceX we’re leveraging our experience in building rockets and spacecraft to deploy Starlink, the world’s most advanced broadband internet system. Starlink is the world’s largest satellite constellation and is providing fast, reliable internet to millions of users worldwide. We design, build, test, and operate all part",
+      "name": "EDA Engineer (RFIC Engineering)",
+      "type": "external",
+      "publication_date": "2026-07-14T23:41:10Z",
+      "short_name": "eda-engineer-rfic-engineering-c28c6e",
+      "model_type": "jobs",
+      "id": 21947336,
+      "locations": [
+        {
+          "name": "Irvine, CA"
+        },
+        {
+          "name": "Redmond, WA"
+        }
+      ],
+      "categories": [
+        {
+          "name": "Software Engineering"
+        }
+      ],
+      "levels": [
+        {
+          "name": "Mid Level",
+          "short_name": "mid"
+        }
+      ],
+      "tags": [],
+      "refs": {
+        "landing_page": "https://www.themuse.com/jobs/spacex/eda-engineer-rfic-engineering-c28c6e"
+      },
+      "company": {
+        "id": 15000190,
+        "short_name": "spacex",
+        "name": "SpaceX"
+      }
+    }
+  ]
+}

@@ -42,7 +42,13 @@ export interface MergedJob {
 }
 
 // Structured ATS APIs are more trustworthy than a hand-uploaded file.
-const SOURCE_RANK: Record<SourceKind, number> = { greenhouse: 2, lever: 2, upload: 1 };
+// A company's own board outranks a user upload, which outranks an aggregator's copy (often a snippet behind a
+// tracking link) when the same job appears in several sources (D184).
+const SOURCE_RANK: Record<SourceKind, number> = {
+  greenhouse: 2, lever: 2, ashby: 2, workable: 2, smartrecruiters: 2, recruitee: 2,
+  upload: 1,
+  adzuna: 0, jooble: 0, usajobs: 0, themuse: 0, remotive: 0, remoteok: 0, arbeitnow: 0, hn_hiring: 0,
+};
 
 /** Sort order for "who wins a conflict": open first, then source rank, then most recently seen, then id (stable). */
 export function comparePostings(a: PostingForMerge, b: PostingForMerge): number {

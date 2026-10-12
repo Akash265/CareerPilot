@@ -1,0 +1,28 @@
+{
+  "count": 1,
+  "results": [
+    {
+      "id": "4732811234",
+      "title": "Senior <strong>Data Engineer</strong>",
+      "company": {
+        "display_name": "Acme Analytics"
+      },
+      "location": {
+        "display_name": "London, UK",
+        "area": [
+          "UK",
+          "London"
+        ]
+      },
+      "description": "We are looking for a Data Engineer with 3+ years of SQL and Python…",
+      "redirect_url": "https://www.adzuna.co.uk/jobs/land/ad/4732811234",
+      "created": "2026-10-08T09:12:44Z",
+      "salary_min": 60000,
+      "salary_max": 75000,
+      "salary_is_predicted": "0",
+      "contract_type": "permanent",
+      "contract_time": "full_time",
+      "__CLASS__": "Adzuna::API::Response::Job"
+    }
+  ]
+}

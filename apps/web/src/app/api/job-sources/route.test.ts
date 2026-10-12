@@ -63,6 +63,15 @@ describe("POST /api/job-sources", () => {
     expect(row).toMatchObject({ enabled: false, consent_confirmed_at: null });
   });
 
+  it("accepts every ATS board kind, but not a search provider or an upload (Phase 12)", async () => {
+    for (const kind of ["ashby", "workable", "smartrecruiters", "recruitee"]) {
+      expect((await post({ kind, slug: `co-${kind}` })).status, kind).toBe(201);
+    }
+    for (const kind of ["remotive", "adzuna", "upload"]) {
+      expect((await post({ kind, slug: "x" })).status, kind).toBe(400);
+    }
+  });
+
   it("labels a board by its slug when no company name is given", async () => {
     const { source } = await (await post({ kind: "lever", slug: "spotify" })).json();
     expect(source).toMatchObject({ label: "spotify", companyName: null });

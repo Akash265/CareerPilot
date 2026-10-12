@@ -3,6 +3,7 @@
 //                           400, so a flow change that reaches a new AI step fails loudly instead of passing on junk.
 //   POST /v1/embeddings  -- Voyage: deterministic 1024-dim bag-of-words vectors (similar text → similar vectors).
 //   GET  /__calls        -- how many calls each endpoint and tool received (the smoke checks the stand-ins were used).
+//   GET  job APIs        -- Phase 12: a Remotive search and the Ashby board it links to (see JOB_APIS).
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 
@@ -22,7 +23,26 @@ const TOOL_INPUTS = {
   },
 };
 
-const calls = { messages: 0, embeddings: 0, tools: {} };
+const calls = { messages: 0, embeddings: 0, tools: {}, jobApis: {} };
+
+// Phase 12 job APIs (D184-D187): one Remotive search hit whose description links to an Ashby board, and that board.
+// Every other job-API path is a 404, so a provider the smoke did not expect fails loudly.
+const JOB_APIS = {
+  "/api/remote-jobs": {
+    jobs: [{
+      id: 990001, url: "https://remotive.com/remote-jobs/data/discovery-data-engineer-990001", title: "Discovery Data Engineer",
+      company_name: "Acme Co", job_type: "full_time", publication_date: "2026-10-10T10:00:00", candidate_required_location: "Worldwide",
+      salary: "", description: '<p>Apply on <a href="https://jobs.ashbyhq.com/acmeco">our board</a>. SQL and Python, 3+ years.</p>',
+    }],
+  },
+  "/posting-api/job-board/acmeco": {
+    jobs: [{
+      id: "acme-1", title: "Acme Platform Engineer", location: "Remote", isListed: true, workplaceType: "Remote", employmentType: "FullTime",
+      publishedAt: "2026-10-10T10:00:00Z", jobUrl: "https://jobs.ashbyhq.com/acmeco/acme-1",
+      descriptionPlain: "Build data platforms with SQL and Python. 3+ years of experience.",
+    }],
+  },
+};
 
 function embed(text) {
   const v = new Array(DIM).fill(0);
@@ -51,6 +71,11 @@ const send = (res, status, body) => res.writeHead(status, { "content-type": "app
 
 createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/__calls") return send(res, 200, calls);
+  if (req.method === "GET") {
+    const path = new URL(req.url ?? "/", "http://x").pathname;
+    calls.jobApis[path] = (calls.jobApis[path] ?? 0) + 1;
+    return path in JOB_APIS ? send(res, 200, JOB_APIS[path]) : send(res, 404, { error: "not found" });
+  }
   if (req.method !== "POST") return send(res, 404, { error: "not found" });
   const body = await readJson(req);
   if (req.url?.startsWith("/v1/messages")) {

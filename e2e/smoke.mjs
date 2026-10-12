@@ -155,6 +155,37 @@ export async function runSmoke(ctx) {
     await check("/status shows the matching worker running",
       (await matchingRow.getByRole("cell").nth(1).textContent({ timeout: 15_000 }))?.trim() === "Running", await matchingRow.textContent());
 
+    // --- Phase 12 discovery ---------------------------------------------------------------------------------------
+    const discovery = async () => json(await api.get(`${ctx.base}/api/discovery`));
+    const refused = await api.put(`${ctx.base}/api/discovery/providers/remotive`, { data: { enabled: true } });
+    await check("a search provider cannot be switched on before the standing permission", refused.status() === 409, await json(refused));
+    const settings = await api.put(`${ctx.base}/api/discovery/settings`, { data: { consent: true, autoDiscover: true } });
+    await check("the standing permission and auto-discovery are recorded", settings.status() === 200 && (await discovery())?.settings?.consentedAt, await json(settings));
+    const enable = await api.put(`${ctx.base}/api/discovery/providers/remotive`, { data: { enabled: true } });
+    await check("Remotive is switched on as a search source", enable.status() === 200, await json(enable));
+    const remotiveId = (await discovery()).providers.find((p) => p.kind === "remotive")?.sourceId;
+    const queued = await api.post(`${ctx.base}/api/job-sources/${remotiveId}/run`);
+    await check("a run of the search source is queued", queued.status() < 300, await json(queued));
+    const searched = await waitFor("the search result to be ingested", async () =>
+      ((await json(await api.get(`${ctx.base}/api/jobs?status=all&q=Discovery%20Data%20Engineer`)))?.total ?? 0) >= 1);
+    await check("the goal-driven search ingested the provider's job", searched);
+    const board = await waitFor("the linked Ashby board to be discovered and validated", async () => {
+      const recent = (await discovery())?.boards?.recent ?? [];
+      return recent.find((b) => b.kind === "ashby" && b.slug === "acmeco" && b.status === "enabled") ?? null;
+    });
+    await check("the board linked from the posting became an enabled source named after it", board.foundVia === "Remotive", board);
+    const discoveredSource = (await json(await api.get(`${ctx.base}/api/job-sources`))).sources.find((s) => s.origin === "discovered" && s.slug === "acmeco");
+    await check("the discovered source is enabled and consented", discoveredSource?.enabled === true && discoveredSource?.consentConfirmedAt, discoveredSource);
+    await api.post(`${ctx.base}/api/job-sources/${discoveredSource.id}/run`);
+    const boardJobs = await waitFor("the discovered board's jobs to be ingested", async () =>
+      ((await json(await api.get(`${ctx.base}/api/jobs?status=all&q=Acme%20Platform%20Engineer`)))?.total ?? 0) >= 1);
+    await check("the discovered board was fetched like any other source", boardJobs);
+    const fake = await (await fetch(`${ctx.fake}/__calls`)).json();
+    await check("every job API call went to the local stand-in", fake.jobApis["/api/remote-jobs"] >= 1 && fake.jobApis["/posting-api/job-board/acmeco"] >= 2, fake.jobApis);
+    await page.goto(`${ctx.base}/sources`);
+    await check("/sources shows the discovery panel and the discovered board",
+      await visible(page.getByRole("heading", { name: "Discover jobs automatically" })) && await visible(page.getByText("Discovered boards (1)")));
+
     // --- 11c rate limits ----------------------------------------------------------------------------------------
     // 2 x limit + 2 calls: even if a 60 s window rolls over mid-loop, one of the two windows sees limit + 1.
     let limited = null;

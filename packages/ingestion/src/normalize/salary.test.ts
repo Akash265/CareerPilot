@@ -196,3 +196,29 @@ describe("extractSalary — adversarial input (posting text is untrusted)", () =
     expect(r.raw).toContain("$150,000");
   });
 });
+
+describe("extractSalary — benefit amounts are not salaries (Phase 12 live check, D189)", () => {
+  it("ignores an amount followed by budget, allowance, stipend, reimbursement or voucher", () => {
+    for (const text of [
+      "We support growth with bunq Academy and €1500 annual learning budget",
+      "Perks: $2,000 annual home-office allowance",
+      "A £500 yearly wellness stipend",
+      "€1,200 per year in travel reimbursement",
+      "$100 monthly lunch vouchers",
+    ]) {
+      expect(extractSalary(text).isParsed, text).toBe(false);
+    }
+  });
+
+  it("keeps a real salary that a benefit is merely mentioned after (review fix)", () => {
+    expect(extractSalary("Salary: $120,000 base salary plus relocation allowance")).toMatchObject({ min: 120000, isParsed: true });
+    expect(extractSalary("Compensation: €60,000 per year and a generous training budget")).toMatchObject({ min: 60000, isParsed: true });
+    expect(extractSalary("Pay: $150k-$180k with home office stipend")).toMatchObject({ min: 150000, max: 180000, isParsed: true });
+    expect(extractSalary("Pay: $150k-$180k with home-office stipend")).toMatchObject({ min: 150000, max: 180000, isParsed: true });
+    expect(extractSalary("Salary $130,000 - $160,000 plus equity and a learning budget")).toMatchObject({ min: 130000, max: 160000, isParsed: true });
+  });
+
+  it("still finds the salary when a benefit amount follows it in the same sentence", () => {
+    expect(extractSalary("Salary: €60,000 per year plus €1,500 learning budget")).toMatchObject({ min: 60000, max: 60000, currency: "EUR", isParsed: true });
+  });
+});

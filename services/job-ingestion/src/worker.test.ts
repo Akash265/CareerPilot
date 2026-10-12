@@ -15,17 +15,20 @@ let queue: Queue<IngestJobData>;
 let events: QueueEvents;
 let worker: Worker<IngestJobData>;
 let adapter: SourceAdapter;
+const afterRun = vi.fn(async (event: { sourceId: string; since: Date; errorClass: string | null }) => void event);
 
 beforeAll(async () => {
   t = await openTestDb();
   queue = new Queue<IngestJobData>(queueName, { connection });
   events = new QueueEvents(queueName, { connection });
   await events.waitUntilReady();
-  worker = createIngestWorker({ connection, db: t.db, userId: USER, adapterFor: () => adapter, queueName });
+  worker = createIngestWorker({ connection, db: t.db, userId: USER, adapterFor: () => adapter, queueName, search: { maxDaysOld: 30, maxPages: 2, staleAfterDays: 14 }, afterRun });
   await worker.waitUntilReady();
 });
 beforeEach(async () => {
   await wipeUser(t.adminSql, USER);
+  afterRun.mockReset();
+  afterRun.mockImplementation(async () => undefined);
 });
 afterAll(async () => {
   await worker.close();
@@ -79,5 +82,30 @@ describe("ingest worker", () => {
     const runs = await t.adminSql`SELECT status, error_class FROM ingestion_runs WHERE source_id = ${source}`;
     expect(runs).toHaveLength(2);
     expect(runs.every((r) => r.status === "failed" && r.error_class === "server_error")).toBe(true);
+  });
+
+  it("calls afterRun with the source, the run's start and its outcome (Phase 12 discovery hook)", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    adapter = { fetch: async function* () { yield { externalId: "1", payload: greenhouseJobFixture }; } };
+    const before = Date.now();
+    await (await enqueue(source)).waitUntilFinished(events);
+    expect(afterRun).toHaveBeenCalledTimes(1);
+    const [event] = afterRun.mock.calls[0];
+    expect(event).toMatchObject({ sourceId: source, errorClass: null });
+    expect(event.since.getTime()).toBeGreaterThanOrEqual(before - 1000);
+
+    const failing = await insertSource(t.adminSql, USER, { consent: false });
+    await expect((await enqueue(failing, { removeOnFail: false })).waitUntilFinished(events)).rejects.toThrow("consent_missing");
+    expect(afterRun.mock.calls[1][0]).toMatchObject({ sourceId: failing, errorClass: "consent_missing" });
+  });
+
+  it("does not fail the job when afterRun throws", async () => {
+    const source = await insertSource(t.adminSql, USER);
+    adapter = { fetch: async function* () { yield { externalId: "1", payload: greenhouseJobFixture }; } };
+    afterRun.mockImplementation(async () => { throw new Error("discovery broke"); });
+    const job = await enqueue(source);
+    await job.waitUntilFinished(events);
+    expect(await job.getState()).toBe("completed");
+    expect(afterRun).toHaveBeenCalledTimes(1);
   });
 });

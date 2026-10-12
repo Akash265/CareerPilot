@@ -289,4 +289,42 @@ describe("loadEnv", () => {
     expect(loadEnv({ ...validSource, VOYAGE_API_BASE: "http://127.0.0.1:4013" }).VOYAGE_API_BASE).toBe("http://127.0.0.1:4013");
     expect(() => loadEnv({ ...validSource, VOYAGE_API_BASE: "nope" })).toThrow(/VOYAGE_API_BASE/);
   });
+
+  it("Phase 12: provider bases default to the real APIs, keys are optional, discovery limits have defaults", () => {
+    const env = loadEnv(validSource);
+    expect(env.ASHBY_API_BASE).toBe("https://api.ashbyhq.com");
+    expect(env.WORKABLE_API_BASE).toBe("https://apply.workable.com");
+    expect(env.SMARTRECRUITERS_API_BASE).toBe("https://api.smartrecruiters.com");
+    expect(env.RECRUITEE_API_BASE).toBe("https://{slug}.recruitee.com");
+    expect(env.ADZUNA_API_BASE).toBe("https://api.adzuna.com");
+    expect(env.JOOBLE_API_BASE).toBe("https://jooble.org");
+    expect(env.USAJOBS_API_BASE).toBe("https://data.usajobs.gov");
+    expect(env.THEMUSE_API_BASE).toBe("https://www.themuse.com");
+    expect(env.REMOTIVE_API_BASE).toBe("https://remotive.com");
+    expect(env.REMOTEOK_API_BASE).toBe("https://remoteok.com");
+    expect(env.ARBEITNOW_API_BASE).toBe("https://www.arbeitnow.com");
+    expect(env.HN_API_BASE).toBe("https://hn.algolia.com");
+    expect(env.ADZUNA_APP_ID).toBeUndefined();
+    expect(env.JOOBLE_API_KEY).toBeUndefined();
+    expect(env.USAJOBS_API_KEY).toBeUndefined();
+    expect(env.ADZUNA_COUNTRIES).toEqual(["us", "gb"]);
+    expect(env).toMatchObject({
+      DISCOVERY_MAX_DAYS_OLD: 30, DISCOVERY_MAX_PAGES: 2, DISCOVERY_MAX_SOURCES: 300, DISCOVERY_MAX_NEW_PER_RUN: 25,
+      DISCOVERY_MIN_INTERVAL_MS: 1000, DISCOVERY_STALE_DAYS: 14,
+    });
+  });
+
+  it("Phase 12: parses keys and countries, and validates the Recruitee template and the USAJobs pairing", () => {
+    const env = loadEnv({
+      ...validSource, ADZUNA_APP_ID: "id", ADZUNA_APP_KEY: "key", ADZUNA_COUNTRIES: " DE, gb ,", JOOBLE_API_KEY: "j",
+      USAJOBS_API_KEY: "u", USAJOBS_USER_AGENT: "me@example.com", RECRUITEE_API_BASE: "http://127.0.0.1:4013/recruitee/{slug}",
+    });
+    expect(env.ADZUNA_COUNTRIES).toEqual(["de", "gb"]);
+    expect(env.RECRUITEE_API_BASE).toBe("http://127.0.0.1:4013/recruitee/{slug}");
+    expect(() => loadEnv({ ...validSource, RECRUITEE_API_BASE: "https://recruitee.com" })).toThrow(/RECRUITEE_API_BASE/);
+    expect(() => loadEnv({ ...validSource, ADZUNA_COUNTRIES: "usa" })).toThrow(/ADZUNA_COUNTRIES/);
+    expect(() => loadEnv({ ...validSource, USAJOBS_API_KEY: "u" })).toThrow(/USAJOBS_USER_AGENT/);
+    expect(() => loadEnv({ ...validSource, ADZUNA_APP_ID: "id" })).toThrow(/ADZUNA_APP_KEY/);
+    expect(() => loadEnv({ ...validSource, DISCOVERY_MAX_PAGES: "0" })).toThrow(/DISCOVERY_MAX_PAGES/);
+  });
 });

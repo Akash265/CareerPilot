@@ -89,6 +89,44 @@ const envSchema = z
     // Phase 11c (D178). Requests per minute for routes that call the AI / start background work; 0 = no limit.
     RATE_LIMIT_AI_PER_MINUTE: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(10)),
     RATE_LIMIT_JOBS_PER_MINUTE: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(20)),
+    // Phase 12 (D184). Provider API bases: operator-controlled like GREENHOUSE_API_BASE (never user input, which keeps the
+    // adapters SSRF-safe); tests and E2E point them at local stand-ins. Recruitee is per-company, so its base is a
+    // template with a {slug} placeholder.
+    ASHBY_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://api.ashbyhq.com")),
+    WORKABLE_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://apply.workable.com")),
+    SMARTRECRUITERS_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://api.smartrecruiters.com")),
+    RECRUITEE_API_BASE: z.preprocess(
+      blankAsUnset,
+      z.string().regex(/^https?:\/\/\S*\{slug\}\S*$/, "must be an http(s) URL template containing {slug}").default("https://{slug}.recruitee.com"),
+    ),
+    ADZUNA_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://api.adzuna.com")),
+    JOOBLE_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://jooble.org")),
+    USAJOBS_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://data.usajobs.gov")),
+    THEMUSE_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://www.themuse.com")),
+    REMOTIVE_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://remotive.com")),
+    REMOTEOK_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://remoteok.com")),
+    ARBEITNOW_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://www.arbeitnow.com")),
+    HN_API_BASE: z.preprocess(blankAsUnset, z.string().url().default("https://hn.algolia.com")),
+    // Keys for the search providers that need one; a provider without its key cannot be enabled.
+    ADZUNA_APP_ID: z.preprocess(blankAsUnset, z.string().min(1).optional()),
+    ADZUNA_APP_KEY: z.preprocess(blankAsUnset, z.string().min(1).optional()),
+    ADZUNA_COUNTRIES: z.preprocess(
+      blankAsUnset,
+      z.string().default("us,gb")
+        .transform((v) => v.split(",").map((c) => c.trim().toLowerCase()).filter(Boolean))
+        .refine((list) => list.length > 0 && list.every((c) => /^[a-z]{2}$/.test(c)), "must be two-letter country codes, comma-separated"),
+    ),
+    JOOBLE_API_KEY: z.preprocess(blankAsUnset, z.string().min(1).optional()),
+    USAJOBS_API_KEY: z.preprocess(blankAsUnset, z.string().min(1).optional()),
+    /** USAJobs requires the registered email as the User-Agent. */
+    USAJOBS_USER_AGENT: z.preprocess(blankAsUnset, z.string().email().optional()),
+    // Discovery limits (D186, D187).
+    DISCOVERY_MAX_DAYS_OLD: z.preprocess(blankAsUnset, z.coerce.number().int().min(1).max(90).default(30)),
+    DISCOVERY_MAX_PAGES: z.preprocess(blankAsUnset, z.coerce.number().int().min(1).max(10).default(2)),
+    DISCOVERY_MAX_SOURCES: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(300)),
+    DISCOVERY_MAX_NEW_PER_RUN: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(25)),
+    DISCOVERY_MIN_INTERVAL_MS: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(1000)),
+    DISCOVERY_STALE_DAYS: z.preprocess(blankAsUnset, z.coerce.number().int().min(1).default(14)),
   })
   .superRefine((val, ctx) => {
     if (val.EMBEDDING_PROVIDER === "voyage" && !val.VOYAGE_API_KEY) {
@@ -104,6 +142,15 @@ const envSchema = z
         path: ["STATUS_STALE_AFTER_MS"],
         message: `must be longer than HEARTBEAT_INTERVAL_MS (${val.HEARTBEAT_INTERVAL_MS}); about 3x is a good margin`,
       });
+    }
+    for (const [present, missing, partner] of [
+      [val.ADZUNA_APP_ID, val.ADZUNA_APP_KEY, "ADZUNA_APP_KEY"],
+      [val.ADZUNA_APP_KEY, val.ADZUNA_APP_ID, "ADZUNA_APP_ID"],
+      [val.USAJOBS_API_KEY, val.USAJOBS_USER_AGENT, "USAJOBS_USER_AGENT"],
+    ] as const) {
+      if (present !== undefined && missing === undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: [partner], message: "is required with its pair (see .env.example)" });
+      }
     }
     const langfuse = { LANGFUSE_HOST: val.LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY: val.LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY: val.LANGFUSE_SECRET_KEY };
     const missing = Object.entries(langfuse).filter(([, v]) => v === undefined).map(([k]) => k);

@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { hasUnsafeText, SLUG_RE } from "@ai-career/ingestion";
+import { BOARD_KINDS, hasUnsafeText, SLUG_RE } from "@ai-career/ingestion";
 
 export const CreateJobSourceSchema = z.object({
-  kind: z.enum(["greenhouse", "lever"]),
+  // Phase 12: any ATS board. Search providers are switched on from the discovery panel, and uploads have their own route.
+  kind: z.enum(BOARD_KINDS),
   slug: z
     .string()
     .trim()

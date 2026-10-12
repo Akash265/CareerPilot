@@ -39,6 +39,12 @@ function e2eEnv() {
     EMBEDDING_PROVIDER: "voyage",
     VOYAGE_API_BASE: fake,
     VOYAGE_API_KEY: "voyage-e2e-fake",
+    // Phase 12: every job-provider base points at the stand-in, keys are blank, and requests are not spaced out.
+    ...Object.fromEntries(["GREENHOUSE", "LEVER", "ASHBY", "WORKABLE", "SMARTRECRUITERS", "ADZUNA", "JOOBLE", "USAJOBS", "THEMUSE", "REMOTIVE", "REMOTEOK", "ARBEITNOW", "HN"]
+      .map((p) => [`${p}_API_BASE`, fake])),
+    RECRUITEE_API_BASE: `${fake}/recruitee/{slug}`,
+    ADZUNA_APP_ID: "", ADZUNA_APP_KEY: "", JOOBLE_API_KEY: "", USAJOBS_API_KEY: "", USAJOBS_USER_AGENT: "",
+    DISCOVERY_MIN_INTERVAL_MS: "0",
     // Blank = unset (loadEnv): nothing is exported to a real Langfuse from an E2E run.
     LANGFUSE_HOST: "",
     LANGFUSE_PUBLIC_KEY: "",

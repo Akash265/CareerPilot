@@ -1,12 +1,15 @@
 import { and, eq } from "drizzle-orm";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { MAX_EXTERNAL_ID_CHARS, normalizeRecord } from "../normalize/normalizeRecord";
-import { IngestError, type IngestErrorClass, type NormalizedJob, type SourceAdapter, type SourceRef } from "../types";
+import { IngestError, isSearchKind, type IngestErrorClass, type NormalizedJob, type SearchQuery, type SourceAdapter, type SourceRef } from "../types";
 import { closeMissingPostings } from "./closeMissing";
 import { hashPayload } from "./hashPayload";
 import { persistPosting } from "./persistPosting";
 
-const { jobSources, ingestionRuns, rawJobPostings, jobPostings } = schema;
+const { jobSources, ingestionRuns, rawJobPostings, jobPostings, careerGoals, careerGoalConstraints, discoverySettings } = schema;
+
+/** A goal can name any number of roles and places; each is a request per provider, so only the first few are searched. */
+const MAX_QUERY_TERMS = 5;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -15,6 +18,8 @@ export interface RunIngestionOptions {
   sourceId: string;
   adapterFor: (source: SourceRef) => SourceAdapter;
   now?: () => Date;
+  /** Phase 12 (D187): limits for search sources. Required to run one; board and upload sources ignore it. */
+  search?: { maxDaysOld: number; maxPages: number; staleAfterDays: number };
 }
 
 export interface RunSummary {
@@ -45,6 +50,9 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
 
   const [source] = await inUserContext((tx) => tx.select().from(jobSources).where(eq(jobSources.id, sourceId)).limit(1));
   if (!source) throw new IngestError("not_found");
+  const search = isSearchKind(source.kind);
+  // A wiring bug, not a source problem: fail before a run row exists rather than leave one "running".
+  if (search && !opts.search) throw new Error("runIngestion: a search source needs opts.search");
 
   const startedAt = now();
   const [run] = await inUserContext((tx) =>
@@ -88,18 +96,25 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
     runId: run.id, status, complete, errorClass, ...counters,
   });
 
-  // The D3 consent gate lives here, in worker code, not only in the UI.
+  // The D3 consent gate lives here, in worker code, not only in the UI. A search or discovered source also needs
+  // the standing consent to still hold, and a discovered one auto-discovery (D185) -- its own stamp is not enough,
+  // since it outlives a withdrawal.
+  const [discovery] = source.origin === "manual" ? [] : await inUserContext((tx) => tx.select().from(discoverySettings).limit(1));
   const guard: IngestErrorClass | null = !source.enabled
     ? "source_disabled"
-    : !source.consentConfirmedAt
+    : !source.consentConfirmedAt || (source.origin !== "manual" && !discovery?.consentedAt)
       ? "consent_missing"
-      : null;
+      : source.origin === "discovered" && !discovery?.autoDiscover
+        ? "source_disabled"
+        : null;
   if (guard) {
     await finishQuietly(guard);
     throw new IngestError(guard);
   }
 
-  const ref: SourceRef = { id: source.id, kind: source.kind, label: source.label, config: source.config };
+  // A search source's query is the active confirmed goal; with none, the provider fails with no_active_goal.
+  const query = search ? await inUserContext((tx) => activeGoalQuery(tx, opts.search!)) : undefined;
+  const ref: SourceRef = { id: source.id, kind: source.kind, label: source.label, config: source.config, ...(query ? { query } : {}) };
 
   // A fetch that returned nothing is more likely an API glitch than an emptied board: treat it as
   // incomplete so it can never mass-close a source's jobs.
@@ -182,7 +197,12 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
     }
 
     complete = counters.fetched > 0;
-    if (complete && source.kind !== "upload") {
+    if (complete && search) {
+      // Search results depend on the query and the date window, so missing from one run says nothing; a posting
+      // closes once it has not been seen for staleAfterDays (D187).
+      const cutoff = new Date(startedAt.getTime() - opts.search!.staleAfterDays * 24 * 60 * 60 * 1000);
+      counters.closed = await inUserContext((tx) => closeMissingPostings(tx, sourceId, cutoff, now()));
+    } else if (complete && source.kind !== "upload") {
       counters.closed = await inUserContext((tx) => closeMissingPostings(tx, sourceId, startedAt, now()));
     }
   } catch (error) {
@@ -200,4 +220,21 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
     throw new IngestError("unknown");
   }
   return summary("succeeded", complete, errorClass);
+}
+
+async function activeGoalQuery(
+  tx: DbClient, limits: { maxDaysOld: number; maxPages: number },
+): Promise<SearchQuery | undefined> {
+  const [goal] = await tx
+    .select({ roles: careerGoalConstraints.targetRoles, locations: careerGoalConstraints.locations, workMode: careerGoalConstraints.workMode })
+    .from(careerGoals)
+    .innerJoin(careerGoalConstraints, eq(careerGoalConstraints.careerGoalId, careerGoals.id))
+    .where(and(eq(careerGoals.isActive, true), eq(careerGoals.confirmationStatus, "confirmed")))
+    .limit(1);
+  if (!goal) return undefined;
+  const clean = (list: string[]) => [...new Set(list.map((v) => v.trim()).filter(Boolean))].slice(0, MAX_QUERY_TERMS);
+  return {
+    roles: clean(goal.roles), locations: clean(goal.locations), remoteOnly: goal.workMode === "remote",
+    maxDaysOld: limits.maxDaysOld, maxPages: limits.maxPages,
+  };
 }

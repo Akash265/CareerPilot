@@ -5,7 +5,8 @@ import { leverV1 } from "./lever";
 
 /** One posting of a job, joined with its source. `slug` comes from job_sources.config. */
 export interface PostingRef {
-  sourceKind: "greenhouse" | "lever" | "upload";
+  /** Any source kind; only Greenhouse and Lever postings can be autofilled (Phase 12 added more kinds). */
+  sourceKind: string;
   slug: string | null;
   externalId: string;
   status: "open" | "closed";

@@ -29,6 +29,12 @@ const CONTEXT =
 const NEGATIVE_BEFORE =
   /(equity|bonus|stock|rsu|options|signing|commission|revenue|funding|raised|valuation)[^.$€£]{0,25}$/i;
 
+// "€1500 annual learning budget": a benefit, not pay (D189). The noun must follow the amount closely -- at most a
+// period ("per year", "annual") and two describing words ("home-office", "travel"), none of them a connector -- so
+// "$120,000 base salary plus relocation allowance" and "$150k with home-office stipend" keep their salary.
+const NEGATIVE_AFTER =
+  /^\s*(?:(?:per\s+(?:year|annum|month|week)|a\s+(?:year|month)|annual|yearly|monthly|quarterly|weekly)\s+)?(?:(?!(?:plus|and|with|or|in addition)\b)[a-z][a-z-]*\s+){0,2}(?:budget|allowance|stipend|reimbursements?|vouchers?)\b/i;
+
 const ANNUALIZE: Record<SalaryPeriod, number> = { year: 1, month: 12, hour: 2080 };
 const AMBIGUOUS_DOLLAR_COUNTRIES = new Set(["CA", "AU", "NZ", "SG", "HK"]);
 
@@ -111,6 +117,7 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
 
       if (MAGNITUDE_AFTER.test(text.slice(end))) continue;
       if (NEGATIVE_BEFORE.test(text.slice(Math.max(0, start - 60), start))) continue;
+      if (NEGATIVE_AFTER.test(text.slice(end, end + 80))) continue;
       if (!CONTEXT.test(text.slice(Math.max(0, start - 120), end + 60))) continue;
       // The suffix pattern re-matches the tail of a range the prefix pattern already took.
       if (candidates.some((c) => start < c.end && c.start < end)) continue;

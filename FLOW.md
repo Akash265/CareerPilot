@@ -1706,3 +1706,42 @@ e2e/run.mjs
  └─ stopAll(): SIGTERM groups, SIGKILL after 10 s; exit 0 | 1
 CI: .github/workflows/ci.yml test job → pnpm test → playwright-core install chromium → pnpm e2e → upload e2e/.out on failure
 ```
+
+## 19. Phase 12 — Broad Job Discovery
+
+### 19a. A search source's run (D187)
+
+```
+/sources DiscoveryPanel → PUT /api/discovery/providers/remotive {enabled}   apps/web/src/lib/discovery/discovery.ts setProvider
+  (needs discovery_settings.consented_at; keyed providers need their .env keys) → job_sources row, origin 'search'
+job-ingestion worker (reconcile tick schedules it like any enabled source, every INGEST_INTERVAL_MINUTES)
+ └─ runIngestion                                   packages/ingestion/src/pipeline/runIngestion.ts
+      origin search/discovered → discovery_settings must still hold consent (discovered: auto_discover too) (D190)
+      search kind → activeGoalQuery(): active confirmed goal → { roles ≤5, locations ≤5, remoteOnly, maxDaysOld, maxPages }
+      adapterFor(ref) → createSearchAdapter(kind)   adapters/search.ts (≤50 requests, each job once per run)
+        no query → no_active_goal | no roles → no_search_terms | no key → missing_api_key
+      normalizeRecord → fromRemotive / fromAdzuna / fromHn …           normalize/normalizeRecord.ts
+      complete → closeMissingPostings(cutoff = start − DISCOVERY_STALE_DAYS)   (boards: cutoff = start)
+every adapter fetches through createPoliteFetch (1 req/s per host, short Retry-After honoured)   adapters/politeFetch.ts (D188)
+```
+
+### 19b. Discovering and validating boards (D186)
+
+```
+createIngestWorker processor → runIngestion → afterRun({ sourceId, since, errorClass })   services/job-ingestion/src/worker.ts
+  (afterRun errors are logged as discovery_failed and never fail the job)
+main.ts afterRun:
+ ├─ success → recordBoardsFromRun(db, { sourceId, since })        packages/ingestion/src/discovery/discover.ts
+ │     needs consent + auto_discover; raw records of this run → stringsIn → extractBoardLinks (boardLinks.ts)
+ │     minus boards already present as sources → discovered_boards (pending, found_via_source_id)
+ │   → void validateBoards() (background) → validatePendingBoards(db, { adapterFor, maxSources 300, maxPerRun 25 })
+ │        ≤500 oldest pending; skip ones checked < 1 h ago; every attempt counts towards maxPerRun
+ │        per pending board: first record of adapterFor(board).fetch
+ │          a job → (re-read settings FOR SHARE; stop if consent / auto-discover gone)
+ │                  job_sources (enabled, consent = consented_at, origin discovered | manual if pasted), board 'enabled'
+ │          none / not_found / invalid_slug / http_error / response_too_large → 'rejected'
+ │          transient (incl. schema_mismatch) → checked_at = now; still failing 7 days after first seen → 'rejected' (D190)
+ └─ not_found → retireIfGone: discovered source whose last 2 runs were not_found → disabled, board 'gone'
+setInterval 60 s → reconcile schedules + validateBoards() (picks up pasted boards)
+/sources paste → POST /api/discovery/boards {text} → importBoards → pending boards (found_via null)
+```

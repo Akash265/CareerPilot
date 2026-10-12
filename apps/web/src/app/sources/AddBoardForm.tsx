@@ -1,9 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import type { BoardKind } from "@ai-career/ingestion";
+
+/** Phase 12: every ATS board, with where its token appears in the company's job-board address. */
+const BOARDS: { kind: BoardKind; label: string; example: string }[] = [
+  { kind: "greenhouse", label: "Greenhouse", example: "boards.greenhouse.io/gitlab" },
+  { kind: "lever", label: "Lever", example: "jobs.lever.co/spotify" },
+  { kind: "ashby", label: "Ashby", example: "jobs.ashbyhq.com/linear" },
+  { kind: "workable", label: "Workable", example: "apply.workable.com/huggingface" },
+  { kind: "smartrecruiters", label: "SmartRecruiters", example: "jobs.smartrecruiters.com/BoschGroup" },
+  { kind: "recruitee", label: "Recruitee", example: "bunq.recruitee.com" },
+];
 
 export function AddBoardForm({ onAdded }: { onAdded: () => void }) {
-  const [kind, setKind] = useState<"greenhouse" | "lever">("greenhouse");
+  const [kind, setKind] = useState<BoardKind>("greenhouse");
   const [slug, setSlug] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,13 +52,12 @@ export function AddBoardForm({ onAdded }: { onAdded: () => void }) {
     <fieldset className="flex flex-col gap-3 rounded border p-4">
       <legend className="px-1 text-sm font-medium">Add a company board</legend>
       <label htmlFor="board-kind" className="text-sm">Source type</label>
-      <select id="board-kind" value={kind} onChange={(e) => setKind(e.target.value as "greenhouse" | "lever")} className="block rounded border px-2 py-1">
-        <option value="greenhouse">Greenhouse</option>
-        <option value="lever">Lever</option>
+      <select id="board-kind" value={kind} onChange={(e) => setKind(e.target.value as BoardKind)} className="block rounded border px-2 py-1">
+        {BOARDS.map((b) => <option key={b.kind} value={b.kind}>{b.label}</option>)}
       </select>
       <label htmlFor="board-slug" className="text-sm">Board token</label>
       <input id="board-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="e.g. gitlab" className="block rounded border px-2 py-1" />
-      <p className="text-xs text-gray-500">The last part of the company&apos;s job-board address, e.g. boards.greenhouse.io/<b>gitlab</b> or jobs.lever.co/<b>spotify</b>.</p>
+      <p className="text-xs text-gray-500">The company&apos;s part of its job-board address, e.g. {BOARDS.find((b) => b.kind === kind)?.example}.</p>
       <label htmlFor="board-company" className="text-sm">Company name (optional)</label>
       <input id="board-company" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="block rounded border px-2 py-1" />
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}

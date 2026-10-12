@@ -55,6 +55,10 @@ const ERROR_CLASS: Record<string, string> = {
   consent_missing: "Terms-of-Service confirmation is missing",
   source_disabled: "The source is disabled",
   empty_result: "The last fetch returned no jobs, so nothing was closed",
+  // Phase 12 search providers (D187).
+  no_active_goal: "Confirm a career goal first — search providers search for its roles and places",
+  no_search_terms: "Your career goal has no target roles to search for",
+  missing_api_key: "This provider's API key is missing from .env",
   unknown: "Something went wrong — it will retry",
 };
 // Own-property lookup: the class is data from the database, and "constructor" must not resolve to Object's.

@@ -4,7 +4,10 @@ import { loadEnv } from "@ai-career/config";
 import { closeDbClient, createDbClient, loadRedactionValues } from "@ai-career/db";
 import { createLogger, initProcessLogging, throttleErrorLog } from "@ai-career/logging";
 import { createShutdown, originalJobError, startHeartbeat } from "@ai-career/monitoring";
-import { INGEST_QUEUE_NAME, createAdapterFor, type IngestJobData } from "@ai-career/ingestion";
+import {
+  INGEST_QUEUE_NAME, createAdapterFor, createPoliteFetch, providerConfigFromEnv, recordBoardsFromRun, retireIfGone, validatePendingBoards,
+  type IngestJobData,
+} from "@ai-career/ingestion";
 import { reconcileSchedules } from "./reconcile";
 import { createIngestWorker } from "./worker";
 
@@ -29,13 +32,39 @@ async function main(): Promise<void> {
   // startup reads as "stale" -- at the configured interval; a clean shutdown records "stopped".
   const heartbeat = await startHeartbeat(connection, "job-ingestion", { intervalMs: env.HEARTBEAT_INTERVAL_MS });
   const queue = new Queue<IngestJobData>(INGEST_QUEUE_NAME, { connection });
-  const adapterFor = createAdapterFor({
-    db,
-    userId: env.DEFAULT_USER_ID,
-    greenhouseBaseUrl: env.GREENHOUSE_API_BASE,
-    leverBaseUrl: env.LEVER_API_BASE,
+  // One polite fetch for every provider: requests to a host are DISCOVERY_MIN_INTERVAL_MS apart (Phase 12, D188).
+  const fetchFn = createPoliteFetch({ minIntervalMs: env.DISCOVERY_MIN_INTERVAL_MS });
+  const adapterFor = createAdapterFor({ db, userId: env.DEFAULT_USER_ID, providers: providerConfigFromEnv(env), fetchFn });
+  const search = { maxDaysOld: env.DISCOVERY_MAX_DAYS_OLD, maxPages: env.DISCOVERY_MAX_PAGES, staleAfterDays: env.DISCOVERY_STALE_DAYS };
+  // Phase 12 (D186): automatic company discovery. Validation fetches each pending board once; one pass at a time.
+  let validating = false;
+  const validateBoards = async () => {
+    if (validating) return;
+    validating = true;
+    try {
+      const result = await validatePendingBoards(db, {
+        userId: env.DEFAULT_USER_ID, adapterFor, maxSources: env.DISCOVERY_MAX_SOURCES, maxPerRun: env.DISCOVERY_MAX_NEW_PER_RUN,
+      });
+      if (result.enabled + result.rejected > 0) log.info("boards_validated", { ...result });
+    } finally {
+      validating = false;
+    }
+  };
+  const afterRun = async ({ sourceId, since, errorClass }: { sourceId: string; since: Date; errorClass: string | null }) => {
+    if (errorClass === null) {
+      const found = await recordBoardsFromRun(db, { userId: env.DEFAULT_USER_ID, sourceId, since });
+      if (found > 0) log.info("boards_discovered", { sourceId, found });
+      // In the background: a pass can take minutes (one request per second per host), and the queue processes one
+      // job at a time, so awaiting it here would hold up every other source.
+      void validateBoards().catch((error) => log.error("discovery_failed", { error }));
+    } else if (errorClass === "not_found" && (await retireIfGone(db, { userId: env.DEFAULT_USER_ID, sourceId }))) {
+      log.info("board_retired", { sourceId });
+    }
+  };
+  const worker = createIngestWorker({
+    connection, db, userId: env.DEFAULT_USER_ID, adapterFor, search,
+    afterRun, onAfterRunError: (error) => log.error("discovery_failed", { error }),
   });
-  const worker = createIngestWorker({ connection, db, userId: env.DEFAULT_USER_ID, adapterFor });
   worker.on("completed", (job) => log.info("ingest_completed", { jobId: job.id }));
   worker.on("failed", (job, rawError) => {
     const error = originalJobError(rawError);
@@ -57,8 +86,11 @@ async function main(): Promise<void> {
   };
 
   await reconcile(true);
-  // The database is the source of truth: pick up sources enabled/disabled from the web app.
-  const timer = setInterval(() => void reconcile(false), 60_000);
+  // The database is the source of truth: pick up sources enabled/disabled from the web app, and boards pasted there.
+  const timer = setInterval(() => {
+    void reconcile(false);
+    void validateBoards().catch((error) => log.error("discovery_failed", { error }));
+  }, 60_000);
   log.info("worker_started", { everyMinutes: env.INGEST_INTERVAL_MINUTES });
 
   // Runs once however many signals arrive, exits 0, and is cut off with exit 1 if a step hangs (Redis unreachable).

@@ -29,6 +29,18 @@ async function handlePATCH(request: Request, { params }: { params: Promise<{ id:
       const [source] = await tx.select().from(schema.jobSources).where(eq(schema.jobSources.id, id)).limit(1);
       if (!source) return NextResponse.json({ error: "Job source not found" }, { status: 404 });
 
+      // Phase 12 (D185): a search or discovered source runs under the standing consent, which may have been withdrawn
+      // since its own consent was stamped; a discovered one also needs automatic discovery on.
+      if (enabled && source.origin !== "manual") {
+        const [discovery] = await tx.select().from(schema.discoverySettings).limit(1);
+        if (!discovery?.consentedAt) {
+          return NextResponse.json({ error: "Give permission for discovery on this page before switching this source on" }, { status: 409 });
+        }
+        if (source.origin === "discovered" && !discovery.autoDiscover) {
+          return NextResponse.json({ error: "Switch on automatic discovery before enabling a discovered board" }, { status: 409 });
+        }
+      }
+
       // D3: a source cannot be enabled until the user has confirmed they reviewed its Terms of Service.
       // Once recorded the confirmation stays; disabling and re-enabling does not ask again.
       if (enabled && !source.consentConfirmedAt && consentConfirmed !== true) {
