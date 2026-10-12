@@ -1,6 +1,6 @@
 # Phase 12 — Broad Job Discovery: Design
 
-Status: Draft for user review (2026-10-07). Combined spec + task list, like Phase 11c–11d. Decisions start at D184.
+Status: Implemented and merged to main (merge 3af5639, 2026-10-12); DECISIONS D184–D191 record what changed during the build and the final review (e.g. pasted boards become manual sources, validation backoff, the standing consent enforced on enable and on every run). Combined spec + task list, like Phase 11c–11d. Decisions start at D184.
 
 ## 1. Goal and user choices (2026-10-07)
 
