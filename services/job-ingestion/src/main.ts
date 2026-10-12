@@ -4,7 +4,7 @@ import { loadEnv } from "@ai-career/config";
 import { closeDbClient, createDbClient, loadRedactionValues } from "@ai-career/db";
 import { createLogger, initProcessLogging, throttleErrorLog } from "@ai-career/logging";
 import { createShutdown, originalJobError, startHeartbeat } from "@ai-career/monitoring";
-import { INGEST_QUEUE_NAME, createAdapterFor, type IngestJobData } from "@ai-career/ingestion";
+import { INGEST_QUEUE_NAME, createAdapterFor, createPoliteFetch, providerConfigFromEnv, type IngestJobData } from "@ai-career/ingestion";
 import { reconcileSchedules } from "./reconcile";
 import { createIngestWorker } from "./worker";
 
@@ -29,13 +29,11 @@ async function main(): Promise<void> {
   // startup reads as "stale" -- at the configured interval; a clean shutdown records "stopped".
   const heartbeat = await startHeartbeat(connection, "job-ingestion", { intervalMs: env.HEARTBEAT_INTERVAL_MS });
   const queue = new Queue<IngestJobData>(INGEST_QUEUE_NAME, { connection });
-  const adapterFor = createAdapterFor({
-    db,
-    userId: env.DEFAULT_USER_ID,
-    greenhouseBaseUrl: env.GREENHOUSE_API_BASE,
-    leverBaseUrl: env.LEVER_API_BASE,
-  });
-  const worker = createIngestWorker({ connection, db, userId: env.DEFAULT_USER_ID, adapterFor });
+  // One polite fetch for every provider: requests to a host are DISCOVERY_MIN_INTERVAL_MS apart (Phase 12, D188).
+  const fetchFn = createPoliteFetch({ minIntervalMs: env.DISCOVERY_MIN_INTERVAL_MS });
+  const adapterFor = createAdapterFor({ db, userId: env.DEFAULT_USER_ID, providers: providerConfigFromEnv(env), fetchFn });
+  const search = { maxDaysOld: env.DISCOVERY_MAX_DAYS_OLD, maxPages: env.DISCOVERY_MAX_PAGES, staleAfterDays: env.DISCOVERY_STALE_DAYS };
+  const worker = createIngestWorker({ connection, db, userId: env.DEFAULT_USER_ID, adapterFor, search });
   worker.on("completed", (job) => log.info("ingest_completed", { jobId: job.id }));
   worker.on("failed", (job, rawError) => {
     const error = originalJobError(rawError);

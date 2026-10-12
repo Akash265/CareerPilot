@@ -11,6 +11,7 @@ export * from "./profileFacts";
 export * from "./careerGoals";
 export * from "./careerGoalConstraints";
 export * from "./jobSources";
+export * from "./discovery";
 export * from "./ingestionRuns";
 export * from "./rawJobPostings";
 export * from "./jobs";

@@ -1,0 +1,47 @@
+{
+  "SearchResult": {
+    "SearchResultCount": 1,
+    "SearchResultCountAll": 1,
+    "SearchResultItems": [
+      {
+        "MatchedObjectId": "812345600",
+        "MatchedObjectDescriptor": {
+          "PositionID": "DE-12345-26",
+          "PositionTitle": "Data Scientist",
+          "PositionURI": "https://www.usajobs.gov:443/GetJob/ViewDetails/812345600",
+          "PositionLocationDisplay": "Washington, District of Columbia",
+          "PositionLocation": [
+            {
+              "LocationName": "Washington, District of Columbia",
+              "CountryCode": "United States"
+            }
+          ],
+          "OrganizationName": "Department of Energy",
+          "DepartmentName": "Department of Energy",
+          "PositionSchedule": [
+            {
+              "Name": "Full-time",
+              "Code": "1"
+            }
+          ],
+          "PositionRemuneration": [
+            {
+              "MinimumRange": "120579",
+              "MaximumRange": "156755",
+              "RateIntervalCode": "PA",
+              "Description": "Per Year"
+            }
+          ],
+          "PublicationStartDate": "2026-10-06T00:00:00.0000",
+          "ApplicationCloseDate": "2026-10-20T23:59:59.9970",
+          "UserArea": {
+            "Details": {
+              "JobSummary": "Apply data science methods to energy datasets. Requires SQL and Python.",
+              "TeleworkEligible": true
+            }
+          }
+        }
+      }
+    ]
+  }
+}

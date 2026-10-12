@@ -19,7 +19,7 @@ export interface JobDetail extends JobListItem {
   postings: {
     id: string;
     sourceId: string;
-    sourceKind: "greenhouse" | "lever" | "upload";
+    sourceKind: (typeof schema.jobSources.$inferSelect)["kind"];
     sourceLabel: string;
     url: string | null;
     status: "open" | "closed";

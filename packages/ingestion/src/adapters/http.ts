@@ -8,6 +8,10 @@ export interface FetchJsonOptions {
   timeoutMs?: number;
   maxBytes?: number;
   fetchFn?: typeof fetch;
+  /** Phase 12: Jooble searches with a POST and a JSON body; USAJobs needs its own headers. */
+  method?: "GET" | "POST";
+  body?: unknown;
+  headers?: Record<string, string>;
 }
 
 function isTimeout(error: unknown): boolean {
@@ -23,8 +27,15 @@ export async function fetchJson(url: string, opts: FetchJsonOptions = {}): Promi
   let response: Response;
   try {
     response = await fetchFn(url, {
+      method: opts.method ?? "GET",
+      ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
       signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
-      headers: { accept: "application/json", "user-agent": "career-pilot-ingestion/0.1 (personal job search tool)" },
+      headers: {
+        ...opts.headers,
+        ...(opts.body === undefined ? {} : { "content-type": "application/json" }),
+        accept: "application/json",
+        "user-agent": opts.headers?.["user-agent"] ?? "career-pilot-ingestion/0.1 (personal job search tool)",
+      },
       // A redirect could move the request off the configured host; treat any 3xx as an error.
       redirect: "manual",
     });

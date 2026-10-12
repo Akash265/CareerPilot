@@ -15,6 +15,8 @@ export interface IngestWorkerDeps {
   db: DbClient;
   userId: string;
   adapterFor: (source: SourceRef) => SourceAdapter;
+  /** Phase 12: limits for goal-driven search sources (D187). */
+  search: { maxDaysOld: number; maxPages: number; staleAfterDays: number };
   /** Overridable so tests use an isolated queue. */
   queueName?: string;
 }
@@ -31,7 +33,7 @@ export function createIngestWorker(deps: IngestWorkerDeps): Worker<IngestJobData
     deps.queueName ?? INGEST_QUEUE_NAME,
     async (job) => {
       try {
-        await runIngestion(deps.db, { userId: deps.userId, sourceId: job.data.sourceId, adapterFor: deps.adapterFor });
+        await runIngestion(deps.db, { userId: deps.userId, sourceId: job.data.sourceId, adapterFor: deps.adapterFor, search: deps.search });
       } catch (error) {
         if (error instanceof IngestError && !error.retryable) throw new UnrecoverableError(error.errorClass);
         throw contentFreeJobError(error);

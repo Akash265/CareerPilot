@@ -1,0 +1,69 @@
+{
+  "id": "744000155061284",
+  "name": "Sales Manager - Mobile Applications",
+  "uuid": "8212d55b-0b59-43a2-8393-3608960a0ff3",
+  "jobId": "321b399a-22bc-4c43-a5d6-35262cbdc5f1",
+  "jobAdId": "18d0f14f-f407-43ba-9e57-ff5cdfcf8bb1",
+  "defaultJobAd": true,
+  "refNumber": "REF298309U",
+  "company": {
+    "name": "Bosch Group",
+    "identifier": "BoschGroup"
+  },
+  "location": {
+    "city": "St Neots, Cirencester, Wakefield, West Midlands",
+    "region": "England",
+    "country": "gb",
+    "address": "Hybrid Working",
+    "remote": false,
+    "hybrid": true,
+    "fullLocation": "St Neots, Cirencester, Wakefield, West Midlands, England, United Kingdom"
+  },
+  "releasedDate": "2026-10-12T15:50:05.847Z",
+  "postingUrl": "https://jobs.smartrecruiters.com/BoschGroup/744000155061284-sales-manager-mobile-applications",
+  "applyUrl": "https://jobs.smartrecruiters.com/BoschGroup/744000155061284-sales-manager-mobile-applications?oga=true",
+  "referralUrl": "https://jobs.smartrecruiters.com/external-referrals/company/BoschGroup/publication/8212d55b-0b59-43a2-8393-3608960a0ff3?dcr_ci=BoschGroup",
+  "jobAd": {
+    "sections": {
+      "companyDescription": {
+        "title": "Company Description",
+        "text": "<p><strong>Bosch Rexroth is one of the world’s leading specialists in the field of drive and control technologies. Under the brand name of Rexroth, the company supplies customers with tailored solutions for driving, controlling and moving industrial applications, factory automation equipment, mobile applications and renewable power generation.</strong></p>"
+      },
+      "jobDescription": {
+        "title": "Job Description",
+        "text": "<p>To build, lead and develop the Mobile Applications sales team responsible for maximising sales, profitability and market share whilst providing superior customer service in a high quality, timely, cost-effective and resource-efficient way. The role is accountable for delivering sustainable growth across the Mobile Applications portfolio, including hydraulics, electronic controls, automation, el"
+      },
+      "qualifications": {
+        "title": "Qualifications",
+        "text": "<ul><li>HNC/HND, degree or equivalent in mechanical, electrical, electronic, mechatronic, automotive engineering or a related discipline.</li><li>Management qualification or equivalent leadership experience, with a proven record in technical sales, business development and profitable growth.</li><li>Strong knowledge of mobile hydraulic systems, electronic controls, automation and electrification.<"
+      },
+      "additionalInformation": {
+        "title": "Additional Information",
+        "text": "<p>This role offers a hybrid working model, so flexibility can be offered to the successful candidate</p><p><strong>Why </strong><strong>Bosch Rexroth?</strong></p><p>A range of benefits are available including employee discounts, various sports and health opportunities, on-site parking</p><p>We offer a wide variety of interesting and challenging tasks.&#xa0; Flexible work-time options, benefits a"
+      }
+    }
+  },
+  "active": true,
+  "visibility": "PUBLIC",
+  "industry": {
+    "id": "mechanical_engineering",
+    "label": "Mechanical Or Industrial Engineering"
+  },
+  "function": {
+    "id": "sales",
+    "label": "Sales"
+  },
+  "experienceLevel": {
+    "id": "mid_senior_level",
+    "label": "Mid-Senior Level"
+  },
+  "typeOfEmployment": {
+    "id": "permanent",
+    "label": "Full-time"
+  },
+  "language": {
+    "code": "en",
+    "label": "English",
+    "labelNative": "English (US)"
+  }
+}

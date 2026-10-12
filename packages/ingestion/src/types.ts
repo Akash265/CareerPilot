@@ -1,4 +1,22 @@
-export type SourceKind = "greenhouse" | "lever" | "upload";
+/** Company job boards: one per company, identified by `config.slug` (Phase 12 added the last four, D184). */
+export const BOARD_KINDS = ["greenhouse", "lever", "ashby", "workable", "smartrecruiters", "recruitee"] as const;
+/** Goal-driven search providers: one source each, queried from the active career goal (D187). */
+export const SEARCH_KINDS = ["adzuna", "jooble", "usajobs", "themuse", "remotive", "remoteok", "arbeitnow", "hn_hiring"] as const;
+export type BoardKind = (typeof BOARD_KINDS)[number];
+export type SearchKind = (typeof SEARCH_KINDS)[number];
+export type SourceKind = BoardKind | SearchKind | "upload";
+
+export const isBoardKind = (kind: string): kind is BoardKind => (BOARD_KINDS as readonly string[]).includes(kind);
+export const isSearchKind = (kind: string): kind is SearchKind => (SEARCH_KINDS as readonly string[]).includes(kind);
+
+/** What a search source asks for, built from the active confirmed career goal at fetch time (D187). */
+export interface SearchQuery {
+  roles: string[];
+  locations: string[];
+  remoteOnly: boolean;
+  maxDaysOld: number;
+  maxPages: number;
+}
 export type WorkMode = "remote" | "hybrid" | "onsite" | "unknown";
 export type SponsorshipValue = "offered" | "not_offered" | "unknown";
 export type SalaryPeriod = "year" | "month" | "hour";
@@ -8,6 +26,8 @@ export interface SourceRef {
   kind: SourceKind;
   label: string;
   config: { slug?: string; companyName?: string };
+  /** Set for search kinds only. */
+  query?: SearchQuery;
 }
 
 /** One record as the source gave it. `payload` is validated later, per record. */
@@ -65,6 +85,10 @@ export type IngestErrorClass =
   | "http_error"
   | "response_too_large"
   | "schema_mismatch"
+  // Phase 12 (D187): a search source cannot run without a confirmed goal, roles to search for, or its API key.
+  | "no_active_goal"
+  | "no_search_terms"
+  | "missing_api_key"
   | "unknown";
 
 const RETRYABLE: ReadonlySet<IngestErrorClass> = new Set([

@@ -218,6 +218,20 @@
       "when": 1791375209217,
       "tag": "0030_foreign_key_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791821450319,
+      "tag": "0031_discovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791821463096,
+      "tag": "0032_discovery_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,8 @@ type RunRow = typeof ingestionRuns.$inferSelect;
 
 export interface JobSourceView {
   id: string;
-  kind: "greenhouse" | "lever" | "upload";
+  kind: SourceRow["kind"];
+  origin: SourceRow["origin"];
   label: string;
   slug: string | null;
   companyName: string | null;
@@ -34,6 +35,7 @@ export function serializeSource(row: SourceRow, run: RunRow | null): JobSourceVi
   return {
     id: row.id,
     kind: row.kind,
+    origin: row.origin,
     label: row.label,
     slug: row.config.slug ?? null,
     companyName: row.config.companyName ?? null,

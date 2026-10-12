@@ -21,7 +21,7 @@ beforeAll(async () => {
   queue = new Queue<IngestJobData>(queueName, { connection });
   events = new QueueEvents(queueName, { connection });
   await events.waitUntilReady();
-  worker = createIngestWorker({ connection, db: t.db, userId: USER, adapterFor: () => adapter, queueName });
+  worker = createIngestWorker({ connection, db: t.db, userId: USER, adapterFor: () => adapter, queueName, search: { maxDaysOld: 30, maxPages: 2, staleAfterDays: 14 } });
   await worker.waitUntilReady();
 });
 beforeEach(async () => {
