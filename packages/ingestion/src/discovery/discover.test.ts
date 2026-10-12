@@ -78,11 +78,12 @@ describe("validatePendingBoards", () => {
 
   it("turns a board with jobs into an enabled, consented, discovered source named after the company", async () => {
     await consent();
-    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug) VALUES (${USER}, 'workable', 'huggingface'), (${USER}, 'ashby', 'linear')`;
+    const hn = await insertSource(t.adminSql, USER, { kind: "hn_hiring", label: "HN" });
+    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via_source_id) VALUES (${USER}, 'workable', 'huggingface', ${hn}), (${USER}, 'ashby', 'linear', ${hn})`;
     const result = await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ huggingface: [workableJob], linear: [ashbyJob("A1")] }), ...limits, now: () => NOW });
     expect(result).toEqual({ enabled: 2, rejected: 0, pending: 0 });
     const sources = await t.adminSql`SELECT kind, label, config, origin, enabled, consent_confirmed_at = ${CONSENT.toISOString()}::timestamptz AS consented
-                                     FROM job_sources WHERE user_id = ${USER} ORDER BY kind`;
+                                     FROM job_sources WHERE user_id = ${USER} AND origin = 'discovered' ORDER BY kind`;
     expect(sources).toEqual([
       { kind: "ashby", label: "linear", config: { slug: "linear" }, origin: "discovered", enabled: true, consented: true },
       { kind: "workable", label: "Hugging Face", config: { slug: "huggingface" }, origin: "discovered", enabled: true, consented: true },
@@ -100,10 +101,22 @@ describe("validatePendingBoards", () => {
 
   it("stops at maxPerRun and at maxSources discovered sources, leaving the rest pending", async () => {
     await consent();
-    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug) VALUES (${USER}, 'ashby', 'a'), (${USER}, 'ashby', 'b'), (${USER}, 'ashby', 'c')`;
+    const hn = await insertSource(t.adminSql, USER, { kind: "hn_hiring", label: "HN" });
+    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via_source_id) VALUES (${USER}, 'ashby', 'a', ${hn}), (${USER}, 'ashby', 'b', ${hn}), (${USER}, 'ashby', 'c', ${hn})`;
     const all = adapterFor({ a: [ashbyJob("1")], b: [ashbyJob("2")], c: [ashbyJob("3")] });
     expect(await validatePendingBoards(t.db, { userId: USER, adapterFor: all, maxSources: 300, maxPerRun: 1, now: () => NOW })).toEqual({ enabled: 1, rejected: 0, pending: 2 });
     expect(await validatePendingBoards(t.db, { userId: USER, adapterFor: all, maxSources: 2, maxPerRun: 25, now: () => NOW })).toEqual({ enabled: 1, rejected: 0, pending: 1 });
+  });
+
+  it("validates pasted boards (found via no source) with auto-discovery off, as manual sources", async () => {
+    await consent(false);
+    const hn = await insertSource(t.adminSql, USER, { kind: "hn_hiring", label: "HN" });
+    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug) VALUES (${USER}, 'ashby', 'pasted')`;
+    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via_source_id) VALUES (${USER}, 'ashby', 'linked', ${hn})`;
+    const result = await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ pasted: [ashbyJob("1")], linked: [ashbyJob("2")] }), ...limits, now: () => NOW });
+    expect(result).toEqual({ enabled: 1, rejected: 0, pending: 1 });
+    const [source] = await t.adminSql`SELECT origin, config FROM job_sources WHERE user_id = ${USER} AND kind = 'ashby'`;
+    expect(source).toEqual({ origin: "manual", config: { slug: "pasted" } });
   });
 
   it("does nothing without consent", async () => {

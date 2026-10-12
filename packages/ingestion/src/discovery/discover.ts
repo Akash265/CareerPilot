@@ -11,7 +11,9 @@ const { discoveredBoards, discoverySettings, jobSources, rawJobPostings, ingesti
  * 1. recordBoardsFromRun -- after a run, every board linked from that run's raw records becomes a `pending` row.
  * 2. validatePendingBoards -- one fetch per pending board: jobs → an enabled, discovered source; none → rejected.
  * 3. retireIfGone -- a discovered source whose board is gone twice in a row is disabled.
- * Nothing runs without the standing consent, and 1-2 also need auto-discovery switched on.
+ * Nothing runs without the standing consent. Auto-discovery gates link-mining (1) and boards found that way; boards
+ * the user pasted (found via no source) are their own choice, validate whenever there is consent, and become manual
+ * sources -- so switching auto-discovery off later never disables them.
  */
 
 async function settingsOf(tx: DbClient): Promise<{ autoDiscover: boolean; consentedAt: Date | null } | null> {
@@ -97,11 +99,15 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
     existing: (await tx.select({ n: count() }).from(jobSources).where(eq(jobSources.origin, "discovered")))[0].n,
   }));
   const result: ValidateResult = { enabled: 0, rejected: 0, pending: pending.length };
-  if (!settings?.consentedAt || !settings.autoDiscover) return result;
+  if (!settings?.consentedAt) return result;
 
-  let room = Math.min(opts.maxPerRun, Math.max(0, opts.maxSources - existing));
+  // maxPerRun bounds the fetches of one pass (politeness); maxSources bounds only what discovery adds on its own.
+  let fetches = opts.maxPerRun;
+  let discoveredRoom = Math.max(0, opts.maxSources - existing);
   for (const board of pending) {
-    if (room <= 0) break;
+    if (fetches <= 0) break;
+    const pasted = board.foundViaSourceId === null;
+    if (!pasted && (!settings.autoDiscover || discoveredRoom <= 0)) continue;
     const ref: SourceRef = { id: board.id, kind: board.kind as BoardKind, label: board.slug, config: { slug: board.slug } };
     let record: RawRecord | null;
     try {
@@ -115,7 +121,7 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
       }
       record = null;
     }
-    room--;
+    fetches--;
     if (!record) {
       await inUser((tx) => tx.update(discoveredBoards).set({ status: "rejected", checkedAt: now() }).where(eq(discoveredBoards.id, board.id)));
       result.rejected++;
@@ -132,7 +138,7 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
       const [source] = await tx
         .insert(jobSources)
         .values({
-          kind: board.kind, origin: "discovered", label, config: { slug: board.slug },
+          kind: board.kind, origin: pasted ? "manual" : "discovered", label, config: { slug: board.slug },
           enabled: true, consentConfirmedAt: settings.consentedAt,
         })
         .onConflictDoNothing() // the user already added this board by hand
@@ -141,6 +147,7 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
     });
     result.enabled++;
     result.pending--;
+    if (!pasted) discoveredRoom--;
   }
   return result;
 }
