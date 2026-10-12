@@ -25,3 +25,5 @@ export * from "./pipeline/hashPayload";
 export * from "./pipeline/storeUpload";
 export * from "./pipeline/adapterFor";
 export * from "./pipeline/runIngestion";
+export * from "./discovery/boardLinks";
+export * from "./discovery/discover";
