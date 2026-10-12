@@ -14,12 +14,15 @@ export interface BoardLink {
 const SLUG = "([A-Za-z0-9_-]{1,64})(?=$|[/?#\"'<>\\s)\\]&,;:.!|])";
 // (?<![\w.-]) stops "notgreenhouse.io" and "x.jobs.lever.co"; the trailing lookahead stops "lever.co.evil.com".
 const PATTERNS: [BoardKind, RegExp][] = [
-  ["greenhouse", new RegExp(`(?<![\\w.-])(?:boards|job-boards)(?:\\.eu)?\\.greenhouse\\.io/(?:embed/job_board\\?for=)?${SLUG}`, "gi")],
-  ["lever", new RegExp(`(?<![\\w.-])jobs(?:\\.eu)?\\.lever\\.co(?![\\w.-])/${SLUG}`, "gi")],
+  // EU-region boards (job-boards.eu.greenhouse.io, jobs.eu.lever.co) live behind separate APIs the adapters do not
+  // call, so they are not matched: fetched against the US API they would only be rejected (review fix).
+  ["greenhouse", new RegExp(`(?<![\\w.-])(?:boards|job-boards)\\.greenhouse\\.io/(?:embed/job_board\\?for=)?${SLUG}`, "gi")],
+  ["lever", new RegExp(`(?<![\\w.-])jobs\\.lever\\.co(?![\\w.-])/${SLUG}`, "gi")],
   ["ashby", new RegExp(`(?<![\\w.-])jobs\\.ashbyhq\\.com/${SLUG}`, "gi")],
   ["workable", new RegExp(`(?<![\\w.-])apply\\.workable\\.com/${SLUG}`, "gi")],
   ["smartrecruiters", new RegExp(`(?<![\\w.-])(?:jobs|careers)\\.smartrecruiters\\.com/${SLUG}`, "gi")],
-  ["recruitee", new RegExp(`(?<![\\w.-])([A-Za-z0-9-]{1,63})\\.recruitee\\.com(?![\\w-])`, "gi")],
+  // (?![\w.-]): "acme.recruitee.com.evil.com" is not a Recruitee board (review fix).
+  ["recruitee", new RegExp(`(?<![\\w.-])([A-Za-z0-9-]{1,63})\\.recruitee\\.com(?![\\w.-])`, "gi")],
 ];
 
 /** Path segments and sub-domains that are the platform's own pages, not a company. */

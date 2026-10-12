@@ -18,6 +18,7 @@ beforeAll(async () => {
   admin = await openAdminDb();
 });
 beforeEach(async () => {
+  await admin`DELETE FROM discovery_settings WHERE user_id = ${USER}`;
   await wipeJobData(admin, USER);
   await wipeJobData(admin, OTHER_USER);
 });
@@ -88,5 +89,24 @@ describe("PATCH /api/job-sources/[id]", () => {
     const id = await insertSource(admin, USER);
     expect((await patch(id, { enabled: "yes" })).status).toBe(400);
     expect((await patch(id, "{oops")).status).toBe(400);
+  });
+
+  it("will not re-enable a search or discovered source without the standing consent (Phase 12 review fix)", async () => {
+    const search = await insertSource(admin, USER, { consent: true });
+    await admin`UPDATE job_sources SET origin = 'search', kind = 'remotive', config = '{}'::jsonb WHERE id = ${search}`;
+    const discovered = await insertSource(admin, USER, { consent: true });
+    await admin`UPDATE job_sources SET origin = 'discovered' WHERE id = ${discovered}`;
+    for (const id of [search, discovered]) {
+      const res = await patch(id, { enabled: true });
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/permission/i);
+      expect((await row(id)).enabled).toBe(false);
+    }
+    await admin`INSERT INTO discovery_settings (user_id, auto_discover, consented_at) VALUES (${USER}, false, now())`;
+    expect((await patch(search, { enabled: true })).status).toBe(200);
+    const blocked = await patch(discovered, { enabled: true });
+    expect(blocked.status).toBe(409);
+    expect((await blocked.json()).error).toMatch(/automatic discovery/i);
+    expect((await patch(discovered, { enabled: false })).status).toBe(200);
   });
 });

@@ -228,8 +228,8 @@ const FETCHERS: Record<SearchKind, Fetcher> = {
           for (const job of body.jobs) {
             const j = job as { id?: unknown; link?: unknown } | null;
             // Jooble's numeric ids exceed 2^53, so JSON.parse rounds them; the link carries the exact digits.
-            const fromLink = typeof j?.link === "string" ? j.link.match(/\/desc\/(-?\d{1,25})(?:[/?#]|$)/)?.[1] : undefined;
-            const id = fromLink ?? idOf(j?.id);
+            // No id in the link: skip the job rather than trust the rounded number, which two jobs can share.
+            const id = typeof j?.link === "string" ? j.link.match(/\/desc\/(-?\d{1,25})(?:[/?#]|$)/)?.[1] : undefined;
             if (id) yield { externalId: id, payload: job };
           }
           if (body.jobs.length === 0) break;

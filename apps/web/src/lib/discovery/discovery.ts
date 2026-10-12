@@ -77,7 +77,8 @@ export async function loadDiscoveryView(tx: DbClient, env: KeyEnv): Promise<Disc
 
 /**
  * The standing consent (D185). Consent is recorded once and kept; withdrawing it switches off auto-discovery and
- * every discovered and search source. Switching auto-discovery off disables the sources it found (data is kept).
+ * every discovered and search source. Switching auto-discovery off disables the sources it found (data is kept), and
+ * switching it back on re-enables those that are still live.
  */
 export async function applySettings(tx: DbClient, body: z.infer<typeof SettingsBodySchema>, now: Date): Promise<string | null> {
   if (body.autoDiscover && !body.consent) return "Give permission before switching on automatic discovery";
@@ -88,6 +89,12 @@ export async function applySettings(tx: DbClient, body: z.infer<typeof SettingsB
     .values({ autoDiscover: body.autoDiscover, consentedAt, updatedAt: now })
     .onConflictDoUpdate({ target: discoverySettings.userId, set: { autoDiscover: body.autoDiscover, consentedAt, updatedAt: now } });
   if (!body.autoDiscover) await tx.update(jobSources).set({ enabled: false }).where(eq(jobSources.origin, "discovered"));
+  // Switching it back on restores what switching it off disabled -- every discovered board still live -- but never a
+  // board retired as gone (its discovered_boards row is no longer 'enabled').
+  if (body.autoDiscover && !current?.autoDiscover) {
+    const live = tx.select({ id: discoveredBoards.sourceId }).from(discoveredBoards).where(eq(discoveredBoards.status, "enabled"));
+    await tx.update(jobSources).set({ enabled: true }).where(and(eq(jobSources.origin, "discovered"), inArray(jobSources.id, live)));
+  }
   if (!body.consent) await tx.update(jobSources).set({ enabled: false }).where(eq(jobSources.origin, "search"));
   return null;
 }

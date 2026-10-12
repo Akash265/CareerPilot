@@ -5,8 +5,8 @@ describe("extractBoardLinks (Phase 12, D186)", () => {
   // Slugs keep their case: Lever is case-sensitive ("leverdemo" exists, "LeverDemo" is a 404); duplicates are compared without it.
   it("finds boards on all six platforms, in plain text and in hrefs", () => {
     const text = `
-      Apply: https://boards.greenhouse.io/gitlab/jobs/123 or https://job-boards.eu.greenhouse.io/mistral
-      <a href="https://jobs.lever.co/netflix/abc-123">x</a> https://jobs.eu.lever.co/Spotify
+      Apply: https://boards.greenhouse.io/gitlab/jobs/123 or https://job-boards.greenhouse.io/mistral
+      <a href="https://jobs.lever.co/netflix/abc-123">x</a> https://jobs.lever.co/Spotify
       https://jobs.ashbyhq.com/linear/7458 https://apply.workable.com/huggingface/j/81B46579FE/
       https://jobs.smartrecruiters.com/BoschGroup/7440001 https://careers.smartrecruiters.com/Visa
       https://bunq.recruitee.com/o/transaction-review-lead`;
@@ -33,5 +33,9 @@ describe("extractBoardLinks (Phase 12, D186)", () => {
 
   it("never returns a slug outside the safe character set or longer than 64", () => {
     expect(extractBoardLinks(`https://jobs.lever.co/${"a".repeat(65)} https://jobs.lever.co/a%2Fb`)).toEqual([]);
+  });
+
+  it("ignores look-alike Recruitee hosts and EU-region boards the US APIs cannot fetch (review fixes)", () => {
+    expect(extractBoardLinks("https://acme.recruitee.com.evil.com/o/x https://jobs.eu.lever.co/acme https://job-boards.eu.greenhouse.io/acme")).toEqual([]);
   });
 });

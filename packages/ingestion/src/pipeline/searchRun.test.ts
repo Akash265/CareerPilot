@@ -14,8 +14,15 @@ beforeAll(async () => {
 const wipe = async () => {
   await wipeUser(t.adminSql, USER);
   await t.adminSql`DELETE FROM career_goals WHERE user_id = ${USER}`;
+  await t.adminSql`DELETE FROM discovery_settings WHERE user_id = ${USER}`;
 };
-beforeEach(wipe);
+const grantDiscovery = (autoDiscover = true) =>
+  t.adminSql`INSERT INTO discovery_settings (user_id, auto_discover, consented_at) VALUES (${USER}, ${autoDiscover}, now())
+             ON CONFLICT (user_id) DO UPDATE SET auto_discover = ${autoDiscover}, consented_at = now()`;
+beforeEach(async () => {
+  await wipe();
+  await grantDiscovery();
+});
 afterAll(async () => {
   await wipe();
   await t.close();
@@ -89,5 +96,26 @@ describe("runIngestion — search sources (Phase 12, D187)", () => {
     expect(later.closed).toBe(1);
     const open = await t.adminSql`SELECT external_id FROM job_postings WHERE source_id = ${source} AND status = 'open' ORDER BY external_id`;
     expect(open.map((r) => r.external_id)).toEqual(["1"]);
+  });
+
+  it("refuses a search or discovered source once the standing consent is withdrawn, even with its own consent stamp (review fix)", async () => {
+    await insertGoal({ roles: ["Data Engineer"], locations: [], workMode: "any" });
+    const search = await insertSource(t.adminSql, USER, { kind: "remotive", label: "Remotive" });
+    const discovered = await insertSource(t.adminSql, USER, { kind: "greenhouse", slug: "found" });
+    await t.adminSql`UPDATE job_sources SET origin = 'discovered' WHERE id = ${discovered}`;
+    await t.adminSql`UPDATE discovery_settings SET consented_at = NULL WHERE user_id = ${USER}`;
+    for (const id of [search, discovered]) {
+      await expect(run(id, capture(() => [rec(1)]).factory)).rejects.toMatchObject({ errorClass: "consent_missing" });
+    }
+  });
+
+  it("refuses a discovered source while auto-discovery is off, but still runs a search source", async () => {
+    await insertGoal({ roles: ["Data Engineer"], locations: [], workMode: "any" });
+    await grantDiscovery(false);
+    const discovered = await insertSource(t.adminSql, USER, { kind: "greenhouse", slug: "found" });
+    await t.adminSql`UPDATE job_sources SET origin = 'discovered' WHERE id = ${discovered}`;
+    await expect(run(discovered, capture(() => [rec(1)]).factory)).rejects.toMatchObject({ errorClass: "source_disabled" });
+    const search = await insertSource(t.adminSql, USER, { kind: "remotive", label: "Remotive" });
+    expect((await run(search, capture(() => [rec(1)]).factory)).status).toBe("succeeded");
   });
 });

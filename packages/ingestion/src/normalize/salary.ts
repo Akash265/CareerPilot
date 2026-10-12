@@ -29,9 +29,11 @@ const CONTEXT =
 const NEGATIVE_BEFORE =
   /(equity|bonus|stock|rsu|options|signing|commission|revenue|funding|raised|valuation)[^.$€£]{0,25}$/i;
 
-// "€1500 annual learning budget": a benefit, not pay (D189). The phrase ends at the next digit or currency
-// symbol, so "€60,000 per year plus €1,500 learning budget" still keeps the €60,000.
-const NEGATIVE_AFTER = /^[^.$€£\d\n]{0,40}\b(budget|allowance|stipend|reimburse|reimbursement|vouchers?)\b/i;
+// "€1500 annual learning budget": a benefit, not pay (D189). The noun must follow the amount closely -- at most a
+// period ("per year", "annual") and two describing words ("home-office", "travel"), none of them a connector -- so
+// "$120,000 base salary plus relocation allowance" and "$150k with home-office stipend" keep their salary.
+const NEGATIVE_AFTER =
+  /^\s*(?:(?:per\s+(?:year|annum|month|week)|a\s+(?:year|month)|annual|yearly|monthly|quarterly|weekly)\s+)?(?:(?!(?:plus|and|with|or|in addition)\b)[a-z][a-z-]*\s+){0,2}(?:budget|allowance|stipend|reimbursements?|vouchers?)\b/i;
 
 const ANNUALIZE: Record<SalaryPeriod, number> = { year: 1, month: 12, hour: 2080 };
 const AMBIGUOUS_DOLLAR_COUNTRIES = new Set(["CA", "AU", "NZ", "SG", "HK"]);

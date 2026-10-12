@@ -20,7 +20,14 @@ describe("createPoliteFetch (Phase 12, D188)", () => {
     expect(inner).toHaveBeenCalledTimes(3);
   });
 
-  it("waits out a 429's Retry-After (up to 60 s) and retries once", async () => {
+  it("spaces concurrent callers too: each one reserves its slot before sleeping (review fix)", async () => {
+    const sleeps: number[] = [];
+    const polite = createPoliteFetch({ fetchFn: async () => ok(), minIntervalMs: 1000, now: () => 0, sleep: async (ms) => { sleeps.push(ms); } });
+    await Promise.all([polite("https://a.example/1"), polite("https://a.example/2"), polite("https://a.example/3")]);
+    expect(sleeps.sort((x, y) => x - y)).toEqual([1000, 2000]);
+  });
+
+  it("waits out a 429's Retry-After (up to 10 s) and retries once", async () => {
     const sleeps: number[] = [];
     const inner = vi.fn()
       .mockResolvedValueOnce(new Response("", { status: 429, headers: { "retry-after": "7" } }))
@@ -31,7 +38,8 @@ describe("createPoliteFetch (Phase 12, D188)", () => {
   });
 
   it("returns the 429 when Retry-After is missing, too long, or the retry is limited again", async () => {
-    for (const header of [undefined, "600", "Wed, 21 Oct 2026 07:28:00 GMT"]) {
+    // 11 s and up are not waited out: the request's own 30 s timeout is already running (review fix).
+    for (const header of [undefined, "11", "600", "Wed, 21 Oct 2026 07:28:00 GMT"]) {
       const inner = vi.fn(async () => new Response("", { status: 429, headers: header ? { "retry-after": header } : {} }));
       const polite = createPoliteFetch({ fetchFn: inner, minIntervalMs: 0, now: () => 0, sleep: async () => undefined });
       expect((await polite("https://a.example/")).status).toBe(429);

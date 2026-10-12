@@ -220,6 +220,7 @@ export const UsaJobsItemSchema = z
     MatchedObjectDescriptor: z.object({
       PositionTitle: z.string().trim().min(1), PositionURI: str, PositionLocationDisplay: str, OrganizationName: z.string().trim().min(1),
       PublicationStartDate: str, PositionSchedule: z.array(z.object({ Name: str }).passthrough()).nullable().optional(),
+      PositionLocation: z.array(z.object({ CountryCode: str }).passthrough()).nullable().optional(),
       PositionRemuneration: z.array(z.object({ MinimumRange: str, MaximumRange: str, RateIntervalCode: str }).passthrough()).nullable().optional(),
       UserArea: z.object({ Details: z.object({ JobSummary: str }).passthrough().nullable().optional() }).passthrough().nullable().optional(),
     }).passthrough(),

@@ -86,6 +86,19 @@ describe("PUT /api/discovery/settings", () => {
     expect((await view()).settings.consentedAt).toBeNull();
     void manual;
   });
+
+  it("re-enables the boards it disabled when auto-discovery is switched back on, but not ones that are gone (review fix)", async () => {
+    await consent();
+    const live = await insertSource(admin, USER, { enabled: true, consent: true, slug: "live" });
+    const gone = await insertSource(admin, USER, { enabled: false, consent: true, slug: "gone" });
+    await admin`UPDATE job_sources SET origin = 'discovered' WHERE id IN (${live}, ${gone})`;
+    await admin`INSERT INTO discovered_boards (user_id, kind, slug, status, source_id) VALUES
+                (${USER}, 'greenhouse', 'live', 'enabled', ${live}), (${USER}, 'greenhouse', 'gone', 'gone', ${gone})`;
+    await settings({ consent: true, autoDiscover: false });
+    await settings({ consent: true, autoDiscover: true });
+    const rows = Object.fromEntries((await admin`SELECT config->>'slug' AS slug, enabled FROM job_sources WHERE user_id = ${USER}`).map((r) => [r.slug, r.enabled]));
+    expect(rows).toEqual({ live: true, gone: false });
+  });
 });
 
 describe("PUT /api/discovery/providers/[kind]", () => {

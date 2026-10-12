@@ -54,7 +54,9 @@ async function main(): Promise<void> {
     if (errorClass === null) {
       const found = await recordBoardsFromRun(db, { userId: env.DEFAULT_USER_ID, sourceId, since });
       if (found > 0) log.info("boards_discovered", { sourceId, found });
-      await validateBoards();
+      // In the background: a pass can take minutes (one request per second per host), and the queue processes one
+      // job at a time, so awaiting it here would hold up every other source.
+      void validateBoards().catch((error) => log.error("discovery_failed", { error }));
     } else if (errorClass === "not_found" && (await retireIfGone(db, { userId: env.DEFAULT_USER_ID, sourceId }))) {
       log.info("board_retired", { sourceId });
     }

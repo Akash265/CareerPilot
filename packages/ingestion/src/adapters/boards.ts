@@ -19,6 +19,7 @@ interface BoardOptions {
 }
 
 const trimBase = (base: string) => base.replace(/\/+$/, "");
+const DNS_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 const idOf = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : typeof value === "number" && Number.isFinite(value) ? String(value) : null;
 
@@ -59,8 +60,10 @@ export function createWorkableAdapter(opts: BoardOptions): SourceAdapter {
 export function createRecruiteeAdapter(opts: { baseUrlTemplate: string; fetchFn?: typeof fetch }): SourceAdapter {
   return {
     async *fetch(source: SourceRef): AsyncIterable<RawRecord> {
-      // The slug becomes part of a host name here, so the same safe-character check is what keeps it on recruitee.com.
+      // The slug becomes part of a host name here: the safe-character check keeps it on recruitee.com, and it must also
+      // be a valid DNS label, or every run fails as a "network" error and is retried forever (review fix).
       const slug = assertValidSlug(source.config.slug);
+      if (!DNS_LABEL.test(slug)) throw new IngestError("invalid_slug");
       const url = `${trimBase(opts.baseUrlTemplate.replace("{slug}", encodeURIComponent(slug)))}/api/offers/`;
       const envelope = RecruiteeOffersResponseSchema.safeParse(await fetchJson(url, { fetchFn: opts.fetchFn }));
       if (!envelope.success) throw new IngestError("schema_mismatch");

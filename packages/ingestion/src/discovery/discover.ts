@@ -90,42 +90,59 @@ async function firstRecord(adapter: SourceAdapter, ref: SourceRef): Promise<RawR
   return null;
 }
 
+/** After a transient failure a board waits this long before it is tried again. */
+const RETRY_AFTER_MS = 60 * 60 * 1000;
+/** A board still failing transiently this long after it was found is given up on. */
+const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+/** Pending rows one pass looks at (oldest first); the rest wait for later passes. */
+const PENDING_PAGE = 500;
+/** Answers that say the board will not work: it does not exist, refuses us, or is not a job board we can read. */
+const REJECTING = new Set(["not_found", "invalid_slug", "http_error", "response_too_large"]);
+
 export async function validatePendingBoards(db: DbClient, opts: ValidateOptions): Promise<ValidateResult> {
   const now = opts.now ?? (() => new Date());
   const inUser = <T>(fn: (tx: DbClient) => Promise<T>) => withUserContext(db, opts.userId, fn);
-  const { settings, pending, existing } = await inUser(async (tx) => ({
+  const { settings, pending, total, existing } = await inUser(async (tx) => ({
     settings: await settingsOf(tx),
-    pending: await tx.select().from(discoveredBoards).where(eq(discoveredBoards.status, "pending")).orderBy(asc(discoveredBoards.firstSeenAt)),
-    existing: (await tx.select({ n: count() }).from(jobSources).where(eq(jobSources.origin, "discovered")))[0].n,
+    pending: await tx.select().from(discoveredBoards).where(eq(discoveredBoards.status, "pending")).orderBy(asc(discoveredBoards.firstSeenAt)).limit(PENDING_PAGE),
+    total: (await tx.select({ n: count() }).from(discoveredBoards).where(eq(discoveredBoards.status, "pending")))[0].n,
+    // Only enabled discovered sources use up the cap: ones switched off with auto-discovery do not block new ones.
+    existing: (await tx.select({ n: count() }).from(jobSources).where(and(eq(jobSources.origin, "discovered"), eq(jobSources.enabled, true))))[0].n,
   }));
-  const result: ValidateResult = { enabled: 0, rejected: 0, pending: pending.length };
+  const result: ValidateResult = { enabled: 0, rejected: 0, pending: total };
   if (!settings?.consentedAt) return result;
 
-  // maxPerRun bounds the fetches of one pass (politeness); maxSources bounds only what discovery adds on its own.
+  // maxPerRun bounds the fetches of one pass (politeness) -- every attempt counts, failed or not; maxSources bounds
+  // only what discovery adds on its own.
   let fetches = opts.maxPerRun;
   let discoveredRoom = Math.max(0, opts.maxSources - existing);
+  const reject = async (id: string) => {
+    await inUser((tx) => tx.update(discoveredBoards).set({ status: "rejected", checkedAt: now() }).where(eq(discoveredBoards.id, id)));
+    result.rejected++;
+    result.pending--;
+  };
   for (const board of pending) {
     if (fetches <= 0) break;
     const pasted = board.foundViaSourceId === null;
     if (!pasted && (!settings.autoDiscover || discoveredRoom <= 0)) continue;
+    if (board.checkedAt && now().getTime() - board.checkedAt.getTime() < RETRY_AFTER_MS) continue; // backing off
+    fetches--;
     const ref: SourceRef = { id: board.id, kind: board.kind as BoardKind, label: board.slug, config: { slug: board.slug } };
     let record: RawRecord | null;
     try {
       record = await firstRecord(opts.adapterFor(ref), ref);
     } catch (error) {
-      const gone = error instanceof IngestError && (error.errorClass === "not_found" || error.errorClass === "invalid_slug" || error.errorClass === "schema_mismatch");
-      if (!gone) {
-        // Transient (network, rate limit, server error): try again on a later pass.
+      const errorClass = error instanceof IngestError ? error.errorClass : "unknown";
+      if (REJECTING.has(errorClass) || now().getTime() - board.firstSeenAt.getTime() > GIVE_UP_AFTER_MS) {
+        await reject(board.id);
+      } else {
+        // Transient (network, rate limit, timeout, server error, an unexpected shape): try again after a while.
         await inUser((tx) => tx.update(discoveredBoards).set({ checkedAt: now() }).where(eq(discoveredBoards.id, board.id)));
-        continue;
       }
-      record = null;
+      continue;
     }
-    fetches--;
     if (!record) {
-      await inUser((tx) => tx.update(discoveredBoards).set({ status: "rejected", checkedAt: now() }).where(eq(discoveredBoards.id, board.id)));
-      result.rejected++;
-      result.pending--;
+      await reject(board.id);
       continue;
     }
     let label = board.slug;
@@ -134,17 +151,23 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
     } catch {
       // An unreadable first record still proves the board exists; the slug names it.
     }
-    await inUser(async (tx) => {
+    const created = await inUser(async (tx) => {
+      // A pass can take minutes: re-read the settings in the same transaction as the insert, so a withdrawn consent
+      // (or auto-discovery switched off) mid-pass creates nothing. FOR SHARE holds off a concurrent change until commit.
+      const [current] = await tx.select().from(discoverySettings).for("share");
+      if (!current?.consentedAt || (!pasted && !current.autoDiscover)) return false;
       const [source] = await tx
         .insert(jobSources)
         .values({
           kind: board.kind, origin: pasted ? "manual" : "discovered", label, config: { slug: board.slug },
-          enabled: true, consentConfirmedAt: settings.consentedAt,
+          enabled: true, consentConfirmedAt: current.consentedAt,
         })
         .onConflictDoNothing() // the user already added this board by hand
         .returning({ id: jobSources.id });
       await tx.update(discoveredBoards).set({ status: "enabled", sourceId: source?.id ?? null, checkedAt: now() }).where(eq(discoveredBoards.id, board.id));
+      return true;
     });
+    if (!created) break; // consent or auto-discovery is gone: stop the pass
     result.enabled++;
     result.pending--;
     if (!pasted) discoveredRoom--;

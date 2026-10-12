@@ -126,6 +126,85 @@ describe("validatePendingBoards", () => {
   });
 });
 
+describe("validatePendingBoards — review fixes", () => {
+  const limits = { maxSources: 300, maxPerRun: 25 };
+  const linked = async (slugs: string[], firstSeen = NOW) => {
+    const hn = await insertSource(t.adminSql, USER, { kind: "hn_hiring", label: "HN" });
+    for (const slug of slugs) {
+      await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via_source_id, first_seen_at)
+                       VALUES (${USER}, 'ashby', ${slug}, ${hn}, ${firstSeen.toISOString()}::timestamptz)`;
+    }
+  };
+  function counting(answers: Record<string, RawRecord[] | string>) {
+    const tried: string[] = [];
+    const factory = adapterFor(answers);
+    return {
+      tried,
+      adapterFor: (s: SourceRef): SourceAdapter => ({
+        fetch: (ref: SourceRef) => {
+          tried.push(ref.config.slug ?? "");
+          return factory(s).fetch(ref);
+        },
+      }),
+    };
+  }
+
+  it("counts a transient failure against the per-pass budget", async () => {
+    await consent();
+    await linked(["a", "b", "c"]);
+    const c = counting({ a: "rate_limited", b: "rate_limited", c: "rate_limited" });
+    await validatePendingBoards(t.db, { userId: USER, adapterFor: c.adapterFor, maxSources: 300, maxPerRun: 2, now: () => NOW });
+    expect(c.tried).toHaveLength(2);
+  });
+
+  it("backs off an hour after a transient failure, and rejects a board still failing a week after it was found", async () => {
+    await consent();
+    await linked(["flaky"]);
+    const c = counting({ flaky: "timeout" });
+    await validatePendingBoards(t.db, { userId: USER, adapterFor: c.adapterFor, ...limits, now: () => NOW });
+    await validatePendingBoards(t.db, { userId: USER, adapterFor: c.adapterFor, ...limits, now: () => new Date(NOW.getTime() + 30 * 60_000) });
+    expect(c.tried).toHaveLength(1);
+    await validatePendingBoards(t.db, { userId: USER, adapterFor: c.adapterFor, ...limits, now: () => new Date(NOW.getTime() + 2 * 3600_000) });
+    expect(c.tried).toHaveLength(2);
+    expect((await boards())[0].status).toBe("pending");
+    await validatePendingBoards(t.db, { userId: USER, adapterFor: c.adapterFor, ...limits, now: () => new Date(NOW.getTime() + 8 * 86_400_000) });
+    expect((await boards())[0].status).toBe("rejected");
+  });
+
+  it("rejects http_error and response_too_large, but keeps schema_mismatch pending (a provider-side change)", async () => {
+    await consent();
+    await linked(["forbidden", "huge", "shape"]);
+    const result = await validatePendingBoards(t.db, {
+      userId: USER, adapterFor: adapterFor({ forbidden: "http_error", huge: "response_too_large", shape: "schema_mismatch" }), ...limits, now: () => NOW,
+    });
+    expect(result).toEqual({ enabled: 0, rejected: 2, pending: 1 });
+  });
+
+  it("creates no source once consent is withdrawn during the pass", async () => {
+    await consent();
+    await linked(["first", "second"]);
+    const withdrawing = (s: SourceRef): SourceAdapter => ({
+      async *fetch(ref: SourceRef) {
+        if (ref.config.slug === "first") await t.adminSql`UPDATE discovery_settings SET consented_at = NULL WHERE user_id = ${USER}`;
+        yield ashbyJob(ref.config.slug ?? "x");
+        void s;
+      },
+    });
+    const result = await validatePendingBoards(t.db, { userId: USER, adapterFor: withdrawing, ...limits, now: () => NOW });
+    expect(result.enabled).toBe(0);
+    expect(await t.adminSql`SELECT 1 FROM job_sources WHERE user_id = ${USER} AND origin = 'discovered'`).toHaveLength(0);
+  });
+
+  it("counts only enabled discovered sources towards maxSources", async () => {
+    await consent();
+    const old = await insertSource(t.adminSql, USER, { kind: "ashby", slug: "old", enabled: false });
+    await t.adminSql`UPDATE job_sources SET origin = 'discovered' WHERE id = ${old}`;
+    await linked(["fresh"]);
+    const result = await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ fresh: [ashbyJob("1")] }), maxSources: 1, maxPerRun: 25, now: () => NOW });
+    expect(result.enabled).toBe(1);
+  });
+});
+
 describe("retireIfGone", () => {
   it("disables a discovered source whose last two runs were not_found, and marks its board gone", async () => {
     await consent();

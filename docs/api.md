@@ -33,7 +33,7 @@ package it calls); the exact schema is the reference, this page is the map.
 | POST | `/api/career-goal/confirm` | ai | `{ goalId, constraints }` → activates that goal version and embeds it. |
 | GET | `/api/job-sources` | | Sources with their latest run. |
 | POST | `/api/job-sources` | | `{ kind, slug, companyName? }` → a Greenhouse, Lever, Ashby, Workable, SmartRecruiters or Recruitee board, created disabled; enabling it (with consent, [D3](../DECISIONS.md)) is a separate `PATCH`. |
-| PATCH | `/api/job-sources/[id]` | | Enable/disable a source or update its settings. |
+| PATCH | `/api/job-sources/[id]` | | Enable/disable a source. Enabling a search or discovered source also needs the discovery permission (and automatic discovery for a discovered one): `409` otherwise. |
 | POST | `/api/job-sources/[id]/run` | jobs | Queue a fetch now. |
 | POST | `/api/job-sources/upload` | jobs | Multipart `file` (CSV/JSON, ≤ 10 MB, ≤ 5,000 rows) + `consentConfirmed=true` → stored and queued for ingestion. |
 | GET | `/api/jobs` | | `?q&status&sourceId&page` → normalized jobs. |

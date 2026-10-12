@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAshbyAdapter, createRecruiteeAdapter, createSmartRecruitersAdapter, createWorkableAdapter } from "./boards";
 import { normalizeRecord } from "../normalize/normalizeRecord";
-import { IngestError, type RawRecord, type SourceRef } from "../types";
+import type { RawRecord, SourceRef } from "../types";
 
 const FIX = path.join(path.dirname(fileURLToPath(import.meta.url)), "__fixtures__");
 const fixture = (name: string): unknown => JSON.parse(readFileSync(path.join(FIX, `${name}.json`), "utf8"));
@@ -83,9 +83,10 @@ describe("Recruitee adapter", () => {
 
   it("refuses a slug that could change the host", async () => {
     const { fn } = fakeFetch({});
-    for (const slug of ["evil.com/x", "a..b", "x@y"]) {
-      await expect(collect(createRecruiteeAdapter({ baseUrlTemplate: "https://{slug}.recruitee.com", fetchFn: fn }).fetch(ref("recruitee", slug))))
-        .rejects.toBeInstanceOf(IngestError);
+    // Also not a DNS label: an underscore, a leading or trailing hyphen, or over 63 characters (review fix).
+    for (const slug of ["evil.com/x", "a..b", "x@y", "a_b", "-ab", "ab-", "a".repeat(64)]) {
+      await expect(collect(createRecruiteeAdapter({ baseUrlTemplate: "https://{slug}.recruitee.com", fetchFn: fn }).fetch(ref("recruitee", slug))), slug)
+        .rejects.toMatchObject({ errorClass: "invalid_slug" });
     }
   });
 });

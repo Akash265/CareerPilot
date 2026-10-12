@@ -390,7 +390,10 @@ function fromUsaJobs(_source: SourceRef, record: RawRecord): NormalizedJob {
   const period = pay?.RateIntervalCode === "PH" ? "hour" : pay?.RateIntervalCode === "PA" ? "year" : null;
   return assemble({
     externalId: record.externalId, url: nonEmpty(d.PositionURI), companyName: d.OrganizationName.trim(), title: d.PositionTitle.trim(),
-    locationRaw: nonEmpty(d.PositionLocationDisplay), countryCode: "US", structuredWorkMode: null,
+    // USAJobs also lists overseas posts; its CountryCode is a country name ("United States").
+    locationRaw: nonEmpty(d.PositionLocationDisplay),
+    countryCode: (d.PositionLocation ?? []).every((l) => l.CountryCode === "United States") && (d.PositionLocation ?? []).length > 0 ? "US" : null,
+    structuredWorkMode: null,
     employmentType: nonEmpty(d.PositionSchedule?.[0]?.Name), descriptionText: htmlToText(d.UserArea?.Details?.JobSummary ?? ""),
     postedAt: parseUtc(d.PublicationStartDate),
     salaryHint: period ? range("USD", Number(pay?.MinimumRange), Number(pay?.MaximumRange), period) : null,

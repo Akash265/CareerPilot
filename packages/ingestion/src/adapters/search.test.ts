@@ -182,6 +182,12 @@ describe("Jooble", () => {
     expect(records.map((r) => r.externalId)).toEqual(["-7120334219118826752"]);
     expect(norm("jooble", records[0])).toMatchObject({ title: "Data Engineer", companyName: "Beispiel GmbH", locationRaw: "Berlin" });
   });
+
+  it("skips a job whose link carries no id, rather than trusting a rounded number (review fix)", async () => {
+    const job = (fixture("jooble") as { jobs: Record<string, unknown>[] }).jobs[0];
+    const { records } = await run("jooble", { "https://jooble.org/api/jk": { jobs: [{ ...job, link: "https://example.com/x" }] } }, { ...QUERY, maxPages: 1 });
+    expect(records).toEqual([]);
+  });
 });
 
 describe("USAJobs", () => {
@@ -195,6 +201,12 @@ describe("USAJobs", () => {
     expect(job).toMatchObject({ title: "Data Scientist", companyName: "Department of Energy", countryCode: "US", locationRaw: "Washington, District of Columbia" });
     expect(job.salary).toMatchObject({ min: 120579, max: 156755, period: "year", isParsed: true });
     expect(job.postedAt?.toISOString()).toBe("2026-10-06T00:00:00.000Z");
+  });
+
+  it("does not claim the US for an overseas posting (review fix)", () => {
+    const item = structuredClone((fixture("usajobs") as { SearchResult: { SearchResultItems: Record<string, Record<string, unknown>>[] } }).SearchResult.SearchResultItems[0]);
+    item.MatchedObjectDescriptor.PositionLocation = [{ LocationName: "Ramstein, Germany", CountryCode: "Germany" }];
+    expect(norm("usajobs", { externalId: "1", payload: item }).countryCode).toBeNull();
   });
 });
 

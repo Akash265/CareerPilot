@@ -6,7 +6,7 @@ import { closeMissingPostings } from "./closeMissing";
 import { hashPayload } from "./hashPayload";
 import { persistPosting } from "./persistPosting";
 
-const { jobSources, ingestionRuns, rawJobPostings, jobPostings, careerGoals, careerGoalConstraints } = schema;
+const { jobSources, ingestionRuns, rawJobPostings, jobPostings, careerGoals, careerGoalConstraints, discoverySettings } = schema;
 
 /** A goal can name any number of roles and places; each is a request per provider, so only the first few are searched. */
 const MAX_QUERY_TERMS = 5;
@@ -96,12 +96,17 @@ export async function runIngestion(db: DbClient, opts: RunIngestionOptions): Pro
     runId: run.id, status, complete, errorClass, ...counters,
   });
 
-  // The D3 consent gate lives here, in worker code, not only in the UI.
+  // The D3 consent gate lives here, in worker code, not only in the UI. A search or discovered source also needs
+  // the standing consent to still hold, and a discovered one auto-discovery (D185) -- its own stamp is not enough,
+  // since it outlives a withdrawal.
+  const [discovery] = source.origin === "manual" ? [] : await inUserContext((tx) => tx.select().from(discoverySettings).limit(1));
   const guard: IngestErrorClass | null = !source.enabled
     ? "source_disabled"
-    : !source.consentConfirmedAt
+    : !source.consentConfirmedAt || (source.origin !== "manual" && !discovery?.consentedAt)
       ? "consent_missing"
-      : null;
+      : source.origin === "discovered" && !discovery?.autoDiscover
+        ? "source_disabled"
+        : null;
   if (guard) {
     await finishQuietly(guard);
     throw new IngestError(guard);

@@ -210,6 +210,14 @@ describe("extractSalary — benefit amounts are not salaries (Phase 12 live chec
     }
   });
 
+  it("keeps a real salary that a benefit is merely mentioned after (review fix)", () => {
+    expect(extractSalary("Salary: $120,000 base salary plus relocation allowance")).toMatchObject({ min: 120000, isParsed: true });
+    expect(extractSalary("Compensation: €60,000 per year and a generous training budget")).toMatchObject({ min: 60000, isParsed: true });
+    expect(extractSalary("Pay: $150k-$180k with home office stipend")).toMatchObject({ min: 150000, max: 180000, isParsed: true });
+    expect(extractSalary("Pay: $150k-$180k with home-office stipend")).toMatchObject({ min: 150000, max: 180000, isParsed: true });
+    expect(extractSalary("Salary $130,000 - $160,000 plus equity and a learning budget")).toMatchObject({ min: 130000, max: 160000, isParsed: true });
+  });
+
   it("still finds the salary when a benefit amount follows it in the same sentence", () => {
     expect(extractSalary("Salary: €60,000 per year plus €1,500 learning budget")).toMatchObject({ min: 60000, max: 60000, currency: "EUR", isParsed: true });
   });
