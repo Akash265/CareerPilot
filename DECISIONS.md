@@ -1377,4 +1377,9 @@ drizzle-orm 0.45 wraps a failed query in `DrizzleQueryError` whose message holds
 **Decision:** The ingestion worker wraps fetch once (`createPoliteFetch`) and every adapter uses it: requests to one host are at least `DISCOVERY_MIN_INTERVAL_MS` (1 s) apart, and a 429 with a seconds-valued `Retry-After` of at most 60 s is waited out and retried once; anything else is left to `fetchJson`'s `rate_limited` class and the queue's backoff. `fetchJson` gained POST bodies and extra headers (Jooble, USAJobs), keeping its own user agent unless one is supplied (USAJobs requires the registered email).
 **What it affects:** `packages/ingestion/src/adapters/{politeFetch,http}.ts`, `services/job-ingestion/src/main.ts`.
 
+### D189. Benefit amounts are not salaries (found by Phase 12's live check)
+**Decision:** The salary extractor skips an amount followed in the same phrase (up to the next digit or currency symbol, within 40 characters) by budget, allowance, stipend, reimbursement or voucher(s) -- the mirror of the existing bonus/equity/stock rule that looks before an amount.
+**Why:** Running every new adapter against the live APIs (820 real records, all normalized) showed bunq's "€1500 annual learning budget" read as a €1,500 annual salary; "annual" is salary context. With Phase 12's many more sources, benefit-heavy postings are common. The phrase boundary keeps "Salary: €60,000 per year plus €1,500 learning budget" parsed (before, the two amounts conflicted and nothing was parsed). The labelled extraction eval stays at 100% precision and recall.
+**What it affects:** `packages/ingestion/src/normalize/salary.ts`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

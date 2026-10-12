@@ -29,6 +29,10 @@ const CONTEXT =
 const NEGATIVE_BEFORE =
   /(equity|bonus|stock|rsu|options|signing|commission|revenue|funding|raised|valuation)[^.$€£]{0,25}$/i;
 
+// "€1500 annual learning budget": a benefit, not pay (D189). The phrase ends at the next digit or currency
+// symbol, so "€60,000 per year plus €1,500 learning budget" still keeps the €60,000.
+const NEGATIVE_AFTER = /^[^.$€£\d\n]{0,40}\b(budget|allowance|stipend|reimburse|reimbursement|vouchers?)\b/i;
+
 const ANNUALIZE: Record<SalaryPeriod, number> = { year: 1, month: 12, hour: 2080 };
 const AMBIGUOUS_DOLLAR_COUNTRIES = new Set(["CA", "AU", "NZ", "SG", "HK"]);
 
@@ -111,6 +115,7 @@ export function extractSalary(text: string, ctx: { countryCode?: string | null }
 
       if (MAGNITUDE_AFTER.test(text.slice(end))) continue;
       if (NEGATIVE_BEFORE.test(text.slice(Math.max(0, start - 60), start))) continue;
+      if (NEGATIVE_AFTER.test(text.slice(end, end + 80))) continue;
       if (!CONTEXT.test(text.slice(Math.max(0, start - 120), end + 60))) continue;
       // The suffix pattern re-matches the tail of a range the prefix pattern already took.
       if (candidates.some((c) => start < c.end && c.start < end)) continue;
