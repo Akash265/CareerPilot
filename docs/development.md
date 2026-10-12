@@ -12,7 +12,7 @@ Node 22+, pnpm 9 (`packageManager` pins 9.15.0), Docker (Postgres + pgvector, Re
 |---|---|
 | `apps/web` | Next.js 16 app: pages, `/api` routes, the request gate (`src/proxy.ts`) |
 | `packages/*` | Domain logic by capability (`ai`, `matching`, `ingestion`, `resume-optimization`, `application-package`, `applications`, `insights`, `browser`, `document-export`, `storage`), plus `db` (Drizzle schema, migrations, RLS), `config` (env schema), `logging`, `monitoring` |
-| `services/*` | BullMQ workers: `job-ingestion`, `matching-worker`, `maintenance-worker`, `browser-worker` |
+| `services/*` | BullMQ workers: `job-ingestion` (also runs discovery, Phase 12), `matching-worker`, `maintenance-worker`, `browser-worker` |
 | `e2e` | The browser smoke suite and AI stand-ins (`pnpm e2e`) |
 | `docs` | Architecture, this guide, [API](api.md), [AI system](ai-system.md); specs and plans under `docs/superpowers/` |
 
@@ -43,7 +43,7 @@ Node 22+, pnpm 9 (`packageManager` pins 9.15.0), Docker (Postgres + pgvector, Re
 pnpm build && pnpm e2e
 ```
 
-`e2e/run.mjs` starts a fake Anthropic + Voyage server, the built web app (port 3100) with an access token and low rate limits, a second instance with an unreachable database (port 3101), and the ingestion and matching workers, then runs `e2e/smoke.mjs` in headless Chrome: the request gate, unlock, profile → goal → job upload → matching → application, the main pages, rate limits and the message-free 500. It uses `career_intel_test` (it refuses any database not ending in `_test`), Redis database 1, and its own user id, whose rows it wipes first; no paid API is ever called. Set `CHROME_PATH` if Chrome is not at the macOS default; CI installs Playwright's Chromium. Logs and a failure screenshot land in `e2e/.out/`.
+`e2e/run.mjs` starts a fake Anthropic + Voyage server (which also serves the job-provider APIs discovery is tested against), the built web app (port 3100) with an access token and low rate limits, a second instance with an unreachable database (port 3101), and the ingestion and matching workers, then runs `e2e/smoke.mjs` in headless Chrome: the request gate, unlock, profile → goal → job upload → matching → application, the main pages, rate limits and the message-free 500. It uses `career_intel_test` (it refuses any database not ending in `_test`), Redis database 1, and its own user id, whose rows it wipes first; no paid API is ever called. Set `CHROME_PATH` if Chrome is not at the macOS default; CI installs Playwright's Chromium. Logs and a failure screenshot land in `e2e/.out/`.
 
 ## Running it on your network
 

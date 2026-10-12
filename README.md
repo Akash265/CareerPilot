@@ -300,3 +300,13 @@ application → status pages) against the test database with local stand-ins
 for Anthropic and Voyage; CI is set up to run it on every push, after the tests. See
 [docs/development.md](docs/development.md), [docs/api.md](docs/api.md) and
 [docs/ai-system.md](docs/ai-system.md).
+
+Phase 12 (Broad Job Discovery) complete: besides Greenhouse and Lever, you can
+follow Ashby, Workable, SmartRecruiters and Recruitee boards. On `/sources`,
+give permission once and switch on search providers — Remotive, Remote OK,
+Arbeitnow, The Muse and HN "Who is hiring" need no key; Adzuna, Jooble and
+USAJobs need free keys in `.env` — which are searched with your career goal's
+roles and places. With automatic discovery on, company boards linked from
+those postings are checked and added for you (up to 300), and you can paste
+board links too. The ingestion worker must be running. Run
+`pnpm --filter @ai-career/db db:migrate` for migrations `0031`–`0032`.

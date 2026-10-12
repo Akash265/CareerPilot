@@ -32,7 +32,7 @@ package it calls); the exact schema is the reference, this page is the map.
 | POST | `/api/career-goal/parse` | ai | `{ rawText }` → a parsed draft goal for review. |
 | POST | `/api/career-goal/confirm` | ai | `{ goalId, constraints }` → activates that goal version and embeds it. |
 | GET | `/api/job-sources` | | Sources with their latest run. |
-| POST | `/api/job-sources` | | `{ kind, slug, companyName? }` → a Greenhouse/Lever board, created disabled; enabling it (with consent, [D3](../DECISIONS.md)) is a separate `PATCH`. |
+| POST | `/api/job-sources` | | `{ kind, slug, companyName? }` → a Greenhouse, Lever, Ashby, Workable, SmartRecruiters or Recruitee board, created disabled; enabling it (with consent, [D3](../DECISIONS.md)) is a separate `PATCH`. |
 | PATCH | `/api/job-sources/[id]` | | Enable/disable a source or update its settings. |
 | POST | `/api/job-sources/[id]/run` | jobs | Queue a fetch now. |
 | POST | `/api/job-sources/upload` | jobs | Multipart `file` (CSV/JSON, ≤ 10 MB, ≤ 5,000 rows) + `consentConfirmed=true` → stored and queued for ingestion. |
@@ -64,6 +64,10 @@ package it calls); the exact schema is the reference, this page is the map.
 | POST | `/api/applications/[id]/status` | | Move to a new status (recorded as an event). |
 | POST | `/api/applications/[id]/events` | | Add a recruiter / interview / note event. |
 | GET | `/api/insights` | | Outcome analytics and the personal response model (§19–§20). |
+| GET | `/api/discovery` | | Phase 12: the standing consent, each search provider (key status, on/off) and discovered boards (counts, latest 50). |
+| PUT | `/api/discovery/settings` | | `{ consent, autoDiscover }`; withdrawing consent disables discovered and search sources. |
+| PUT | `/api/discovery/providers/[kind]` | | `{ enabled }` for one search provider; `409` without consent, `400` without its key, `404` for an unknown provider. |
+| POST | `/api/discovery/boards` | jobs | `{ text }` with board links → `{ recognized, added }` pending boards; `409` without consent. |
 | GET | `/api/automation-sessions` | | `?jobId=` → autofill sessions. |
 | POST | `/api/automation-sessions` | jobs | Start a guarded-autofill session for a job (§18). |
 | GET | `/api/automation-sessions/[id]` | | One session with its field audit. |
