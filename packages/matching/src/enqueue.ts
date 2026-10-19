@@ -38,18 +38,33 @@ export async function pushMatching(
 }
 
 export const rematchFlagKey = (userId: string): string => `careerpilot:rematch:${userId}`;
-const FLAG_TTL_SECONDS = 3600;
+export const REMATCH_FLAG_TTL_SECONDS = 3600;
+
+export interface RematchFlagDeps {
+  redis: Pick<IORedis, "set" | "del">;
+  queue: Queue<MatchingJobData>;
+}
+
+/**
+ * A run in progress cannot see newer jobs, so for a `running` result leave a flag the matching worker takes when
+ * that run finishes. The run may have finished (and its job been removed) between pushMatching's state read and the
+ * flag write, leaving the flag for no one: re-check the job, and if it is gone take the flag back and queue a run now.
+ * Taking the flag is atomic, so this and the worker's follow-up never both queue.
+ */
+export async function flagRematchIfRunning(deps: RematchFlagDeps, userId: string, result: PushResult): Promise<PushResult> {
+  if (result !== "running") return result;
+  await deps.redis.set(rematchFlagKey(userId), "1", "EX", REMATCH_FLAG_TTL_SECONDS);
+  if (await deps.queue.getJob(matchingJobId(userId))) return result;
+  if (await takeRematchFlag(deps.redis, userId)) return pushMatching(deps.queue, userId);
+  return result;
+}
 
 /**
  * New jobs arrived outside a search run (a schedule, a late source, a newly validated board). Queue a debounced run;
  * if one is already running it cannot see them, so leave a flag the matching worker reads when that run finishes.
  */
-export async function requestRematch(
-  deps: { redis: Pick<IORedis, "set">; queue: Queue<MatchingJobData> }, userId: string, debounceMs: number,
-): Promise<PushResult> {
-  const result = await pushMatching(deps.queue, userId, { delayMs: debounceMs });
-  if (result === "running") await deps.redis.set(rematchFlagKey(userId), "1", "EX", FLAG_TTL_SECONDS);
-  return result;
+export async function requestRematch(deps: RematchFlagDeps, userId: string, debounceMs: number): Promise<PushResult> {
+  return flagRematchIfRunning(deps, userId, await pushMatching(deps.queue, userId, { delayMs: debounceMs }));
 }
 
 /** True once per flag: DEL is atomic, so two finishing runs never both take it. */

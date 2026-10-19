@@ -9,7 +9,7 @@ import {
   type IngestJobData,
 } from "@ai-career/ingestion";
 import { createAnthropicFor, withLangfuseExport } from "@ai-career/ai";
-import { MATCHING_QUEUE_NAME, pushMatching, rematchFlagKey, requestRematch, type MatchingJobData } from "@ai-career/matching";
+import { flagRematchIfRunning, MATCHING_QUEUE_NAME, pushMatching, requestRematch, type MatchingJobData } from "@ai-career/matching";
 import { afterRunRematch, requestRematchSafely } from "./rematch";
 import { createSearchRunWorker } from "./searchRunWorker";
 import { reconcileSchedules } from "./reconcile";
@@ -98,8 +98,7 @@ async function main(): Promise<void> {
       requestMatching: async () => {
         const result = await pushMatching(matchingQueue, env.DEFAULT_USER_ID, { promoteDelayed: true });
         // A run in progress cannot see this run's jobs: the matching worker runs once more when it finishes.
-        if (result === "running") await connection.set(rematchFlagKey(env.DEFAULT_USER_ID), "1", "EX", 3600);
-        return result;
+        return flagRematchIfRunning({ redis: connection, queue: matchingQueue }, env.DEFAULT_USER_ID, result);
       },
       webSearch: (goal) => searchWebForBoards(anthropicFor("discovery_web_search"), env, goal),
       startValidation: () => void validateBoards().catch((error) => log.error("discovery_failed", { error })),
