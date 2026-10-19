@@ -21,7 +21,7 @@ const REPLACEMENTS: Readonly<Record<string, string>> = {
   "`": "\\textasciigrave{}",
   '"': "\\textquotedbl{}",
   "|": "\\textbar{}",
-  " ": "~",
+  "\u00a0": "~",
   "–": "\\textendash{}",
   "—": "\\textemdash{}",
   "‘": "\\textquoteleft{}",
@@ -40,7 +40,7 @@ const REPLACEMENTS: Readonly<Record<string, string>> = {
 const LIGATURE_CHARS = new Set(["-", "'", ",", "<", ">"]);
 
 /** Control, zero-width and soft-hyphen characters: removed, never typeset. */
-const STRIP = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F­​-‍⁠﻿]/g;
+const STRIP = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u200B-\u200D\u2060\uFEFF]/g;
 
 /** Latin Extended-A code points pdflatex's T1/utf8 setup has no glyph or definition for. */
 const UNSUPPORTED_LATIN = new Set([0x126, 0x127, 0x138, 0x13f, 0x140, 0x149, 0x166, 0x167, 0x17f]);
@@ -52,10 +52,12 @@ function clean(text: string): string {
 export function escapeTex(text: string): string {
   const chars = [...clean(text)];
   let out = "";
-  for (let i = 0; i < chars.length; i++) {
-    const ch = chars[i];
-    out += REPLACEMENTS[ch] ?? ch;
-    if (LIGATURE_CHARS.has(ch) && chars[i + 1] === ch) out += "{}";
+  for (const ch of chars) {
+    const emitted = REPLACEMENTS[ch] ?? ch;
+    // Check the EMITTED characters (a mapping such as U+2212 -> "-" can join a neighbouring "-" into a ligature).
+    const first = emitted[0];
+    if (out.length > 0 && LIGATURE_CHARS.has(first) && out[out.length - 1] === first) out += "{}";
+    out += emitted;
   }
   return out;
 }

@@ -48,6 +48,12 @@ describe("escapeTex", () => {
     expect(escapeTex("<<>>")).toBe("<{}<>{}>");
   });
 
+  it("breaks the en-dash ligature when U+2212 maps to a hyphen next to another hyphen", () => {
+    expect(escapeTex("a\u2212\u2212b")).toBe("a-{}-b");
+    expect(escapeTex("a-\u2212b")).toBe("a-{}-b");
+    expect(escapeTex("a\u2212-b")).toBe("a-{}-b");
+  });
+
   it("turns tabs/newlines into spaces and strips control and zero-width characters", () => {
     expect(escapeTex("a\tb\nc\r\nd")).toBe("a b c d");
     expect(escapeTex("a\u0007b\u200bc\u00add\ufeff")).toBe("abcd");
