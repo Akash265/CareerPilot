@@ -1870,7 +1870,8 @@ ResumeOptimizationPanel (changed) → TailoredResumeExport (new) → DownloadBut
      2. loadResumeExportContext (new; the D84 checks shared with exportResume, which now uses it):
         job 404, source_mismatch 400, profile_changed 409, no_profile 409
      3. job_requirements rows for the job (termText, requirementLevel)
-     4. build(extraRemovals) = selectTailoredResume (new; uses estimateLines (new), containsTerm) → normalizeModel
+     4. build(extraRemovals) = selectTailoredResume (new; uses estimateLines (new), containsTerm): remove worst-first until it fits,
+        one greedy refill pass over the removed items (best-ranked first), then extraRemovals; skills past the 2-line cap go to omitted → normalizeModel
      5. first model only: assertSafeModel, then findUnsupportedCharacter (new; render/tex/escapeTex.ts)
         → unsupported_character 422 with a location
      6. fitToPage (new; pipeline/fitToPage.ts), render = renderTex (new; render/tex/renderTex.ts, uses escapeTex)
