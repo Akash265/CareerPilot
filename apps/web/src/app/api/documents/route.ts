@@ -6,24 +6,31 @@ import { loadEnv } from "@ai-career/config";
 import { closeDbClient, createDbClient, schema, withUserContext, type DbClient } from "@ai-career/db";
 import { createStorageClient } from "@ai-career/storage";
 import {
-  exportPitch, exportResume, exportCoverLetter, exportInterviewPrep, DocumentExportError, type GeneratedDocumentRow,
+  exportPitch, exportResume, exportCoverLetter, exportInterviewPrep, exportTailoredResume, DocumentExportError,
+  type GeneratedDocumentRow, type OmittedItemView, type PaperSize,
 } from "@ai-career/document-export";
 import { readJsonBody } from "../../../lib/readJsonBody";
 import { formatValidationError } from "../../../lib/formatValidationError";
 import { listDocuments } from "../../../lib/documents/listDocuments";
 import { toDocumentView } from "../../../lib/documents/serializeDocument";
 import { exportErrorResponse } from "../../../lib/documents/exportErrors";
+import { texCompilerFromEnv } from "../../../lib/documents/texCompiler";
 import { withRouteErrors } from "../../../lib/http/withRouteErrors";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ExportBodySchema = z
   .object({
-    kind: z.enum(["resume", "pitch", "cover_letter", "interview_prep"]),
+    kind: z.enum(["resume", "pitch", "cover_letter", "interview_prep", "tailored_resume"]),
     jobId: z.string().uuid(),
     sourceId: z.string().uuid(),
-    format: z.enum(["pdf", "docx"]),
+    format: z.enum(["pdf", "docx", "tex"]),
   })
-  .strict();
+  .strict()
+  .superRefine((body, ctx) => {
+    // .tex exists only for the tailored resume, and the tailored resume has no DOCX (Phase 13c spec §6).
+    if (body.format === "tex" && body.kind !== "tailored_resume") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["format"], message: "tex is only available for kind tailored_resume" });
+    if (body.kind === "tailored_resume" && body.format === "docx") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["format"], message: "tailored_resume is available as pdf or tex" });
+  });
 const { resumeOptimizations, applicationPitches, coverLetters, interviewPreparations } = schema;
 
 type ExportKind = z.infer<typeof ExportBodySchema>["kind"];
@@ -31,16 +38,28 @@ type ExportKind = z.infer<typeof ExportBodySchema>["kind"];
 // runExport can take the one client POST creates instead of each export making its own.
 type Storage = ReturnType<typeof createStorageClient>;
 
-function runExport(db: DbClient, storage: Storage, userId: string, kind: ExportKind, jobId: string, sourceId: string, format: "pdf" | "docx") {
+interface ExportOutcome { row: GeneratedDocumentRow; omittedItems?: OmittedItemView[] }
+type ExportSettings = { paperSize: PaperSize; compilerEnv: { LATEX_COMPILER_URL?: string; LATEX_COMPILER_TOKEN?: string } };
+
+async function runExport(
+  db: DbClient, storage: Storage, userId: string, kind: ExportKind, jobId: string, sourceId: string, format: "pdf" | "docx" | "tex", settings: ExportSettings
+): Promise<ExportOutcome> {
+  if (kind === "tailored_resume") {
+    const { document, omittedItems } = await exportTailoredResume(db, storage, texCompilerFromEnv(settings.compilerEnv), {
+      userId, jobId, optimizationId: sourceId, format: format as "pdf" | "tex", paperSize: settings.paperSize,
+    });
+    return { row: document, omittedItems };
+  }
+  const fmt = format as "pdf" | "docx"; // superRefine rejected tex for every other kind
   switch (kind) {
     case "resume":
-      return exportResume(db, storage, { userId, jobId, optimizationId: sourceId, format });
+      return { row: await exportResume(db, storage, { userId, jobId, optimizationId: sourceId, format: fmt }) };
     case "pitch":
-      return exportPitch(db, storage, { userId, jobId, pitchId: sourceId, format });
+      return { row: await exportPitch(db, storage, { userId, jobId, pitchId: sourceId, format: fmt }) };
     case "cover_letter":
-      return exportCoverLetter(db, storage, { userId, jobId, coverLetterId: sourceId, format });
+      return { row: await exportCoverLetter(db, storage, { userId, jobId, coverLetterId: sourceId, format: fmt }) };
     case "interview_prep":
-      return exportInterviewPrep(db, storage, { userId, jobId, interviewPrepId: sourceId, format });
+      return { row: await exportInterviewPrep(db, storage, { userId, jobId, interviewPrepId: sourceId, format: fmt }) };
   }
 }
 
@@ -78,8 +97,12 @@ async function handlePOST(request: Request) {
   const db = createDbClient(env);
   const storage = createStorageClient(env);
   try {
-    const row = await runExport(db, storage, env.DEFAULT_USER_ID, kind, jobId, sourceId, format);
-    return NextResponse.json({ document: toDocumentView(row, await sourceVersion(db, env.DEFAULT_USER_ID, row)) }, { status: 201 });
+    const { row, omittedItems } = await runExport(db, storage, env.DEFAULT_USER_ID, kind, jobId, sourceId, format, {
+      paperSize: env.RESUME_PAPER_SIZE ?? "a4",
+      compilerEnv: { LATEX_COMPILER_URL: env.LATEX_COMPILER_URL, LATEX_COMPILER_TOKEN: env.LATEX_COMPILER_TOKEN },
+    });
+    const document = toDocumentView(row, await sourceVersion(db, env.DEFAULT_USER_ID, row));
+    return NextResponse.json(omittedItems ? { document, omittedItems } : { document }, { status: 201 });
   } catch (error) {
     if (error instanceof DocumentExportError) return exportErrorResponse(error);
     throw error;

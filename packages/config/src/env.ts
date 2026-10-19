@@ -72,6 +72,10 @@ const envSchema = z
     LANGFUSE_HOST: z.preprocess(blankAsUnset, z.string().url().regex(/^https?:\/\//i, "must be an http(s) URL").optional()),
     LANGFUSE_PUBLIC_KEY: z.preprocess(blankAsUnset, z.string().min(1).optional()),
     LANGFUSE_SECRET_KEY: z.preprocess(blankAsUnset, z.string().min(1).optional()),
+    // Phase 13c: the LaTeX compiler sidecar (services/latex-compiler). Unset → tailored PDF export answers 503.
+    LATEX_COMPILER_URL: z.preprocess(blankAsUnset, z.string().url().regex(/^https?:\/\//i, "must be an http(s) URL").optional()),
+    LATEX_COMPILER_TOKEN: z.preprocess(blankAsUnset, z.string().min(32, "must be at least 32 characters").optional()),
+    RESUME_PAPER_SIZE: z.preprocess(blankAsUnset, z.enum(["a4", "letter"]).default("a4")),
     // Phase 11b (design §3, §5.2). Minimum level the structured logger writes, and how long a worker may go without
     // a heartbeat (they beat every 30 s) before /status calls it "stale".
     LOG_LEVEL: z.preprocess(blankAsUnset, z.enum(["debug", "info", "warn", "error"]).default("info")),

@@ -354,4 +354,14 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...validSource, SKILL_GAP_TOP_N: "0" })).toThrow(/SKILL_GAP_TOP_N/);
     expect(() => loadEnv({ ...validSource, SKILL_GAP_TOP_N: "201" })).toThrow(/SKILL_GAP_TOP_N/);
   });
+  it("parses the optional LaTeX compiler settings and defaults the paper size to a4", () => {
+    const env = loadEnv(validSource);
+    expect(env.LATEX_COMPILER_URL).toBeUndefined();
+    expect(env.RESUME_PAPER_SIZE).toBe("a4");
+    const set = loadEnv({ ...validSource, LATEX_COMPILER_URL: "http://127.0.0.1:8090", LATEX_COMPILER_TOKEN: "t".repeat(32), RESUME_PAPER_SIZE: "letter" });
+    expect(set).toMatchObject({ LATEX_COMPILER_URL: "http://127.0.0.1:8090", LATEX_COMPILER_TOKEN: "t".repeat(32), RESUME_PAPER_SIZE: "letter" });
+    expect(loadEnv({ ...validSource, LATEX_COMPILER_URL: "", RESUME_PAPER_SIZE: "" }).RESUME_PAPER_SIZE).toBe("a4");
+    expect(() => loadEnv({ ...validSource, LATEX_COMPILER_TOKEN: "short" })).toThrow(/LATEX_COMPILER_TOKEN/);
+    expect(() => loadEnv({ ...validSource, RESUME_PAPER_SIZE: "a3" })).toThrow(/RESUME_PAPER_SIZE/);
+  });
 });
