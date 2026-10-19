@@ -98,6 +98,27 @@ describe("MatchesClient", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/last matching run failed \(no_active_goal\)/i);
   });
 
+  it.each(["matching_failed", "matching_timeout"])(
+    "shows one alert, the search panel's, when the latest search run already explains the matching failure (%s)",
+    async (errorCode) => {
+      mockFetch({
+        "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+        "GET /api/search-runs/latest": () => ({
+          body: { run: { id: "r1", status: "failed", errorCode, createdAt: "2026-09-22T00:00:00Z", startedAt: null, finishedAt: "2026-09-22T00:01:00Z", sources: [], seeding: {} } },
+        }),
+        "GET /api/matches/runs/latest": () => ({
+          body: { run: { status: "failed", errorClass: "llm_error", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 } },
+        }),
+      });
+      render(<MatchesClient />);
+      expect(await screen.findByText(/Jobs were fetched, but ranking/)).toBeInTheDocument();
+      // Let the matching-run check settle too, then expect exactly one alert.
+      await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(screen.queryByText(/last matching run failed/i)).not.toBeInTheDocument();
+    },
+  );
+
   it("toggles to show ineligible matches with their reason", async () => {
     const ineligible = matchItem({ eligible: false, ineligibleReason: "You dismissed this job.", overallScore: null, factors: null, explanation: null });
     mockFetch({

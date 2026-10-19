@@ -7,6 +7,8 @@ import { modelUnavailableReason } from "../../lib/insights/formatPersonal";
 import {
   readRankPreference, serverRankPreference, subscribeRankPreference, writeRankPreference,
 } from "../../lib/insights/rankPreference";
+import type { SearchRunView } from "../../lib/searchRuns/searchRuns";
+import { explainsMatchingFailure } from "../../lib/searchRuns/format";
 import { FindJobsPanel } from "./FindJobsPanel";
 import { MatchRow } from "./MatchRow";
 
@@ -34,6 +36,9 @@ export function MatchesClient() {
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runFailure, setRunFailure] = useState<string | null>(null);
+  // Phase 13a: when the latest search run failed at matching, the panel already says so; one alert is enough.
+  const [searchRunExplains, setSearchRunExplains] = useState(false);
+  const onRunLoaded = useCallback((run: SearchRunView | null) => setSearchRunExplains(explainsMatchingFailure(run)), []);
   // Phase 10b: per-browser preference; false on the server, the stored choice after hydration.
   const rankWithHistory = useSyncExternalStore(subscribeRankPreference, readRankPreference, serverRankPreference);
 
@@ -120,7 +125,7 @@ export function MatchesClient() {
 
   return (
     <div className="flex flex-col gap-4">
-      <FindJobsPanel onResultsChanged={() => { void load(); void checkRunStatus(); }} />
+      <FindJobsPanel onResultsChanged={() => { void load(); void checkRunStatus(); }} onRunLoaded={onRunLoaded} />
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showIneligible} onChange={(e) => setShowIneligible(e.target.checked)} />
@@ -144,7 +149,7 @@ export function MatchesClient() {
       )}
 
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      {runFailure && <p role="alert" className="text-sm text-red-600">{runFailure}</p>}
+      {runFailure && !searchRunExplains && <p role="alert" className="text-sm text-red-600">{runFailure}</p>}
 
       {loadFailed && (
         <div className="flex flex-col gap-2">

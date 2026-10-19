@@ -177,20 +177,23 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
   } catch {
     return fail("queue_unavailable");
   }
+  // A matching job has retries, and each failed attempt writes its own `failed` row: any completed attempt since the
+  // request completes the run, and a failure is only final once the wait is over (a retry may still follow).
   const matchDeadline = matchRequestedAt.getTime() + deps.env.FIND_JOBS_MATCH_WAIT_SECONDS * 1000;
+  let latestMatchStatus: string | undefined;
   while (now().getTime() < matchDeadline) {
     await sleep(pollMs);
-    const [run] = await inUser((tx) =>
+    const runs = await inUser((tx) =>
       tx.select({ status: matchingRuns.status }).from(matchingRuns)
-        .where(gte(matchingRuns.startedAt, matchRequestedAt)).orderBy(desc(matchingRuns.startedAt)).limit(1));
+        .where(gte(matchingRuns.startedAt, matchRequestedAt)).orderBy(desc(matchingRuns.startedAt)));
     await update({});
-    if (run?.status === "completed") {
+    if (runs.some((r) => r.status === "completed")) {
       await update({ status: "completed", finishedAt: now() });
       return "completed";
     }
-    if (run?.status === "failed") return fail("matching_failed");
+    latestMatchStatus = runs[0]?.status;
   }
-  return fail("matching_timeout");
+  return fail(latestMatchStatus === "failed" ? "matching_failed" : "matching_timeout");
   } catch (err) {
     if (err instanceof RunNoLongerOwned) return currentStatus();
     // Unexpected (DB) error: leave the row terminal rather than for the 10-minute stall rule, then surface it.

@@ -150,12 +150,31 @@ describe("coordinateSearchRun (Phase 13a)", () => {
     expect((await runRow(second)).error_code).toBe("consent_missing");
   });
 
-  it("fails with matching_failed when the matching run fails", async () => {
+  it("keeps waiting after a failed matching attempt and fails with matching_failed only at the deadline", async () => {
     const { goalId } = await goal();
     const runId = await newRun();
-    onTick = async () => { if ((await runRow(runId)).status === "matching") await matchingRun(goalId, "failed"); };
+    const start = clock.getTime();
+    let inserted = false;
+    onTick = async () => {
+      if (!inserted && (await runRow(runId)).status === "matching") { inserted = true; await matchingRun(goalId, "failed"); }
+    };
     expect(await coordinateSearchRun(deps(), runId)).toBe("failed");
     expect((await runRow(runId)).error_code).toBe("matching_failed");
+    // The match wait (60 s) ran out: a retry of the matching job could still have followed the failed attempt.
+    expect(clock.getTime() - start).toBeGreaterThanOrEqual(ENV.FIND_JOBS_MATCH_WAIT_SECONDS * 1000);
+  });
+
+  it("completes when a retried matching attempt succeeds after a failed one", async () => {
+    const { goalId } = await goal();
+    const runId = await newRun();
+    let tick = 0;
+    onTick = async () => {
+      tick++;
+      if (tick === 1) await matchingRun(goalId, "failed");
+      if (tick === 4) await matchingRun(goalId, "completed");
+    };
+    expect(await coordinateSearchRun(deps(), runId)).toBe("completed");
+    expect(await runRow(runId)).toMatchObject({ status: "completed", error_code: null });
   });
 
   it("observes a source already ingesting when the run started", async () => {

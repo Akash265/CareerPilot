@@ -23,6 +23,9 @@ describe("search run text (Phase 13a)", () => {
   it("explains run failures", () => {
     expect(runFailureText("stalled")).toMatch(/job-ingestion worker/);
     expect(runFailureText("matching_failed")).toMatch(/ranking/);
+    // Nothing refreshes the list after the run has ended, so the text must not promise results "will appear".
+    expect(runFailureText("matching_timeout")).toMatch(/then use Find matching jobs again/);
+    expect(runFailureText("matching_timeout")).not.toMatch(/will appear/);
     expect(runFailureText(null)).toMatch(/went wrong/);
   });
 });

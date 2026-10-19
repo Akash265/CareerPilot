@@ -57,11 +57,15 @@ export function seedingLine(seeding: SearchRunSeeding): string {
 const FAILURES: Record<string, string> = {
   stalled: "The search stopped responding. Make sure the job-ingestion worker is running (pnpm --filter @ai-career/job-ingestion start), then try again.",
   matching_failed: "Jobs were fetched, but ranking them failed. Try again, or check the matching worker.",
-  matching_timeout: "Jobs were fetched, but ranking took too long. Make sure the matching worker is running; results will appear when it finishes.",
+  matching_timeout: "Jobs were fetched, but ranking took too long. Make sure the matching worker is running, then use Find matching jobs again.",
   queue_unavailable: "The job queue is unavailable. Is Redis running?",
   no_active_goal: "Confirm a career goal first.",
   consent_missing: "Permission for discovery was withdrawn.",
 };
 
-export const runFailureText = (code: string | null): string =>
+/** A failed search run with one of these codes already explains a failed matching run (MatchesClient's own alert). */
+export const explainsMatchingFailure = (run: { status: string; errorCode: string | null } | null): boolean =>
+  run?.status === "failed" && (run.errorCode === "matching_failed" || run.errorCode === "matching_timeout");
+
+export const runFailureText =(code: string | null): string =>
   (code && FAILURES[code]) ?? "Something went wrong with this search. Try again.";

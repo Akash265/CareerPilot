@@ -16,7 +16,11 @@ const STAGE: Record<string, string> = { queued: "Searching — starting…", run
  * Phase 13a: "Find matching jobs" -- one click refreshes sources, discovers companies, and ranks. Shows a one-time
  * consent step, per-source progress, and plain-language failures. Calls `onResultsChanged` when a run finishes.
  */
-export function FindJobsPanel({ onResultsChanged }: { onResultsChanged: () => void }) {
+export function FindJobsPanel({ onResultsChanged, onRunLoaded }: {
+  onResultsChanged: () => void;
+  /** Called with each loaded run (or null), so the page can avoid repeating a failure the panel already shows. */
+  onRunLoaded?: (run: SearchRunView | null) => void;
+}) {
   const [run, setRun] = useState<SearchRunView | null>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -28,7 +32,8 @@ export function FindJobsPanel({ onResultsChanged }: { onResultsChanged: () => vo
   const lastStatus = useRef<string | null>(null);
   // Held in a ref so an inline callback from the parent does not change `refresh` (and re-run the effects) every render.
   const onChanged = useRef(onResultsChanged);
-  useEffect(() => { onChanged.current = onResultsChanged; });
+  const onLoaded = useRef(onRunLoaded);
+  useEffect(() => { onChanged.current = onResultsChanged; onLoaded.current = onRunLoaded; });
 
   // Promise chaining (not async/await) so the mount effect below never sets state synchronously.
   const refresh = useCallback(
@@ -41,6 +46,7 @@ export function FindJobsPanel({ onResultsChanged }: { onResultsChanged: () => vo
           lastStatus.current = body.run?.status ?? null;
           setNow(Date.now());
           setRun(body.run);
+          onLoaded.current?.(body.run);
           if (previous && ACTIVE.has(previous) && body.run && !ACTIVE.has(body.run.status)) onChanged.current();
         })
         .catch(() => {
@@ -83,6 +89,7 @@ export function FindJobsPanel({ onResultsChanged }: { onResultsChanged: () => vo
       if (!res.ok) { setError(body.error ?? "Something went wrong."); return; }
       lastStatus.current = body.run.status;
       setRun(body.run);
+      onLoaded.current?.(body.run);
     } catch {
       setError("Could not reach the server — check your connection and try again.");
     } finally {
