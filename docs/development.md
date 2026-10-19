@@ -45,6 +45,34 @@ pnpm build && pnpm e2e
 
 `e2e/run.mjs` starts a fake Anthropic + Voyage server (which also serves the job-provider APIs discovery is tested against), the built web app (port 3100) with an access token and low rate limits, a second instance with an unreachable database (port 3101), and the ingestion and matching workers, then runs `e2e/smoke.mjs` in headless Chrome: the request gate, unlock, profile → goal → job upload → matching → application, the main pages, rate limits and the message-free 500. It uses `career_intel_test` (it refuses any database not ending in `_test`), Redis database 1, and its own user id, whose rows it wipes first; no paid API is ever called. Set `CHROME_PATH` if Chrome is not at the macOS default; CI installs Playwright's Chromium. Logs and a failure screenshot land in `e2e/.out/`.
 
+## Tailored LaTeX resume (Phase 13c)
+
+The "Tailored resume (LaTeX)" PDF export compiles in a sandboxed Docker service; the `.tex` download works without it (it is then fitted by estimate only and marked "page count not verified").
+
+```bash
+# Once: a token for the app and the service (32+ characters). .env may lack a trailing newline, hence printf.
+grep -q '^LATEX_COMPILER_TOKEN=' .env || printf '\nLATEX_COMPILER_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
+# Also in .env: LATEX_COMPILER_URL=http://127.0.0.1:8090   (and optionally RESUME_PAPER_SIZE=a4|letter, default a4)
+
+# From the repo root (builds the image on first use, about 1.2 GB):
+docker compose -f infra/docker-compose.yml --env-file .env --profile latex up -d latex-compiler
+curl -s http://127.0.0.1:8090/health      # {"ok":true,"texVersion":"..."}
+```
+
+Restart the web app after changing `.env`. If either `LATEX_COMPILER_URL` or `LATEX_COMPILER_TOKEN` is unset the app treats the compiler as not running: PDF export answers 503 with the start command, and `.tex` still downloads.
+
+`pnpm test` does not need the compiler (the web route tests use a local fake). The real-compile test (`packages/document-export/src/latex.integration.test.ts`) is skipped unless `LATEX_COMPILER_URL` is set and needs a container in test mode, which adds `POST /extract` (PDF to text):
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file .env --profile latex run -d --rm --service-ports \
+  -e LATEX_COMPILER_TEST_MODE=1 --name latex-compiler-test latex-compiler
+export LATEX_COMPILER_TOKEN="$(grep '^LATEX_COMPILER_TOKEN=' .env | cut -d= -f2-)"
+LATEX_COMPILER_URL=http://127.0.0.1:8090 pnpm --filter @ai-career/document-export test:latex
+docker stop latex-compiler-test
+```
+
+CI builds the image and runs the same test against it ([D209](../DECISIONS.md)). If a page-fit estimate looks off after a template change, recalibrate `LINE_METRICS` in `estimateLines.ts` against that test.
+
 ## Running it on your network
 
 The web app listens on `127.0.0.1` only. To open it to other devices set `APP_HOST=0.0.0.0`, list the names you will use in `ALLOWED_HOSTS`, and set `APP_ACCESS_TOKEN` (32+ characters, e.g. `openssl rand -hex 32`); you then unlock once per browser at `/unlock`. Without TLS the cookie travels in clear text, so do this only on a network you trust. Behind a reverse proxy, keep the original `Host` header (e.g. nginx `proxy_set_header Host $host`) so the cross-site check compares the right names ([D177](../DECISIONS.md)).

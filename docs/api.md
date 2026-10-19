@@ -54,9 +54,9 @@ package it calls); the exact schema is the reference, this page is the map.
 | POST | `/api/cover-letters/[jobId]/edit` | | Save the user's edit of a cover-letter version (same paragraph count). |
 | GET | `/api/interview-preps/[jobId]` | | Interview preparations for a job. |
 | POST | `/api/interview-preps/[jobId]/run` | ai | Generate interview preparation. |
-| POST | `/api/documents` | | `{ kind, jobId, sourceId, format }` → render and store a PDF/DOCX. |
+| POST | `/api/documents` | | `{ kind, jobId, sourceId, format }` → render and store a PDF/DOCX. Phase 13c adds `kind: "tailored_resume"` (`sourceId` is the resume optimization; `format` `pdf` or `tex`; `docx` is `400`) and `format: "tex"`, valid only for that kind (else `400`). `201 { document, omittedItems? }`: for a tailored resume `document.details` is `{ pageCount, pageVerified, includedCount, totalCount, omitted: [{ sourceType, sourceFactId, reason: "no_requirement_match" \| "page_limit" }] }` (ids only) and `omittedItems` is `[{ sourceType, text, reason }]` for the "Left out" list. Tailored-resume errors: `422` unsupported character (message names where), `503` LaTeX compiler not running (message carries the start command; PDF only, `.tex` falls back to an estimate-only fit) or busy, `504` compiler timeout, `502` the resume could not be typeset. A `pageCount` of 2 means it could not be fitted to one page. |
 | GET | `/api/documents` | | `?jobId=` → generated documents for a job. |
-| GET, HEAD | `/api/documents/[id]/download` | | Stream a stored document. |
+| GET, HEAD | `/api/documents/[id]/download` | | Stream a stored document (`.tex` as `application/x-tex`). |
 | GET | `/api/applications` | | `?status&due=1` → tracked applications. |
 | POST | `/api/applications` | | `{ jobId }` or `{ external: { companyName, jobTitle, jobUrl? } }`, optional document links, `appliedAt`, `followUpAt`, `notes`. |
 | GET | `/api/applications/for-job/[jobId]` | | The application for a job, if any. |

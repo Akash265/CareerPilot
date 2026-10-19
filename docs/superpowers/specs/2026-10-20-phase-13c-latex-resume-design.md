@@ -1,6 +1,6 @@
 # Phase 13c — Job-Specific LaTeX Resume — Design
 
-Status: design approved by user in brainstorming (2026-10-20); not yet implemented.
+Status: implemented on branch phase-13c-latex-resume (not yet merged).
 Part of Phase 13 (user's 2026-10-19 refinement request), split by user choice into
 13a one-click discovery (merged) → 13b missing-skill verification (merged) → 13c job-specific LaTeX resume
 (this spec).
