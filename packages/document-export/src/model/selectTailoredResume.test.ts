@@ -50,6 +50,8 @@ const paragraphAfter = (model: DocumentModel, heading: string): string | undefin
 };
 const headings = (model: DocumentModel) => model.blocks.filter((b) => b.type === "heading").map((b) => (b as { text: string }).text);
 
+const EDU = 17; // filler entries: the full resume is a few lines over budget; the floor alone fits
+
 describe("selectTailoredResume", () => {
   it("keeps everything that fits, orders selected first (optimizer text), then by requirement score", () => {
     const sel = selectTailoredResume(profileWith(), [applied("b2", "Led daily standups for 6 engineers")], reqs, { paperSize: "a4" });
@@ -117,5 +119,25 @@ describe("selectTailoredResume", () => {
     expect(bulletsOf(sel.model, "Engineer")).toEqual(["Built Kafka pipelines"]);
     expect(sel.exhausted).toBe(true);
     expect(sel.totalCount).toBe(1);
+  });
+
+  it("refills smaller lower-ranked items once the last (large) removal frees more room than needed", () => {
+    // Floor: P1, P2. Removal queue (worst first): the three small Kafka bullets, then the large Kafka+SQL bullet.
+    const big = `Kafka SQL ${"x".repeat(1000)}`;
+    const bullets = [
+      { id: "P1", text: "Kafka SQL Python lead" }, { id: "P2", text: "Kafka SQL Python ops" },
+      { id: "BIG", text: big },
+      { id: "S1", text: "Kafka one" }, { id: "S2", text: "Kafka two" }, { id: "S3", text: "Kafka three" },
+    ];
+    const education = Array.from({ length: EDU }, (_, i) => ({ id: `ed${i}`, institution: "TU", degree: `BSc ${i}`, fieldOfStudy: null, startDate: null, endDate: null, gpa: null }));
+    const p = profileWith({
+      experiences: [{ ...profileWith().experiences[0], bullets }], projects: [], achievements: [], certifications: [],
+      education, skills: [], verifiedSkills: [],
+    });
+    const sel = selectTailoredResume(p, [], reqs, { paperSize: "a4" });
+    expect(sel.omitted).toEqual([{ sourceType: "work_experience_bullet", sourceFactId: "BIG", reason: "page_limit" }]);
+    expect(bulletsOf(sel.model, "Engineer")).toEqual(["Kafka SQL Python lead", "Kafka SQL Python ops", "Kafka one", "Kafka two", "Kafka three"]);
+    expect(sel.includedCount).toBe(5);
+    expect(sel.exhausted).toBe(false);
   });
 });

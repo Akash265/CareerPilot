@@ -187,13 +187,27 @@ export function selectTailoredResume(
     removed.add(removalQueue[next++].key);
     model = build(removed);
   }
-  for (let n = 0; n < (opts.extraRemovals ?? 0) && next < removalQueue.length; n++) {
-    removed.add(removalQueue[next++].key);
+  // One greedy refill pass (best-ranked first): the last removal may have been large enough that smaller,
+  // lower-ranked items removed earlier fit again.
+  if (removed.size > 0) {
+    for (const item of ranked.filter((i) => removed.has(i.key))) {
+      removed.delete(item.key);
+      const candidate = build(removed);
+      if (estimateLines(candidate, opts.paperSize) <= budget) model = candidate;
+      else removed.add(item.key);
+    }
+  }
+  // Extra removals take the worst-ranked removable items still included (queue order); floor items are not in the queue.
+  const nextIncluded = () => removalQueue.find((i) => !removed.has(i.key));
+  for (let n = 0; n < (opts.extraRemovals ?? 0); n++) {
+    const item = nextIncluded();
+    if (!item) break;
+    removed.add(item.key);
     model = build(removed);
   }
 
   const omitted: OmittedItem[] = items
     .filter((i) => removed.has(i.key))
     .map((i) => ({ sourceType: i.sourceType, sourceFactId: i.id, reason: isIrrelevant(i) ? "no_requirement_match" : "page_limit" }));
-  return { model, includedCount: items.length - removed.size, totalCount: items.length, omitted, exhausted: next >= removalQueue.length };
+  return { model, includedCount: items.length - removed.size, totalCount: items.length, omitted, exhausted: nextIncluded() === undefined };
 }
