@@ -61,6 +61,8 @@ export async function startRun(tx: DbClient, now: Date): Promise<StartResult> {
   return { kind: "created", run: toView(created) };
 }
 
+/** Fails a run only while still `queued`: a late enqueue timeout must not overwrite a run the coordinator claimed. */
 export async function failQueued(tx: DbClient, runId: string, errorCode: string, now: Date): Promise<void> {
-  await tx.update(searchRuns).set({ status: "failed", errorCode, finishedAt: now }).where(eq(searchRuns.id, runId));
+  await tx.update(searchRuns).set({ status: "failed", errorCode, finishedAt: now })
+    .where(and(eq(searchRuns.id, runId), eq(searchRuns.status, "queued")));
 }

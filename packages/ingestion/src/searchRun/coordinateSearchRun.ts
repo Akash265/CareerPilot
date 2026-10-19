@@ -30,6 +30,12 @@ export interface CoordinatorDeps {
 
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+/** The coordinator only writes a run it still owns: one that is `running` or `matching`. */
+const OWNED: SearchRunStatus[] = ["running", "matching"];
+
+/** Thrown when a guarded write finds the run no longer owned (stalled, failed by the web side, or finished). */
+class RunNoLongerOwned extends Error {}
+
 /**
  * Phase 13a: drives one "Find matching jobs" run (spec §3.3). Sources and seeding never fail the run; each failure
  * is recorded as a fixed code. Matching is requested once the sources settle or the deadline passes.
@@ -39,8 +45,19 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
   const sleep = deps.sleep ?? defaultSleep;
   const pollMs = deps.pollMs ?? 2000;
   const inUser = <T>(fn: (tx: DbClient) => Promise<T>) => withUserContext(deps.db, deps.userId, fn);
-  const update = (set: Partial<typeof searchRuns.$inferInsert>) =>
-    inUser((tx) => tx.update(searchRuns).set({ heartbeatAt: now(), ...set }).where(eq(searchRuns.id, runId)));
+  /** Writes the run only while it is still owned; returns the number of rows updated (0 or 1). */
+  const guardedUpdate = async (set: Partial<typeof searchRuns.$inferInsert>): Promise<number> =>
+    (await inUser((tx) => tx.update(searchRuns).set({ heartbeatAt: now(), ...set })
+      .where(and(eq(searchRuns.id, runId), inArray(searchRuns.status, OWNED))).returning({ id: searchRuns.id }))).length;
+  // A write that finds the run no longer owned (e.g. the web side marked it `stalled`) stops the run: nothing more
+  // is written and matching is not requested.
+  const update = async (set: Partial<typeof searchRuns.$inferInsert>): Promise<void> => {
+    if ((await guardedUpdate(set)) === 0) throw new RunNoLongerOwned();
+  };
+  const currentStatus = async (): Promise<SearchRunStatus> => {
+    const [row] = await inUser((tx) => tx.select({ status: searchRuns.status }).from(searchRuns).where(eq(searchRuns.id, runId)));
+    return row?.status ?? "failed";
+  };
   const fail = async (errorCode: string): Promise<SearchRunStatus> => {
     await update({ status: "failed", errorCode, finishedAt: now() });
     return "failed";
@@ -51,10 +68,7 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
   const claimed = await inUser((tx) =>
     tx.update(searchRuns).set({ status: "running", startedAt, heartbeatAt: startedAt })
       .where(and(eq(searchRuns.id, runId), eq(searchRuns.status, "queued"))).returning({ id: searchRuns.id }));
-  if (claimed.length === 0) {
-    const [row] = await inUser((tx) => tx.select({ status: searchRuns.status }).from(searchRuns).where(eq(searchRuns.id, runId)));
-    return row?.status ?? "failed";
-  }
+  if (claimed.length === 0) return currentStatus();
   try {
   const context = await inUser(async (tx) => {
     const [settings] = await tx.select().from(discoverySettings).limit(1);
@@ -178,8 +192,10 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
   }
   return fail("matching_timeout");
   } catch (err) {
+    if (err instanceof RunNoLongerOwned) return currentStatus();
     // Unexpected (DB) error: leave the row terminal rather than for the 10-minute stall rule, then surface it.
-    try { await update({ status: "failed", errorCode: "coordinator_error", finishedAt: now() }); } catch { /* best effort */ }
+    // Guarded too: a run that is already terminal keeps its status and code.
+    try { await guardedUpdate({ status: "failed", errorCode: "coordinator_error", finishedAt: now() }); } catch { /* best effort */ }
     throw err;
   }
 }

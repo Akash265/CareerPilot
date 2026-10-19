@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import Anthropic from "@anthropic-ai/sdk";
 import { AiBudgetExceededError, type MessagesClient } from "@ai-career/ai";
-import { searchWebForBoards } from "./webSearchBoards";
+import { searchWebForBoards, WEB_SEARCH_TIMEOUT_MS } from "./webSearchBoards";
 
 const ENV = { ANTHROPIC_MODEL_RESEARCH: "claude-research", DISCOVERY_WEB_SEARCH_MAX_USES: 5 };
 const GOAL = { roles: ["Data Engineer"], locations: ["Berlin"], remote: true, skills: ["SQL"] };
@@ -39,6 +39,9 @@ describe("searchWebForBoards (Phase 13a)", () => {
     expect(body.tools).toEqual([{ type: "web_search_20250305", name: "web_search", max_uses: 5 }]);
     expect(body.model).toBe("claude-research");
     expect(JSON.stringify(body.messages)).toContain("Data Engineer");
+    // An explicit request timeout, so a hung call cannot outlive the 10-minute stall rule.
+    expect(create.mock.calls[0][1]).toEqual({ timeout: WEB_SEARCH_TIMEOUT_MS });
+    expect(WEB_SEARCH_TIMEOUT_MS).toBe(120_000);
   });
 
   it("follows pause_turn at most twice", async () => {

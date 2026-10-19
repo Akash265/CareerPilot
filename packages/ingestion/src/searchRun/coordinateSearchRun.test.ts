@@ -188,6 +188,68 @@ describe("coordinateSearchRun (Phase 13a)", () => {
     expect(row.error_code).toBe("coordinator_error");
   });
 
+  it("stops without overwriting when the run is marked stalled during the web search", async () => {
+    await goal();
+    const runId = await newRun();
+    onTick = async () => undefined;
+    const d = deps({
+      webSearch: vi.fn(async () => {
+        await t.adminSql`UPDATE search_runs SET status = 'failed', error_code = 'stalled', finished_at = now() WHERE id = ${runId}`;
+        return { state: "ran" as const, boards: [], unsupported: 0 };
+      }),
+    });
+    expect(await coordinateSearchRun(d, runId)).toBe("failed");
+    const row = await runRow(runId);
+    expect(row).toMatchObject({ status: "failed", error_code: "stalled" });
+    expect(row.seeding).toEqual({});
+    expect(d.requestMatching).not.toHaveBeenCalled();
+    expect(d.startValidation).not.toHaveBeenCalled();
+  });
+
+  it("stops without overwriting when the run is failed while waiting for sources", async () => {
+    await goal();
+    const slow = await insertSource(t.adminSql, USER, { kind: "lever", label: "Slow" });
+    const runId = await newRun();
+    onTick = async () => {
+      await t.adminSql`UPDATE search_runs SET status = 'failed', error_code = 'stalled', finished_at = now() WHERE id = ${runId}`;
+    };
+    const d = deps();
+    expect(await coordinateSearchRun(d, runId)).toBe("failed");
+    expect(d.enqueueSource).toHaveBeenCalledWith(slow);
+    expect(await runRow(runId)).toMatchObject({ status: "failed", error_code: "stalled" });
+    expect(d.requestMatching).not.toHaveBeenCalled();
+  });
+
+  it("stops without overwriting when the run is failed while waiting for matching", async () => {
+    const { goalId } = await goal();
+    const runId = await newRun();
+    let ticks = 0;
+    onTick = async () => {
+      ticks++;
+      if (ticks === 1) await t.adminSql`UPDATE search_runs SET status = 'failed', error_code = 'stalled', finished_at = now() WHERE id = ${runId}`;
+      if (ticks === 2) await matchingRun(goalId, "completed");
+    };
+    const d = deps();
+    expect(await coordinateSearchRun(d, runId)).toBe("failed");
+    expect(await runRow(runId)).toMatchObject({ status: "failed", error_code: "stalled" });
+    expect(ticks).toBe(1);
+  });
+
+  it("does not overwrite a terminal run with coordinator_error", async () => {
+    await goal();
+    await insertSource(t.adminSql, USER, { kind: "lever", label: "Slow" });
+    const runId = await newRun();
+    const d = deps({
+      // The stall rule fires, then an unexpected error escapes the wait loop.
+      sleep: async () => {
+        await t.adminSql`UPDATE search_runs SET status = 'failed', error_code = 'stalled', finished_at = now() WHERE id = ${runId}`;
+        throw new Error("boom");
+      },
+    });
+    await expect(coordinateSearchRun(d, runId)).rejects.toThrow("boom");
+    expect(await runRow(runId)).toMatchObject({ status: "failed", error_code: "stalled" });
+  });
+
   it("ignores a run that is not queued (already handled or stalled)", async () => {
     await goal();
     const runId = (await t.adminSql`INSERT INTO search_runs (user_id, status) VALUES (${USER}, 'failed') RETURNING id`)[0].id as string;

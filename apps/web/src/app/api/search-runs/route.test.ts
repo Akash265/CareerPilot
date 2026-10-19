@@ -78,6 +78,20 @@ describe("POST /api/search-runs (Phase 13a)", () => {
     const rows = await admin`SELECT status, error_code FROM search_runs WHERE user_id = ${USER}`;
     expect(rows).toEqual([{ status: "failed", error_code: "queue_unavailable" }]);
   });
+
+  it("leaves a run the coordinator already claimed alone when the enqueue call times out late", async () => {
+    await consent();
+    await insertCareerGoal(admin, USER);
+    vi.mocked(enqueueSearchRun).mockImplementation(async (_env, runId) => {
+      // queue.add succeeded and the coordinator claimed the run before the 5 s timeout fired.
+      await admin`UPDATE search_runs SET status = 'running', started_at = now(), heartbeat_at = now() WHERE id = ${runId}`;
+      throw new Error("timeout");
+    });
+    const res = await POST();
+    expect(res.status).toBe(503);
+    const rows = await admin`SELECT status, error_code FROM search_runs WHERE user_id = ${USER}`;
+    expect(rows).toEqual([{ status: "running", error_code: null }]);
+  });
 });
 
 describe("GET /api/search-runs/latest", () => {

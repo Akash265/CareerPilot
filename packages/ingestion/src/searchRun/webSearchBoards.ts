@@ -5,6 +5,8 @@ import { extractBoardLinks } from "../discovery/boardLinks";
 import type { PendingBoard } from "../discovery/discover";
 
 export const MAX_PAUSE_CONTINUATIONS = 2;
+/** Per-request timeout: the SDK default (10 minutes) equals the search run's stall rule, so a hung call could outlive it. */
+export const WEB_SEARCH_TIMEOUT_MS = 120_000;
 const MAX_ROLES = 5;
 const MAX_LOCATIONS = 5;
 const MAX_SKILLS = 10;
@@ -64,7 +66,10 @@ export async function searchWebForBoards(
   const collected: Anthropic.ContentBlock[] = [];
   try {
     for (let turn = 0; turn <= MAX_PAUSE_CONTINUATIONS; turn++) {
-      const message = await client.messages.create({ model: env.ANTHROPIC_MODEL_RESEARCH, max_tokens: 4000, system, tools, messages });
+      const message = await client.messages.create(
+        { model: env.ANTHROPIC_MODEL_RESEARCH, max_tokens: 4000, system, tools, messages },
+        { timeout: WEB_SEARCH_TIMEOUT_MS },
+      );
       collected.push(...message.content);
       if (message.stop_reason !== "pause_turn") break;
       messages.push({ role: "assistant", content: message.content as unknown as Anthropic.ContentBlockParam[] });
