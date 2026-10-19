@@ -10,7 +10,7 @@ import {
 } from "@ai-career/ingestion";
 import { createAnthropicFor, withLangfuseExport } from "@ai-career/ai";
 import { MATCHING_QUEUE_NAME, pushMatching, rematchFlagKey, requestRematch, type MatchingJobData } from "@ai-career/matching";
-import { afterRunRematch } from "./rematch";
+import { afterRunRematch, requestRematchSafely } from "./rematch";
 import { createSearchRunWorker } from "./searchRunWorker";
 import { reconcileSchedules } from "./reconcile";
 import { createIngestWorker } from "./worker";
@@ -58,8 +58,9 @@ async function main(): Promise<void> {
   };
   const afterRun = async ({ sourceId, since, errorClass }: { sourceId: string; since: Date; errorClass: string | null }) => {
     // Phase 13a: changes outside a search run's collection phase are re-matched, debounced.
-    if (errorClass === null && (await afterRunRematch(db, env.DEFAULT_USER_ID, sourceId, since))) {
-      log.info("rematch_requested", { sourceId, result: await rematch() });
+    // Guarded: a failure here must never skip board discovery below.
+    if (errorClass === null) {
+      await requestRematchSafely(() => afterRunRematch(db, env.DEFAULT_USER_ID, sourceId, since), rematch, log, sourceId);
     }
     if (errorClass === null) {
       const found = await recordBoardsFromRun(db, { userId: env.DEFAULT_USER_ID, sourceId, since });

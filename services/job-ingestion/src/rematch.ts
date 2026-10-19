@@ -25,3 +25,25 @@ export async function afterRunRematch(db: DbClient, userId: string, sourceId: st
     return shouldRematch({ counts: run ?? null, activeSearchRun: active.length > 0 });
   });
 }
+
+type RematchLog = {
+  info: (message: string, fields: Record<string, unknown>) => void;
+  error: (message: string, fields: Record<string, unknown>) => void;
+};
+
+/**
+ * Phase 13a (R8): the re-match runs before board discovery in `afterRun`, so a DB or Redis failure here is logged
+ * and swallowed -- it may never skip recordBoardsFromRun / validateBoards for the same run.
+ */
+export async function requestRematchSafely(
+  check: () => Promise<boolean>,
+  rematch: () => Promise<string>,
+  log: RematchLog,
+  sourceId: string,
+): Promise<void> {
+  try {
+    if (await check()) log.info("rematch_requested", { sourceId, result: await rematch() });
+  } catch (error) {
+    log.error("rematch_failed", { sourceId, error });
+  }
+}
