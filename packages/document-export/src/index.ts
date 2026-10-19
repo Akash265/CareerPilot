@@ -18,3 +18,13 @@ export { exportResume, type ExportResumeInput } from "./pipeline/exportResume";
 export { exportPitch, type ExportPitchInput } from "./pipeline/exportPitch";
 export { exportCoverLetter, type ExportCoverLetterInput } from "./pipeline/exportCoverLetter";
 export { exportInterviewPrep, type ExportInterviewPrepInput } from "./pipeline/exportInterviewPrep";
+export { escapeTex, findUnsupportedCharacter } from "./render/tex/escapeTex";
+export { renderTex } from "./render/tex/renderTex";
+export { estimateLines, lineBudget, LINE_METRICS } from "./model/estimateLines";
+export { selectTailoredResume, type TailoredSelection } from "./model/selectTailoredResume";
+export { createHttpTexCompiler, type TexCompiler, type CompiledPdf } from "./render/compileTex";
+export { fitToPage, MAX_EXTRA_TRIMS } from "./pipeline/fitToPage";
+export {
+  exportTailoredResume, type ExportTailoredResumeInput, type OmittedItemView, type TailoredExportResult,
+} from "./pipeline/exportTailoredResume";
+export { tailoredContentHash } from "./model/hash";

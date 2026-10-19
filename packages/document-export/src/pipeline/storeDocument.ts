@@ -2,7 +2,9 @@ import { and, eq } from "drizzle-orm";
 import type { Client } from "minio";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { deleteGeneratedDocument, uploadGeneratedDocument } from "@ai-career/storage";
-import { RENDERER_VERSION, type DocumentFormat, type DocumentKind, type DocumentModel } from "../model/types";
+import {
+  RENDERER_VERSION, type DocumentFormat, type DocumentKind, type DocumentModel, type StoredDocumentFormat, type TailoredResumeDetails,
+} from "../model/types";
 import { modelContentHash } from "../model/hash";
 import { assertSafeModel } from "../model/assertSafeModel";
 import { normalizeModel } from "../model/normalizeModel";
@@ -17,13 +19,16 @@ export interface StoreDocumentInput {
   userId: string;
   jobId: string;
   kind: DocumentKind;
-  format: DocumentFormat;
+  format: StoredDocumentFormat;
   model: DocumentModel;
   resumeOptimizationId: string | null;
   applicationPitchId: string | null;
   coverLetterId?: string | null;
   interviewPreparationId?: string | null;
   downloadFilename: string;
+  /** Phase 13c: a file rendered elsewhere (the LaTeX path) with its own content hash; required for format "tex". */
+  prerendered?: { buffer: Buffer; contentHash: string; rendererVersion: string };
+  details?: TailoredResumeDetails | null;
 }
 
 /**
@@ -41,7 +46,8 @@ export async function storeDocument(db: DbClient, storage: Client, rawInput: Sto
   const input: StoreDocumentInput = { ...rawInput, model: normalizeModel(rawInput.model) };
   const inUserContext = <T>(fn: (tx: DbClient) => Promise<T>) => withUserContext(db, input.userId, fn);
   assertSafeModel(input.model);
-  const contentHash = modelContentHash(input.model, input.format);
+  if (input.format === "tex" && !input.prerendered) throw new Error("a tex document must be prerendered");
+  const contentHash = input.prerendered?.contentHash ?? modelContentHash(input.model, input.format as DocumentFormat);
   const findExisting = () =>
     inUserContext((tx) =>
       tx
@@ -61,7 +67,7 @@ export async function storeDocument(db: DbClient, storage: Client, rawInput: Sto
   const [existing] = await findExisting();
   if (existing) return existing;
 
-  const buffer = await renderDocument(input.model, input.format);
+  const buffer = input.prerendered?.buffer ?? (await renderDocument(input.model, input.format as DocumentFormat));
   let objectKey: string;
   try {
     ({ objectKey } = await uploadGeneratedDocument(storage, { userId: input.userId, buffer, extension: input.format }));
@@ -85,7 +91,8 @@ export async function storeDocument(db: DbClient, storage: Client, rawInput: Sto
           objectKey,
           byteSize: buffer.length,
           contentHash,
-          rendererVersion: RENDERER_VERSION,
+          rendererVersion: input.prerendered?.rendererVersion ?? RENDERER_VERSION,
+          details: input.details ?? null,
           downloadFilename: input.downloadFilename,
         })
         .onConflictDoNothing({
