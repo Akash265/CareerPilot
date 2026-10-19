@@ -47,4 +47,20 @@ describe("createHttpTexCompiler", () => {
     });
     expect((await errorClassOf(slow.compile("x")))[0]).toBe("compiler_timeout");
   });
+
+  const bodyFailingWith = (err: unknown) => {
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.error(err); } });
+    return response(200, body, { "X-Page-Count": "1", "X-Tex-Version": "pdfTeX 3.14" });
+  };
+
+  it("maps a connection drop while reading the 200 body to compiler_unavailable", async () => {
+    const c = compilerWith((async () => bodyFailingWith(new TypeError("terminated"))) as unknown as typeof fetch);
+    expect(await errorClassOf(c.compile("x"))).toEqual(["compiler_unavailable", undefined]);
+  });
+
+  it("maps a timeout while reading the 200 body to compiler_timeout", async () => {
+    const timeout = Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+    const c = compilerWith((async () => bodyFailingWith(timeout)) as unknown as typeof fetch);
+    expect(await errorClassOf(c.compile("x"))).toEqual(["compiler_timeout", undefined]);
+  });
 });

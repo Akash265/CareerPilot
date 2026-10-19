@@ -7,6 +7,13 @@ export interface HttpTexCompilerOptions { url: string; token: string; timeoutMs?
 /** Above the service's own 20 s kill, so a slow compile normally ends as the service's 504, not a client abort. */
 export const TEX_COMPILE_CLIENT_TIMEOUT_MS = 30_000;
 
+/** Maps a transport failure (fetch rejection or body-stream error) to the export error class. Name-based: abort/timeout errors are not always `instanceof Error`. */
+function transportError(cause: unknown): DocumentExportError {
+  const name = (cause as { name?: unknown } | null)?.name;
+  const timedOut = name === "TimeoutError" || name === "AbortError";
+  return new DocumentExportError(timedOut ? "compiler_timeout" : "compiler_unavailable", { cause });
+}
+
 /** Client for services/latex-compiler (Phase 13c spec §5). Errors carry no compiler log text, only a line number. */
 export function createHttpTexCompiler(opts: HttpTexCompilerOptions): TexCompiler {
   const doFetch = opts.fetchImpl ?? fetch;
@@ -22,14 +29,19 @@ export function createHttpTexCompiler(opts: HttpTexCompilerOptions): TexCompiler
           signal: AbortSignal.timeout(opts.timeoutMs ?? TEX_COMPILE_CLIENT_TIMEOUT_MS),
         });
       } catch (cause) {
-        const timedOut = cause instanceof Error && (cause.name === "TimeoutError" || cause.name === "AbortError");
-        throw new DocumentExportError(timedOut ? "compiler_timeout" : "compiler_unavailable", { cause });
+        throw transportError(cause);
       }
       if (res.status === 200) {
         const pageCount = Number(res.headers.get("x-page-count"));
         const texVersion = res.headers.get("x-tex-version") ?? "";
         if (!Number.isInteger(pageCount) || pageCount < 1 || texVersion === "") throw new DocumentExportError("compiler_unavailable");
-        return { pdf: Buffer.from(await res.arrayBuffer()), pageCount, texVersion };
+        let pdf: Buffer;
+        try {
+          pdf = Buffer.from(await res.arrayBuffer());
+        } catch (cause) {
+          throw transportError(cause);
+        }
+        return { pdf, pageCount, texVersion };
       }
       const body = (await res.json().catch(() => null)) as { line?: unknown } | null;
       switch (res.status) {
