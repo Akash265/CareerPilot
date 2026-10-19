@@ -7,10 +7,9 @@ import { modelUnavailableReason } from "../../lib/insights/formatPersonal";
 import {
   readRankPreference, serverRankPreference, subscribeRankPreference, writeRankPreference,
 } from "../../lib/insights/rankPreference";
+import { FindJobsPanel } from "./FindJobsPanel";
 import { MatchRow } from "./MatchRow";
 
-const POLL_INTERVAL_MS = 3000;
-const POLL_DURATION_MS = 60_000;
 const RANK_REASON_ID = "rank-with-history-reason";
 
 interface Result {
@@ -33,10 +32,8 @@ export function MatchesClient() {
   const [result, setResult] = useState<Result | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runFailure, setRunFailure] = useState<string | null>(null);
-  const [pollUntil, setPollUntil] = useState(0);
   // Phase 10b: per-browser preference; false on the server, the stored choice after hydration.
   const rankWithHistory = useSyncExternalStore(subscribeRankPreference, readRankPreference, serverRankPreference);
 
@@ -80,8 +77,7 @@ export function MatchesClient() {
           const run = body?.run;
           if (!run) return;
           if (run.status === "failed") {
-            setRunFailure(`The last matching run failed${run.errorClass ? ` (${run.errorClass})` : ""}. Try Find Matches again, or check the worker logs.`);
-            setPollUntil(0);
+            setRunFailure(`The last matching run failed${run.errorClass ? ` (${run.errorClass})` : ""}. Try Find matching jobs again, or check the matching worker.`);
           } else {
             setRunFailure(null);
           }
@@ -94,36 +90,6 @@ export function MatchesClient() {
     void load();
     void checkRunStatus();
   }, [load, checkRunStatus]);
-
-  useEffect(() => {
-    if (pollUntil <= Date.now()) return;
-    const timer = setInterval(() => {
-      if (Date.now() > pollUntil) clearInterval(timer);
-      else {
-        void load();
-        void checkRunStatus();
-      }
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [pollUntil, load, checkRunStatus]);
-
-  async function findMatches() {
-    setError(null);
-    setNotice(null);
-    setRunFailure(null);
-    try {
-      const res = await fetch("/api/matches/run", { method: "POST" });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? "Something went wrong.");
-        return;
-      }
-      setNotice("Queued a matching run. Make sure the worker is running (pnpm --filter @ai-career/matching-worker start).");
-      setPollUntil(Date.now() + POLL_DURATION_MS);
-    } catch {
-      setError("Could not reach the server — check your connection and try again.");
-    }
-  }
 
   async function act(jobId: string, userAction: "saved" | "dismissed") {
     setBusyJobId(jobId);
@@ -154,10 +120,8 @@ export function MatchesClient() {
 
   return (
     <div className="flex flex-col gap-4">
+      <FindJobsPanel onResultsChanged={() => { void load(); void checkRunStatus(); }} />
       <div className="flex flex-wrap items-center gap-4">
-        <button type="button" onClick={() => void findMatches()} className="rounded bg-black px-4 py-1.5 text-sm text-white">
-          Find Matches
-        </button>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={showIneligible} onChange={(e) => setShowIneligible(e.target.checked)} />
           Show excluded jobs
@@ -179,7 +143,6 @@ export function MatchesClient() {
         <p className="text-xs text-gray-600">{`Ranked with your history (weight ${Math.round(result.model.blendWeight * 100)}%)`}</p>
       )}
 
-      {notice && <p role="status" className="text-sm text-green-700">{notice}</p>}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {runFailure && <p role="alert" className="text-sm text-red-600">{runFailure}</p>}
 
@@ -193,7 +156,7 @@ export function MatchesClient() {
       {result === null && !loadFailed && <p>Loading...</p>}
       {result !== null && result.total === 0 && (
         <p className="text-sm text-gray-600">
-          {showIneligible ? "No excluded jobs." : "No matches yet — confirm a career goal, run job ingestion, then Find Matches."}
+          {showIneligible ? "No excluded jobs." : "No matches yet — use Find matching jobs to search and rank jobs for your goal."}
         </p>
       )}
       {result !== null && result.total > 0 && (
