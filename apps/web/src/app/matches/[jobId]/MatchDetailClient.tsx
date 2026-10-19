@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ResponsePrediction } from "@ai-career/insights";
 import { ApplicationPanel } from "./ApplicationPanel";
 import { AutofillPanel } from "./AutofillPanel";
+import { SkillGapsPanel } from "./SkillGapsPanel";
 import { ResumeOptimizationPanel } from "./ResumeOptimizationPanel";
 import { PitchPanel } from "./PitchPanel";
 import { CoverLetterPanel } from "./CoverLetterPanel";
@@ -164,6 +165,7 @@ export function MatchDetailClient({ jobId }: { jobId: string }) {
 
       <ApplicationPanel jobId={jobId} />
       {showWorkspace && <AutofillPanel jobId={jobId} />}
+      {showWorkspace && <SkillGapsPanel jobId={jobId} />}
       {showWorkspace && <ResumeOptimizationPanel jobId={jobId} />}
       {showWorkspace && <PitchPanel jobId={jobId} />}
       {showWorkspace && <CoverLetterPanel jobId={jobId} />}

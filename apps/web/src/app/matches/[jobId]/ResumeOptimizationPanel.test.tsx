@@ -17,7 +17,9 @@ function mockFetchSequence(responses: { body: unknown; status?: number }[]) {
   for (const { body, status = 200 } of responses) {
     fn.mockResolvedValueOnce({ ok: status < 400, status, json: async () => body } as Response);
   }
-  vi.stubGlobal("fetch", fn);
+  // Phase 13b: the panel also GETs /api/skill-gaps/ on mount; route that away so `fn` only sees the optimization calls.
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+    url.startsWith("/api/skill-gaps/") ? Promise.resolve({ ok: false, status: 404, json: async () => ({}) } as Response) : fn(url, init));
   return fn;
 }
 
@@ -127,5 +129,16 @@ describe("ResumeOptimizationPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Optimize Resume" }));
 
     expect(await screen.findByText("This job is not an eligible match")).toBeInTheDocument();
+  });
+
+  it("notes unanswered required skills without blocking optimization", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      url.startsWith("/api/skill-gaps/")
+        ? ({ ok: true, status: 200, json: async () => ({ requirementsStatus: "ready", unanswered: [{ termKey: "a" }, { termKey: "b" }], coveredCount: 0, declinedCount: 0, profileSkills: [] }) } as Response)
+        : ({ ok: true, status: 200, json: async () => ({ optimizations: [] }) } as Response)));
+    render(<ResumeOptimizationPanel jobId="j1" />);
+    expect(await screen.findByText(/2 required skills are unanswered/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "answer them" })).toHaveAttribute("href", "#skill-gaps");
+    expect(screen.getByRole("button", { name: "Optimize Resume" })).toBeEnabled();
   });
 });
