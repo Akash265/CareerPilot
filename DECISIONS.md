@@ -1491,25 +1491,3 @@ Minor cleanups: `probeEmployerNames` lost its unused `goalId` option.
 **What it affects:** `apps/web/package.json` (`start`), `apps/web/src/lib/http/buildScript.test.ts`.
 
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
-
-### D207. Phase 13c: LaTeX compile loop is a pure function over an injected compiler
-**Decision:** `createHttpTexCompiler` (`packages/document-export/src/render/compileTex.ts`) is a thin `fetch` client for the LaTeX compiler service: `POST {url}/compile` with a bearer token, `text/plain` body, and a 30 s client timeout (`TEX_COMPILE_CLIENT_TIMEOUT_MS`, above the service's own 20 s kill so slow compiles surface as its 504). A 200 must carry integer `X-Page-Count` >= 1 and a non-empty `X-Tex-Version`, else `compiler_unavailable`. Status mapping: 422 → `compile_failed` with `line N` detail only, 413 → `compile_failed` ("document too large"), 503 → `compiler_busy`, 504 → `compiler_timeout`, anything else → `compiler_unavailable`. `fitToPage` (`packages/document-export/src/pipeline/fitToPage.ts`) takes `build(extraRemovals)`, `render` and a nullable compiler; with no compiler it returns the estimate fit, otherwise it compiles and removes one more item per retry until one page, `MAX_EXTRA_TRIMS` (3) extra compiles, or `selection.exhausted` (floors leave nothing to remove).
-**Alternatives considered:** a compiler-log passthrough in errors (rejected: the log can echo resume text, CLAUDE.md §9); a fixed-count estimate-only fit with no compile (rejected: the estimate is approximate and the spec requires a real one-page check); binary-search over removal counts (rejected: at most 3 extra compiles, so linear retries are simpler and bounded).
-**Why:** the client and loop take `fetch` and the compiler as parameters, so every behaviour (status mapping, timeout, trim bound) is unit-tested with no network or DB. The 20 s/30 s gap means a normal service-side timeout reaches the user as `compiler_timeout` from the service, not as a client abort.
-**What it affects:** `packages/document-export/src/render/compileTex.ts`, `packages/document-export/src/pipeline/fitToPage.ts` (and their tests).
-
-## FLOW.md addition (Phase 13c, Task 5)
-
-### 22a. Compile-and-trim (request-driven, export of a tailored resume)
-
-```
-exportTailoredResume (caller, Task 6+)
-  → fitToPage(build, render, compiler)            pipeline/fitToPage.ts
-      build(extra) → buildTailoredResume(…, extraRemovals)   model/selectTailoredResume.ts
-      render(model) → tex string                  render/tex/renderTex.ts
-      compiler.compile(tex) → createHttpTexCompiler  render/compileTex.ts
-          POST {url}/compile (Bearer, 30 s timeout) → 200 PDF + headers | DocumentExportError
-      loop: pageCount > 1 && extra < MAX_EXTRA_TRIMS && !exhausted → extra + 1
-  → FitResult { selection, tex, compiled }
-```
-Changed in this task: `compileTex.ts` and `fitToPage.ts` (new). Not yet wired into an export path.
