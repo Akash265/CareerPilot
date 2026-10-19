@@ -327,4 +327,23 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...validSource, ADZUNA_APP_ID: "id" })).toThrow(/ADZUNA_APP_KEY/);
     expect(() => loadEnv({ ...validSource, DISCOVERY_MAX_PAGES: "0" })).toThrow(/DISCOVERY_MAX_PAGES/);
   });
+
+  it("Phase 13a: one-click discovery defaults", () => {
+    const env = loadEnv(validSource);
+    expect(env).toMatchObject({
+      FIND_JOBS_FRESH_MINUTES: 360, FIND_JOBS_MAX_WAIT_SECONDS: 180, FIND_JOBS_MATCH_WAIT_SECONDS: 300,
+      MATCH_DEBOUNCE_SECONDS: 120, DISCOVERY_PROBE_MAX_NAMES: 30, DISCOVERY_WEB_SEARCH: true,
+      DISCOVERY_WEB_SEARCH_INTERVAL_DAYS: 7, DISCOVERY_WEB_SEARCH_MAX_USES: 5,
+    });
+  });
+
+  it("Phase 13a: parses overrides, treats blanks as unset, and rejects out-of-range values", () => {
+    const env = loadEnv({ ...validSource, DISCOVERY_WEB_SEARCH: "false", FIND_JOBS_FRESH_MINUTES: "0", MATCH_DEBOUNCE_SECONDS: "" });
+    expect(env.DISCOVERY_WEB_SEARCH).toBe(false);
+    expect(env.FIND_JOBS_FRESH_MINUTES).toBe(0);
+    expect(env.MATCH_DEBOUNCE_SECONDS).toBe(120);
+    expect(() => loadEnv({ ...validSource, DISCOVERY_WEB_SEARCH_MAX_USES: "0" })).toThrow();
+    expect(() => loadEnv({ ...validSource, FIND_JOBS_MAX_WAIT_SECONDS: "5" })).toThrow();
+    expect(() => loadEnv({ ...validSource, DISCOVERY_WEB_SEARCH: "yes" })).toThrow();
+  });
 });
