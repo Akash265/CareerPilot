@@ -29,3 +29,4 @@ export * from "./discovery/boardLinks";
 export * from "./discovery/companyCheck";
 export * from "./discovery/discover";
 export * from "./searchRun/plan";
+export * from "./searchRun/probeEmployerNames";
