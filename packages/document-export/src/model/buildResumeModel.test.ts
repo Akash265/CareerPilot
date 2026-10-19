@@ -204,4 +204,11 @@ describe("buildResumeModel", () => {
   it("still rejects a verified_skill id that is not in the profile", () => {
     expect(() => buildResumeModel({ ...profile, verifiedSkills: [] }, [applied("nope", "verified_skill", "")])).toThrow(/unknown source fact/);
   });
+
+describe("buildResumeModel verified skill duplicates", () => {
+  it("lists a verified skill once when it normalizes to a profile skill name", () => {
+    const p = { ...profile, skills: [{ id: "s1", name: "Docker" }], verifiedSkills: [{ id: "v1", term: "docker" }] };
+    expect(blocksAfter(buildResumeModel(p, []), "Skills")![0]).toEqual({ type: "paragraph", text: "Docker" });
+  });
+});
 });

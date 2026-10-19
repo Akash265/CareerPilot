@@ -1,4 +1,5 @@
 import type { EvidenceCatalogEntry } from "../optimization/buildResumeSnapshot";
+import { normalizeTermKey } from "./normalizeTermKey";
 
 /** A required job term not found in the profile (formerly application-package's GapTerm; same shape). */
 export interface GapTerm {
@@ -69,17 +70,16 @@ export function computeGapTerms(requirements: RequirementForGapDetection[], cata
   const haystack = catalog.map((e) => (e.context ? `${e.context}: ${e.text}` : e.text)).join("\n").toLowerCase();
   const sorted = requirements
     .filter(isGapCandidate)
-    .map((r) => ({ term: r.termText.trim(), requirementId: r.id }))
-    .sort((a, b) => compareStrings(a.term.toLowerCase(), b.term.toLowerCase()) || compareStrings(a.requirementId, b.requirementId));
+    .map((r) => ({ term: r.termText.trim(), key: normalizeTermKey(r.termText), requirementId: r.id }))
+    .sort((a, b) => compareStrings(a.key, b.key) || compareStrings(a.requirementId, b.requirementId));
 
   const seen = new Set<string>();
   const gaps: GapTerm[] = [];
   for (const candidate of sorted) {
-    const key = candidate.term.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (containsTerm(haystack, key)) continue;
-    gaps.push(candidate);
+    if (seen.has(candidate.key)) continue;
+    seen.add(candidate.key);
+    if (containsTerm(haystack, candidate.key)) continue;
+    gaps.push({ term: candidate.term, requirementId: candidate.requirementId });
   }
   return gaps;
 }

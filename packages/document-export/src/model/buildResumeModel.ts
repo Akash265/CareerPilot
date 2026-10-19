@@ -1,4 +1,4 @@
-import type { AppliedBullet } from "@ai-career/resume-optimization";
+import { normalizeTermKey, type AppliedBullet } from "@ai-career/resume-optimization";
 import type { DocumentBlock, DocumentModel } from "./types";
 import { certDates, contactLine, dateRange, present, type ResumeProfile } from "./resumeProfile";
 
@@ -113,10 +113,13 @@ export function buildResumeModel(profile: ResumeProfile, applied: AppliedBullet[
     blocks.push({ type: "heading", text: "Skills" });
     // Names only, never the optimizer's text: profile skills in selection order, then verified skills (Phase 13b, R4)
     // in selection order, each list followed by its unselected items.
-    const ordered = [
-      ...selectedFirst(profile.skills, applied, "skill", (s) => s.name).map(({ item }) => item.name),
-      ...selectedFirst(profile.verifiedSkills, applied, "verified_skill", (v) => v.term).map(({ item }) => item.term),
-    ];
+    const profileNames = selectedFirst(profile.skills, applied, "skill", (s) => s.name).map(({ item }) => item.name);
+    const listed = new Set(profileNames.map(normalizeTermKey));
+    // A verified term that normalizes to a skill already listed is not rendered twice.
+    const verifiedNames = selectedFirst(profile.verifiedSkills, applied, "verified_skill", (v) => v.term)
+      .map(({ item }) => item.term)
+      .filter((term) => !listed.has(normalizeTermKey(term)));
+    const ordered = [...profileNames, ...verifiedNames];
     blocks.push({ type: "paragraph", text: ordered.join(", ") });
   }
 

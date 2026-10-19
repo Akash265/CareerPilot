@@ -66,6 +66,12 @@ describe("computeGapTerms", () => {
   });
 });
 
+describe("computeGapTerms whitespace", () => {
+  it("does not report a term whose only difference is internal whitespace", () => {
+    expect(computeGapTerms([req("1", "Apache  Kafka")], [entry("Apache Kafka")])).toEqual([]);
+  });
+});
+
 describe("containsTerm", () => {
   it("matches only when the term has no alphanumeric character adjacent to it", () => {
     expect(containsTerm("worked at google", "go")).toBe(false);

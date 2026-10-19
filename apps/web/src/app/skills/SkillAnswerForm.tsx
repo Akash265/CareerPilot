@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 /** Dispatched on window after every answer or undo, so other panels on the page (resume notice, job panel) reload. */
 export const SKILL_GAPS_CHANGED_EVENT = "skill-gaps-changed";
@@ -9,11 +9,12 @@ const MAX_EVIDENCE = 300;
 type Mode = "idle" | "have" | "alias";
 
 /** Phase 13b design §7: the three answers to "this job requires <term>". "I have it" needs one evidence sentence. */
-export function SkillAnswerForm({ termDisplay, suggestion, profileSkills, onSaved }: {
-  termDisplay: string; suggestion: string | null; profileSkills: string[]; onSaved: () => void;
+export function SkillAnswerForm({ termDisplay, suggestion, profileSkills, initialEvidence, onSaved }: {
+  termDisplay: string; suggestion: string | null; profileSkills: string[]; initialEvidence?: string | null; onSaved: () => void;
 }) {
+  const formId = useId();
   const [mode, setMode] = useState<Mode>("idle");
-  const [evidence, setEvidence] = useState("");
+  const [evidence, setEvidence] = useState(initialEvidence ?? "");
   const [alias, setAlias] = useState(suggestion && profileSkills.includes(suggestion) ? suggestion : (profileSkills[0] ?? ""));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,13 +46,17 @@ export function SkillAnswerForm({ termDisplay, suggestion, profileSkills, onSave
         <button type="button" onClick={() => setMode("have")} disabled={saving} className="rounded border px-2 py-1">I have it</button>
         <button type="button" onClick={() => save({ status: "dont_have" })} disabled={saving} className="rounded border px-2 py-1">I don&apos;t have it</button>
         <button type="button" onClick={() => setMode("alias")} disabled={saving || profileSkills.length === 0} className="rounded border px-2 py-1">Same as…</button>
-        {suggestion && <span className="text-gray-600">Suggested: {suggestion}</span>}
+        {suggestion && (
+          <span className="text-gray-600">
+            {profileSkills.includes(suggestion) ? `Suggested: ${suggestion}` : `Previously same as ${suggestion} (no longer in your profile)`}
+          </span>
+        )}
       </div>
       {mode === "have" && (
         <div className="flex flex-col gap-1">
-          <label className="text-sm" htmlFor={`evidence-${termDisplay}`}>Where you used {termDisplay}</label>
+          <label className="text-sm" htmlFor={`${formId}-evidence`}>Where you used {termDisplay}</label>
           <textarea
-            id={`evidence-${termDisplay}`}
+            id={`${formId}-evidence`}
             value={evidence}
             maxLength={MAX_EVIDENCE}
             onChange={(e) => setEvidence(e.target.value)}
@@ -65,8 +70,8 @@ export function SkillAnswerForm({ termDisplay, suggestion, profileSkills, onSave
       )}
       {mode === "alias" && (
         <div className="flex items-center gap-2">
-          <label className="text-sm" htmlFor={`alias-${termDisplay}`}>Same as which of your skills</label>
-          <select id={`alias-${termDisplay}`} value={alias} onChange={(e) => setAlias(e.target.value)} className="rounded border p-1 text-sm">
+          <label className="text-sm" htmlFor={`${formId}-alias`}>Same as which of your skills</label>
+          <select id={`${formId}-alias`} value={alias} onChange={(e) => setAlias(e.target.value)} className="rounded border p-1 text-sm">
             {profileSkills.map((name) => <option key={name} value={name}>{name}{name === suggestion ? " (suggested)" : ""}</option>)}
           </select>
           <button type="button" onClick={() => save({ status: "alias", aliasSkillName: alias })} disabled={saving || !alias}

@@ -66,4 +66,29 @@ describe("SkillAnswerForm", () => {
     await waitFor(() => expect(fetchFn).toHaveBeenCalled());
     expect(sent(fetchFn)).toEqual({ status: "alias", termDisplay: "MySQL", aliasSkillName: "Postgres" });
   });
+
+describe("SkillAnswerForm details", () => {
+  it("says a stale alias suggestion is no longer in the profile", () => {
+    render(<SkillAnswerForm termDisplay="Postgres" suggestion="PG" profileSkills={["SQL"]} onSaved={vi.fn()} />);
+    expect(screen.getByText("Previously same as PG (no longer in your profile)")).toBeInTheDocument();
+    expect(screen.queryByText("Suggested: PG")).toBeNull();
+  });
+
+  it("keeps the 'Suggested:' wording for a current profile skill", () => {
+    render(<SkillAnswerForm termDisplay="Postgres" suggestion="SQL" profileSkills={["SQL"]} onSaved={vi.fn()} />);
+    expect(screen.getByText("Suggested: SQL")).toBeInTheDocument();
+  });
+
+  it("seeds the evidence box from initialEvidence", () => {
+    render(<SkillAnswerForm termDisplay="Kubernetes" suggestion={null} profileSkills={[]} initialEvidence="Ran staging." onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "I have it" }));
+    expect(screen.getByLabelText("Where you used Kubernetes")).toHaveValue("Ran staging.");
+  });
+
+  it("uses ids without spaces even when the term contains spaces", () => {
+    render(<SkillAnswerForm termDisplay="Apache Kafka" suggestion={null} profileSkills={[]} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "I have it" }));
+    expect(screen.getByLabelText("Where you used Apache Kafka").id).not.toMatch(/\s/);
+  });
+});
 });

@@ -60,7 +60,7 @@ export function SkillsClient() {
       <section aria-labelledby="unanswered-heading" className="flex flex-col gap-4">
         <h2 id="unanswered-heading" className="font-medium">Skills your top matches require</h2>
         {overview.jobsWithoutRequirements > 0 && (
-          <p className="text-sm text-gray-600">{overview.jobsWithoutRequirements} top matches have no requirements checked yet.</p>
+          <p className="text-sm text-gray-600">{overview.jobsWithoutRequirements === 1 ? "1 top match has" : `${overview.jobsWithoutRequirements} top matches have`} no requirements checked yet.</p>
         )}
         {overview.unanswered.length === 0 ? (
           <p className="text-sm text-gray-600">No unanswered required skills in your top {overview.topN} matches.</p>
@@ -98,7 +98,7 @@ export function SkillsClient() {
                   <button type="button" onClick={() => undo(v)} className="underline" aria-label={`Undo ${v.termDisplay}`}>Undo</button>
                 </div>
                 {editing === v.id && (
-                  <SkillAnswerForm termDisplay={v.termDisplay} suggestion={null} profileSkills={overview.profileSkills}
+                  <SkillAnswerForm termDisplay={v.termDisplay} suggestion={null} profileSkills={overview.profileSkills} initialEvidence={v.evidence}
                     onSaved={() => { setEditing(null); load(); }} />
                 )}
               </li>

@@ -58,4 +58,22 @@ describe("SkillsClient", () => {
     expect(screen.getByRole("button", { name: "I have it" })).toBeInTheDocument();
     expect(screen.queryByText(/suggested/i)).not.toBeInTheDocument();
   });
+
+describe("SkillsClient wording and edit seeding", () => {
+  it("uses the singular for one top match without requirements", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(respond({ ...overview, jobsWithoutRequirements: 1 })));
+    render(<SkillsClient />);
+    expect(await screen.findByText("1 top match has no requirements checked yet.")).toBeInTheDocument();
+  });
+
+  it("starts the edit form of a 'have' answer with its saved evidence", async () => {
+    const have = { id: "v2", termKey: "k8s", termDisplay: "Kubernetes", status: "have", evidence: "Ran staging.", aliasSkillName: null, updatedAt: "2026-10-19T00:00:00Z" };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(respond({ ...overview, answered: [have] })));
+    render(<SkillsClient />);
+    fireEvent.click(await screen.findByRole("button", { name: "Change Kubernetes" }));
+    const answers = screen.getByRole("list", { name: "Your answers" });
+    fireEvent.click(within(answers).getByRole("button", { name: "I have it" }));
+    expect(within(answers).getByLabelText("Where you used Kubernetes")).toHaveValue("Ran staging.");
+  });
+});
 });
