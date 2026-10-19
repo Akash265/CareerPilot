@@ -212,6 +212,13 @@ describe("loadEnv", () => {
     ).toThrow(/LANGFUSE_PUBLIC_KEY/);
   });
 
+  it("rejects a half-configured LaTeX compiler, naming both variables", () => {
+    expect(() => loadEnv({ ...validSource, LATEX_COMPILER_URL: "http://127.0.0.1:8090" })).toThrow(/LATEX_COMPILER_URL.*LATEX_COMPILER_TOKEN/);
+    expect(() => loadEnv({ ...validSource, LATEX_COMPILER_TOKEN: "t".repeat(32) })).toThrow(/LATEX_COMPILER_URL.*LATEX_COMPILER_TOKEN/);
+    const env = loadEnv({ ...validSource, LATEX_COMPILER_URL: "http://127.0.0.1:8090", LATEX_COMPILER_TOKEN: "t".repeat(32) });
+    expect(env.LATEX_COMPILER_URL).toBe("http://127.0.0.1:8090");
+  });
+
   it("rejects a non-http(s) LANGFUSE_HOST", () => {
     expect(() =>
       loadEnv({ ...validSource, LANGFUSE_HOST: "ftp://x.example", LANGFUSE_PUBLIC_KEY: "p", LANGFUSE_SECRET_KEY: "s" })

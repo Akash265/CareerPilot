@@ -167,6 +167,14 @@ const envSchema = z
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: [partner], message: "is required with its pair (see .env.example)" });
       }
     }
+    if ((val.LATEX_COMPILER_URL === undefined) !== (val.LATEX_COMPILER_TOKEN === undefined)) {
+      const unset = val.LATEX_COMPILER_URL === undefined ? "LATEX_COMPILER_URL" : "LATEX_COMPILER_TOKEN";
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [unset],
+        message: "set both LATEX_COMPILER_URL and LATEX_COMPILER_TOKEN, or neither",
+      });
+    }
     const langfuse = { LANGFUSE_HOST: val.LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY: val.LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY: val.LANGFUSE_SECRET_KEY };
     const missing = Object.entries(langfuse).filter(([, v]) => v === undefined).map(([k]) => k);
     if (missing.length > 0 && missing.length < 3) {
