@@ -15,6 +15,8 @@ export function pdflatexEnv(workDir: string): NodeJS.ProcessEnv {
     openout_any: "p",
     shell_escape: "f",
     max_print_line: "10000",
+    // Disable kpathsea's on-the-fly font/format generation scripts (defense in depth; lmodern is Type1, nothing needs them).
+    MKTEXTFM: "0", MKTEXPK: "0", MKTEXMF: "0", MKTEXFMT: "0", MKTEXTEX: "0",
   };
 }
 

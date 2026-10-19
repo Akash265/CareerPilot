@@ -41,6 +41,6 @@ describe("runPdflatex", () => {
   });
   it("passes no other environment through", () => {
     const env = pdflatexEnv("/tmp/w");
-    expect(Object.keys(env).sort()).toEqual(["HOME", "PATH", "TEXMFOUTPUT", "TEXMFVAR", "max_print_line", "openin_any", "openout_any", "shell_escape"].sort());
+    expect(Object.keys(env).sort()).toEqual(["HOME", "MKTEXFMT", "MKTEXMF", "MKTEXPK", "MKTEXTEX", "MKTEXTFM", "PATH", "TEXMFOUTPUT", "TEXMFVAR", "max_print_line", "openin_any", "openout_any", "shell_escape"].sort());
   });
 });
