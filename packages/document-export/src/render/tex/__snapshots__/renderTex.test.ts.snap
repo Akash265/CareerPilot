@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderTex > renders the template (golden) 1`] = `
+"\\documentclass[10pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
+\\usepackage{lmodern}
+\\usepackage[a4paper,margin=0.6in]{geometry}
+\\usepackage{titlesec}
+\\usepackage{enumitem}
+\\usepackage[hidelinks]{hyperref}
+\\input{glyphtounicode}
+\\pdfgentounicode=1
+\\pagestyle{empty}
+\\setlength{\\parindent}{0pt}
+\\titleformat{\\section}{\\large\\bfseries}{}{0pt}{}[\\titlerule]
+\\titlespacing*{\\section}{0pt}{8pt}{4pt}
+\\setlist[itemize]{leftmargin=1.2em,itemsep=1pt,topsep=2pt,parsep=0pt}
+\\hypersetup{pdftitle={Jane Doe - Resume},pdfauthor={Jane Doe}}
+\\begin{document}
+\\begin{center}
+{\\LARGE\\bfseries Jane Doe}\\par
+\\vspace{2pt}
+{\\small jane@example.com · +49 1}\\par
+\\end{center}
+\\section*{Experience}
+\\vspace{2pt}
+\\textbf{Engineer}\\hfill{}2021 \\textendash{} present\\par
+\\textit{Globex · Berlin}\\par
+\\begin{itemize}
+\\item Built A \\& B
+\\item {[}Remote{]} 50\\% faster
+\\end{itemize}
+\\section*{Projects}
+\\vspace{2pt}
+\\textbf{Tool}\\par
+A CLI\\par
+\\section*{Skills}
+C++, C\\#, .NET\\par
+\\end{document}
+"
+`;
