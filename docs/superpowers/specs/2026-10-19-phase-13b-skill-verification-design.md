@@ -1,6 +1,6 @@
 # Phase 13b — Missing-Skill Verification — Design
 
-Status: implemented on branch phase-13b-skill-verification (2026-10-19).
+Status: implemented and merged to main 2026-10-19 (merge commit a2d7d89; branch phase-13b-skill-verification, deleted). Post-merge fix D206 (route cache cleared on start).
 Part of Phase 13 (user's 2026-10-19 refinement request), split by user choice into
 13a one-click discovery (merged) → 13b missing-skill verification (this spec) → 13c job-specific LaTeX resume
 (depends on 13b).
