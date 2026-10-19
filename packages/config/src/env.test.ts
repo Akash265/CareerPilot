@@ -346,4 +346,12 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...validSource, FIND_JOBS_MAX_WAIT_SECONDS: "5" })).toThrow();
     expect(() => loadEnv({ ...validSource, DISCOVERY_WEB_SEARCH: "yes" })).toThrow();
   });
+
+  it("Phase 13b: SKILL_GAP_TOP_N defaults to 25, treats blank as unset, and is bounded 1-200", () => {
+    expect(loadEnv(validSource).SKILL_GAP_TOP_N).toBe(25);
+    expect(loadEnv({ ...validSource, SKILL_GAP_TOP_N: "" }).SKILL_GAP_TOP_N).toBe(25);
+    expect(loadEnv({ ...validSource, SKILL_GAP_TOP_N: "40" }).SKILL_GAP_TOP_N).toBe(40);
+    expect(() => loadEnv({ ...validSource, SKILL_GAP_TOP_N: "0" })).toThrow(/SKILL_GAP_TOP_N/);
+    expect(() => loadEnv({ ...validSource, SKILL_GAP_TOP_N: "201" })).toThrow(/SKILL_GAP_TOP_N/);
+  });
 });

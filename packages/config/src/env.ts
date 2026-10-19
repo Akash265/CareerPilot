@@ -42,6 +42,8 @@ const envSchema = z
     MATCHING_EXPERIENCE_GRACE_YEARS: z.coerce.number().min(0).max(10).default(1),
     MATCHING_FRESHNESS_HALF_LIFE_HOURS: z.coerce.number().min(1).default(168),
     MATCHING_EXPLANATION_TTL_DAYS: z.coerce.number().min(1).default(7),
+    // Phase 13b: top eligible matches whose requirements are extracted after each matching run and listed on /skills.
+    SKILL_GAP_TOP_N: z.preprocess(blankAsUnset, z.coerce.number().int().min(1).max(200).default(25)),
     // Phase 7a: web searches allowed per company-research call (the tool's max_uses). Bounds cost.
     COMPANY_RESEARCH_MAX_SEARCHES: z.coerce.number().int().min(1).max(20).default(5),
     // Phase 9: days after an application reaches a terminal status before its job's generated documents
