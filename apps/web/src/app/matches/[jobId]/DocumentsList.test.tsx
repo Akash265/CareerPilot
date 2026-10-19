@@ -58,6 +58,13 @@ describe("DocumentsList", () => {
     expect(screen.getByText(/Interview prep v1 · PDF/)).toBeInTheDocument();
   });
 
+  it("labels a tailored LaTeX resume and shows its page summary", async () => {
+    mockListAndHead([{ ...doc, id: "d4", kind: "tailored_resume", format: "tex", details: { pageCount: null, pageVerified: false, includedCount: 5, totalCount: 6 } }], true);
+    render(<DocumentsList jobId="j1" />);
+    expect(await screen.findByText(/Tailored resume \(LaTeX\)/)).toBeInTheDocument();
+    expect(screen.getByText(/page count not verified/)).toBeInTheDocument();
+  });
+
   it("reloads when a documents-changed event fires", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ documents: [] }) } as Response)

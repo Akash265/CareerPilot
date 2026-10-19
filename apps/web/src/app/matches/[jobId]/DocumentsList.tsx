@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { DOCUMENTS_CHANGED_EVENT } from "./DownloadButtons";
+import { tailoredSummary, type TailoredDetailsView } from "./TailoredResumeExport";
 
 interface DocumentView {
   id: string;
-  kind: "resume" | "pitch" | "cover_letter" | "interview_prep";
-  format: "pdf" | "docx";
+  kind: "resume" | "pitch" | "cover_letter" | "interview_prep" | "tailored_resume";
+  format: "pdf" | "docx" | "tex";
   sourceVersion: number | null;
   downloadFilename: string;
   byteSize: number;
   createdAt: string;
   downloadUrl: string;
+  details?: TailoredDetailsView | null;
 }
 
 const KIND_LABELS: Record<DocumentView["kind"], string> = {
@@ -19,6 +21,7 @@ const KIND_LABELS: Record<DocumentView["kind"], string> = {
   pitch: "Pitch",
   cover_letter: "Cover letter",
   interview_prep: "Interview prep",
+  tailored_resume: "Tailored resume (LaTeX)",
 };
 
 type State = { kind: "loading" } | { kind: "error" } | { kind: "ready"; documents: DocumentView[] };
@@ -85,6 +88,7 @@ export function DocumentsList({
           {state.documents.map((d) => (
             <li key={d.id}>
               {KIND_LABELS[d.kind]} v{d.sourceVersion ?? "?"} · {d.format.toUpperCase()} ·{" "}
+              {d.details ? `${tailoredSummary(d.details)} · ` : ""}
               {new Date(d.createdAt).toLocaleString()} ·{" "}
               <button type="button" className="underline" onClick={() => handleDownload(d.downloadUrl)}>Download</button>
             </li>

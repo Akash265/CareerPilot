@@ -46,6 +46,7 @@ describe("ResumeOptimizationPanel", () => {
     expect(await screen.findByText("92.5/100")).toBeInTheDocument();
     expect(screen.getByText("Built X using SQL")).toBeInTheDocument();
     expect(screen.getByText("SQL")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tailored resume (LaTeX, 1 page)" })).toBeTruthy();
   });
 
   it("shows a review banner when requiresReview is true", async () => {
@@ -110,7 +111,8 @@ describe("ResumeOptimizationPanel", () => {
     render(<ResumeOptimizationPanel jobId="j1" />);
     await screen.findByText("92.5/100");
 
-    fireEvent.click(screen.getByRole("button", { name: "Download PDF" }));
+    // Two PDF buttons now (plain resume first, then the tailored LaTeX one); this test is about the plain resume export.
+    fireEvent.click(screen.getAllByRole("button", { name: "Download PDF" })[0]!);
     expect(await screen.findByRole("alert")).toHaveTextContent("Your profile changed since this optimization");
 
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "opt2" } });

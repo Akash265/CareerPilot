@@ -88,4 +88,15 @@ describe("DownloadButtons", () => {
     expect(screen.getByRole("button", { name: "Download PDF" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Download DOCX" })).toBeDisabled();
   });
+
+  it("renders only the requested formats, labels tex as .tex, and reports the export body", async () => {
+    const body = { document: { downloadUrl: "/api/documents/t1/download", details: { pageCount: 1, pageVerified: true, includedCount: 3, totalCount: 4, omitted: [] } }, omittedItems: [] };
+    const fetchMock = mockPostThenHead(201, body, true);
+    const onExported = vi.fn();
+    render(<DownloadButtons jobId="j1" kind="tailored_resume" sourceId="o1" formats={["pdf", "tex"]} onExported={onExported} navigate={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Download DOCX" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download .tex" }));
+    await waitFor(() => expect(onExported).toHaveBeenCalledWith(body));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string)).toEqual({ kind: "tailored_resume", jobId: "j1", sourceId: "o1", format: "tex" });
+  });
 });
