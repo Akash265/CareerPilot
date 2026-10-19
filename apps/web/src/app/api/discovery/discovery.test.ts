@@ -153,6 +153,18 @@ describe("POST /api/discovery/boards", () => {
     const v = await view();
     expect(v.boards.counts.pending).toBe(2);
     expect(v.boards.recent.map((b: { slug: string }) => b.slug).sort()).toEqual(["huggingface", "linear"]);
+    expect(v.boards.recent[0]).toMatchObject({ origin: "pasted", rejectReason: null, foundVia: null });
+  });
+
+  it("reports each recent board's origin and fixed reject reason (Phase 13a review)", async () => {
+    await consent();
+    await admin`INSERT INTO discovered_boards (user_id, kind, slug, status, found_via, expected_company, reject_reason)
+                VALUES (${USER}, 'lever', 'globex', 'rejected', 'name_probe', 'Globex', 'company_mismatch'),
+                       (${USER}, 'ashby', 'initech', 'pending', 'web_search', 'Initech', NULL)`;
+    const v = await view();
+    const bySlug = Object.fromEntries(v.boards.recent.map((b: { slug: string }) => [b.slug, b]));
+    expect(bySlug.globex).toMatchObject({ status: "rejected", origin: "name_probe", rejectReason: "company_mismatch" });
+    expect(bySlug.initech).toMatchObject({ status: "pending", origin: "web_search", rejectReason: null });
   });
 
   it("rejects an empty or oversized paste", async () => {

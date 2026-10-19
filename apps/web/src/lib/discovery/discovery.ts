@@ -32,7 +32,16 @@ export interface DiscoveryView {
   providers: { kind: SearchKind; label: string; keyRequired: boolean; keyConfigured: boolean; missingKeys: string[]; enabled: boolean; sourceId: string | null }[];
   boards: {
     counts: Record<(typeof BOARD_STATUSES)[number], number>;
-    recent: { kind: string; slug: string; status: string; label: string | null; foundVia: string | null; firstSeenAt: string }[];
+    recent: {
+      kind: string; slug: string; status: string; label: string | null;
+      /** The label of the source whose posting linked to the board, when there is one. */
+      foundVia: string | null;
+      /** How the board was found (fixed code): posting_link, pasted, name_probe or web_search. */
+      origin: string;
+      /** Why it was rejected (fixed code), or null. */
+      rejectReason: string | null;
+      firstSeenAt: string;
+    }[];
   };
 }
 
@@ -69,6 +78,7 @@ export async function loadDiscoveryView(tx: DbClient, env: KeyEnv): Promise<Disc
         kind: b.kind, slug: b.slug, status: b.status,
         label: b.sourceId ? labels.get(b.sourceId) ?? null : null,
         foundVia: b.foundViaSourceId ? labels.get(b.foundViaSourceId) ?? null : null,
+        origin: b.foundVia, rejectReason: b.rejectReason,
         firstSeenAt: b.firstSeenAt.toISOString(),
       })),
     },
@@ -143,7 +153,7 @@ export async function quickStart(tx: DbClient, env: KeyEnv, now: Date): Promise<
   return { enabled, skipped };
 }
 
-export type ImportResult ={ ok: true; recognized: number; added: number } | { ok: false; status: 409; error: string };
+export type ImportResult = { ok: true; recognized: number; added: number } | { ok: false; status: 409; error: string };
 
 /** Pasted board links become pending boards (validated by the ingestion worker); ones already added are skipped. */
 export async function importBoards(tx: DbClient, text: string): Promise<ImportResult> {

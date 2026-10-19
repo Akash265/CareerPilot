@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { DiscoveryPanel } from "./DiscoveryPanel";
 
 const providers = [
@@ -68,13 +68,21 @@ describe("DiscoveryPanel (Phase 12)", () => {
       settings: { consentedAt: "2026-10-12T09:00:00.000Z", autoDiscover: true },
       boards: {
         counts: { pending: 1, enabled: 2, rejected: 1, gone: 0 },
-        recent: [{ kind: "ashby", slug: "linear", status: "enabled", label: "Linear", foundVia: "HN Who is hiring", firstSeenAt: "2026-10-12T09:00:00.000Z" }],
+        recent: [
+          { kind: "ashby", slug: "linear", status: "enabled", label: "Linear", foundVia: "HN Who is hiring", origin: "posting_link", rejectReason: null, firstSeenAt: "2026-10-12T09:00:00.000Z" },
+          { kind: "lever", slug: "globex", status: "rejected", label: null, foundVia: null, origin: "name_probe", rejectReason: "company_mismatch", firstSeenAt: "2026-10-12T09:00:00.000Z" },
+          { kind: "ashby", slug: "initech", status: "pending", label: null, foundVia: null, origin: "web_search", rejectReason: null, firstSeenAt: "2026-10-12T09:00:00.000Z" },
+          { kind: "lever", slug: "umbrella", status: "rejected", label: null, foundVia: null, origin: "pasted", rejectReason: "no_jobs", firstSeenAt: "2026-10-12T09:00:00.000Z" },
+        ],
       },
     }));
     render(<DiscoveryPanel />);
     expect(await screen.findByText(/2 enabled · 1 waiting · 1 rejected · 0 gone/)).toBeInTheDocument();
-    expect(screen.getByText(/Linear/)).toBeInTheDocument();
-    expect(screen.getByText(/via HN Who is hiring/)).toBeInTheDocument();
+    const items = within(screen.getByRole("list", { name: /recently discovered boards/i })).getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent(/Linear.*found in a job posting via HN Who is hiring/);
+    expect(items[1]).toHaveTextContent(/globex.*rejected: different company.*found by name guess/);
+    expect(items[2]).toHaveTextContent(/initech.*waiting to be checked.*found by web search/);
+    expect(items[3]).toHaveTextContent(/umbrella.*rejected: no open jobs.*added by you/);
   });
 
   it("shows a server's refusal", async () => {
