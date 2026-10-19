@@ -30,6 +30,8 @@ export interface ResumeProfile {
     gpa: string | null;
   }[];
   skills: { id: string; name: string }[];
+  /** Phase 13b: skills the user verified (a "have" answer, or an alias to a skill still in the profile), as the job wrote them. */
+  verifiedSkills: { id: string; term: string }[];
 }
 
 /** True for a non-blank string. Blank/whitespace-only text is nullable text left empty by LLM extraction, not a value. */

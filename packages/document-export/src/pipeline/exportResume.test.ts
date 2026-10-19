@@ -199,4 +199,18 @@ describe("exportResume", () => {
     await expect(run("33333333-3333-3333-3333-333333333333", optimizationId)).rejects.toBeInstanceOf(DocumentExportError);
     await expect(run("33333333-3333-3333-3333-333333333333", optimizationId)).rejects.toMatchObject({ errorClass: "job_not_found" });
   });
+
+  it("exports an optimization that cites a verified skill without profile_changed", async () => {
+    const { jobId, goalId } = await seedResumeFixture(testDb, USER);
+    const [v] = await testDb.adminSql`
+      INSERT INTO skill_verifications (user_id, term_key, term_display, status, evidence)
+      VALUES (${USER}, 'docker', 'Docker', 'have', 'Ran it in production.') RETURNING id`;
+    const { contentHash } = await withUserContext(testDb.db, USER, (tx) => buildResumeSnapshot(tx));
+    const optimizationId = await insertOptimization(testDb, USER, jobId, goalId, [
+      { sourceFactId: v.id as string, sourceType: "verified_skill", originalText: "Docker: Ran it in production.", optimizedText: "Docker: Ran it in production.", changeType: "unchanged", justification: "j" },
+    ], contentHash);
+    const doc = await run(jobId, optimizationId);
+    const text = (await extractText(await readAll(await getGeneratedDocument(storage, doc.objectKey)), "pdf")).replace(/\s+/g, " ");
+    expect(text).toContain("Docker");
+  });
 });

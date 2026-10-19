@@ -1,8 +1,9 @@
 import { asc } from "drizzle-orm";
 import { schema, type DbClient } from "@ai-career/db";
+import { normalizeTermKey } from "@ai-career/resume-optimization";
 import type { ResumeProfile } from "../model/resumeProfile";
 
-const { candidateProfiles, workExperiences, workExperienceBullets, achievements, projects, certifications, education, skills } = schema;
+const { candidateProfiles, workExperiences, workExperienceBullets, achievements, projects, certifications, education, skills, skillVerifications } = schema;
 
 /** Call inside withUserContext. Null when the user has no confirmed profile. Street address is not read. */
 export async function loadResumeProfile(tx: DbClient): Promise<ResumeProfile | null> {
@@ -12,7 +13,7 @@ export async function loadResumeProfile(tx: DbClient): Promise<ResumeProfile | n
     .limit(1);
   if (!contact) return null;
 
-  const [exps, bullets, achs, projs, certs, edus, skls] = await Promise.all([
+  const [exps, bullets, achs, projs, certs, edus, skls, verifs] = await Promise.all([
     tx.select().from(workExperiences).orderBy(asc(workExperiences.displayOrder), asc(workExperiences.id)),
     tx.select().from(workExperienceBullets).orderBy(asc(workExperienceBullets.displayOrder), asc(workExperienceBullets.id)),
     tx.select().from(achievements).orderBy(asc(achievements.displayOrder), asc(achievements.id)),
@@ -20,6 +21,7 @@ export async function loadResumeProfile(tx: DbClient): Promise<ResumeProfile | n
     tx.select().from(certifications).orderBy(asc(certifications.displayOrder), asc(certifications.id)),
     tx.select().from(education).orderBy(asc(education.displayOrder), asc(education.id)),
     tx.select().from(skills).orderBy(asc(skills.displayOrder), asc(skills.id)),
+    tx.select().from(skillVerifications).orderBy(asc(skillVerifications.termKey)),
   ]);
 
   return {
@@ -35,5 +37,10 @@ export async function loadResumeProfile(tx: DbClient): Promise<ResumeProfile | n
       id: e.id, institution: e.institution, degree: e.degree, fieldOfStudy: e.fieldOfStudy, startDate: e.startDate, endDate: e.endDate, gpa: e.gpa,
     })),
     skills: skls.map((s) => ({ id: s.id, name: s.name })),
+    // Same set buildResumeSnapshot puts in the catalog (have rows and live aliases), so applied ids always resolve.
+    verifiedSkills: verifs
+      .filter((v) => (v.status === "have" && v.evidence !== null)
+        || (v.status === "alias" && v.aliasSkillName !== null && skls.some((s) => normalizeTermKey(s.name) === normalizeTermKey(v.aliasSkillName!))))
+      .map((v) => ({ id: v.id, term: v.termDisplay })),
   };
 }

@@ -19,6 +19,7 @@ const profile: ResumeProfile = {
   certifications: [{ id: "c1", name: "AWS SA", issuer: "Amazon", issueDate: "2022", expiryDate: "2025" }],
   education: [{ id: "d1", institution: "TU Berlin", degree: "BSc", fieldOfStudy: "CS", startDate: "2016", endDate: "2020", gpa: null }],
   skills: [{ id: "s1", name: "Python" }, { id: "s2", name: "SQL" }, { id: "s3", name: "Go" }],
+  verifiedSkills: [],
 };
 
 const applied = (sourceFactId: string, sourceType: AppliedBullet["sourceType"], optimizedText: string): AppliedBullet => ({
@@ -187,5 +188,20 @@ describe("buildResumeModel", () => {
       { type: "entry", title: "Proj Two", subtitle: "https://two.example", meta: null },
       { type: "paragraph", text: "Second project" },
     ]);
+  });
+
+  it("renders verified skills in the Skills section, selected ones first, using the job's term (R4)", () => {
+    const p = { ...profile, skills: [{ id: "s1", name: "SQL" }], verifiedSkills: [{ id: "v1", term: "Docker" }, { id: "v2", term: "Kubernetes" }] };
+    const model = buildResumeModel(p, [applied("v2", "verified_skill", "x")]);
+    expect(blocksAfter(model, "Skills")![0]).toEqual({ type: "paragraph", text: "SQL, Kubernetes, Docker" });
+  });
+
+  it("shows the Skills section when only verified skills exist", () => {
+    const model = buildResumeModel({ ...profile, skills: [], verifiedSkills: [{ id: "v1", term: "Docker" }] }, []);
+    expect(model.blocks).toContainEqual({ type: "paragraph", text: "Docker" });
+  });
+
+  it("still rejects a verified_skill id that is not in the profile", () => {
+    expect(() => buildResumeModel({ ...profile, verifiedSkills: [] }, [applied("nope", "verified_skill", "")])).toThrow(/unknown source fact/);
   });
 });
