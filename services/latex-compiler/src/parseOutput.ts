@@ -1,6 +1,8 @@
 /** pdflatex's final line, e.g. "Output written on resume.pdf (1 page, 34567 bytes)." (max_print_line is raised, so it is never wrapped). */
 export function parsePageCount(output: string): number | null {
-  const m = /Output written on .*?\((\d+) pages?/s.exec(output);
+  // The LAST match: box warnings echo document text to the log, so an earlier line could be spoofed.
+  const all = [...output.matchAll(/Output written on [^\n]*?\((\d+) pages?/g)];
+  const m = all[all.length - 1];
   return m ? Number(m[1]) : null;
 }
 
