@@ -6,6 +6,8 @@ import { createLogger, initProcessLogging, throttleErrorLog } from "@ai-career/l
 import { createShutdown, originalJobError, startHeartbeat } from "@ai-career/monitoring";
 import { createAnthropicFor, withLangfuseExport, type AiUsageSink } from "@ai-career/ai";
 import { MATCHING_QUEUE_NAME, type MatchingJobData } from "@ai-career/matching";
+import { ensureTopMatchRequirements } from "@ai-career/resume-optimization";
+import { createRequirementsRefresh } from "./requirementsRefresh";
 import { createMatchingWorker } from "./worker";
 import { createFollowUp, isFinalFailure } from "./followUp";
 
@@ -38,6 +40,21 @@ async function main(): Promise<void> {
   const matchingQueue = new Queue<MatchingJobData>(MATCHING_QUEUE_NAME, { connection });
   const followUp = createFollowUp({ redis: connection, queue: matchingQueue, onError: (error) => log.error("rematch_failed", { error }) });
 
+  // Phase 13b (R3): requirements for the top matches, so /skills can list their missing skills. Logs carry ids, counts
+  // and error class names only -- never job text.
+  const errorClass = (error: unknown) => (error instanceof Error ? error.name : "unknown");
+  const refreshRequirements = createRequirementsRefresh({
+    run: async (userId) => {
+      const { anthropicFor } = aiFor(userId);
+      const result = await ensureTopMatchRequirements(db, {
+        userId, env, anthropicFor,
+        onJobError: (jobId, error) => log.warn("requirements_failed", { jobId, errorClass: errorClass(error) }),
+      });
+      log.info("requirements_checked", { ...result });
+    },
+    onError: (error) => log.error("requirements_refresh_failed", { errorClass: errorClass(error) }),
+  });
+
   const worker = createMatchingWorker({ connection, db, aiFor, env });
   worker.on("completed", (job) => log.info("matching_completed", { jobId: job.id }));
   worker.on("failed", (job, rawError) => {
@@ -46,6 +63,7 @@ async function main(): Promise<void> {
   });
   // Phase 13a (D193): one follow-up run if new jobs arrived while this run was in progress.
   worker.on("completed", (job) => void followUp(job.data.userId));
+  worker.on("completed", (job) => void refreshRequirements(job.data.userId));
   worker.on("failed", (job, error) => {
     // Only a final failure frees the job id; a failure that will be retried keeps it (attempts: 2).
     if (job && isFinalFailure(job, error)) void followUp(job.data.userId);

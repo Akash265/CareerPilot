@@ -19,6 +19,7 @@
     "@ai-career/logging": "workspace:*",
     "@ai-career/matching": "workspace:*",
     "@ai-career/monitoring": "workspace:*",
+    "@ai-career/resume-optimization": "workspace:*",
     "@anthropic-ai/sdk": "^0.128.0",
     "bullmq": "^5.34.0",
     "drizzle-orm": "^0.45.3",
