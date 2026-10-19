@@ -79,4 +79,37 @@ describe("FindJobsPanel (Phase 13a)", () => {
     render(<FindJobsPanel onResultsChanged={vi.fn()} />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/stopped responding/);
   });
+
+  it("does not refetch the latest run when the parent re-renders with a new callback", async () => {
+    const fn = mockFetch({ "GET /api/search-runs/latest": () => ({ body: { run: null } }) });
+    const { rerender } = render(<FindJobsPanel onResultsChanged={vi.fn()} />);
+    await screen.findByRole("button", { name: "Find matching jobs" });
+    rerender(<FindJobsPanel onResultsChanged={vi.fn()} />);
+    rerender(<FindJobsPanel onResultsChanged={vi.fn()} />);
+    expect(fn.mock.calls.filter(([url]) => url === "/api/search-runs/latest")).toHaveLength(1);
+  });
+
+  it("keeps reloading results every 30 s while a completed run has late sources", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const late = { sourceId: "s2", name: "Lever: acme", kind: "lever", state: "late" };
+    mockFetch({ "GET /api/search-runs/latest": () => ({ body: { run: run({ status: "completed", finishedAt: new Date().toISOString(), sources: [late] }) } }) });
+    const onResultsChanged = vi.fn();
+    render(<FindJobsPanel onResultsChanged={onResultsChanged} />);
+    await screen.findByText(/Lever: acme — still running/);
+    expect(onResultsChanged).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_100); });
+    expect(onResultsChanged).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(onResultsChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reload periodically when a completed run has no late sources", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockFetch({ "GET /api/search-runs/latest": () => ({ body: { run: run({ status: "completed", finishedAt: new Date().toISOString() }) } }) });
+    const onResultsChanged = vi.fn();
+    render(<FindJobsPanel onResultsChanged={onResultsChanged} />);
+    await screen.findByText("Remotive — 2 new jobs");
+    await act(async () => { await vi.advanceTimersByTimeAsync(65_000); });
+    expect(onResultsChanged).not.toHaveBeenCalled();
+  });
 });

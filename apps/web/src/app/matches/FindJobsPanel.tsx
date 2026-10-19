@@ -7,6 +7,8 @@ import { runFailureText, seedingLine, sourceLine } from "../../lib/searchRuns/fo
 
 const POLL_MS = 3000;
 const QUEUED_WARNING_MS = 30_000;
+const LATE_REFRESH_MS = 30_000;
+const LATE_WINDOW_MS = 10 * 60_000;
 const ACTIVE = new Set(["queued", "running", "matching"]);
 const STAGE: Record<string, string> = { queued: "Searching — starting…", running: "Searching job sources…", matching: "Ranking jobs against your goal…" };
 
@@ -24,6 +26,9 @@ export function FindJobsPanel({ onResultsChanged }: { onResultsChanged: () => vo
   // Render must stay pure, so "now" is sampled whenever a poll result arrives.
   const [now, setNow] = useState(0);
   const lastStatus = useRef<string | null>(null);
+  // Held in a ref so an inline callback from the parent does not change `refresh` (and re-run the effects) every render.
+  const onChanged = useRef(onResultsChanged);
+  useEffect(() => { onChanged.current = onResultsChanged; });
 
   // Promise chaining (not async/await) so the mount effect below never sets state synchronously.
   const refresh = useCallback(
@@ -36,12 +41,12 @@ export function FindJobsPanel({ onResultsChanged }: { onResultsChanged: () => vo
           lastStatus.current = body.run?.status ?? null;
           setNow(Date.now());
           setRun(body.run);
-          if (previous && ACTIVE.has(previous) && body.run && !ACTIVE.has(body.run.status)) onResultsChanged();
+          if (previous && ACTIVE.has(previous) && body.run && !ACTIVE.has(body.run.status)) onChanged.current();
         })
         .catch(() => {
           // A missed poll is retried on the next tick.
         }),
-    [onResultsChanged]
+    []
   );
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -51,6 +56,20 @@ export function FindJobsPanel({ onResultsChanged }: { onResultsChanged: () => vo
     const timer = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(timer);
   }, [active, refresh]);
+
+  // A source that finished after the run ended reaches the list via the debounced re-match, so keep reloading the
+  // list for a while after a completed run that has late sources. Time is read in the timer, not during render.
+  const hasLate = run?.status === "completed" && run.sources.some((s) => s.state === "late");
+  const finishedAt = run?.finishedAt ?? null;
+  useEffect(() => {
+    if (!hasLate || !finishedAt) return;
+    const deadline = new Date(finishedAt).getTime() + LATE_WINDOW_MS;
+    const timer = setInterval(() => {
+      if (Date.now() > deadline) clearInterval(timer);
+      else onChanged.current();
+    }, LATE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [hasLate, finishedAt]);
 
   async function start() {
     setError(null);
