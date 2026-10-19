@@ -101,6 +101,7 @@ export async function runResumeOptimization(
     const requirements = await inUserContext((tx) =>
       ensureJobRequirements(tx, env, anthropicFor("job_requirements_extraction"), {
         id: job.id, title: job.title, descriptionText: job.descriptionText, descriptionHash: job.descriptionHash,
+        requirementsExtractedHash: job.requirementsExtractedHash,
       })
     );
     requirementsForPrompt = requirements.map((r) => ({

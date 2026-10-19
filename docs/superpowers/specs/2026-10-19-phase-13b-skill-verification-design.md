@@ -1,6 +1,6 @@
 # Phase 13b — Missing-Skill Verification — Design
 
-Status: spec approved 2026-10-19; plan next.
+Status: implemented on branch phase-13b-skill-verification (2026-10-19).
 Part of Phase 13 (user's 2026-10-19 refinement request), split by user choice into
 13a one-click discovery (merged) → 13b missing-skill verification (this spec) → 13c job-specific LaTeX resume
 (depends on 13b).
@@ -196,3 +196,12 @@ with 400.
 - The alias table only covers common names; other synonyms need "Same as…" by hand.
 - Gaps are listed only for the top `SKILL_GAP_TOP_N` matches and jobs whose requirements were extracted.
 - Phrase-shaped or "other"-typed requirements are never gaps (unchanged D104 limitation).
+
+## 13. Planning refinements (2026-10-19)
+
+- **R1 — Write routes are keyed by body / id, not by term in the path.** Terms like `ci/cd` or `c#` do not survive a path segment reliably. `PUT /api/skill-verifications` (body carries `termDisplay`; the server computes `term_key`) and `DELETE /api/skill-verifications/[id]` (uuid) replace the spec's `[termKey]` routes.
+- **R2 — A live alias is a catalog entry too.** `buildResumeSnapshot` adds `{ sourceType: "verified_skill", text: "<term> (same as <profile skill>)" }` for an alias whose profile skill still exists. Without it, the cover-letter and interview-prep gap checks (`computeGapTerms`, which only sees the catalog) would still treat an aliased term as missing.
+- **R3 — The requirements step runs after the matching job completes, not inside it.** It is fired from the worker's `completed` event (single-flight per user), so 13a's search run — which waits for matching to finish — is never delayed by up to 25 extraction calls.
+- **R4 — Every verified skill is rendered in the resume's Skills section** (selected ones first), not only those the optimizer selected — consistent with D82 (every profile item is rendered).
+- **R5 — E2E stops at the verification API and pages.** "Optimize resume → cites the verified fact" is pinned by a `runResumeOptimization` integration test with a fake Anthropic client (Task 5), because the E2E stand-in has no optimizer answer.
+- **R6 — The alias table has ~50 groups**, not ~60: only unambiguous equivalents (e.g. `tf`, `cv`, `dl` are left out).

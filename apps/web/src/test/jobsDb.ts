@@ -41,6 +41,7 @@ export async function wipeJobData(adminSql: postgres.Sql, userId: string): Promi
 export async function wipeMatchingData(adminSql: postgres.Sql, userId: string): Promise<void> {
   // Phase 11a: ai_calls rows (budget seeds and calls recorded by the routes under test).
   await adminSql`DELETE FROM ai_calls WHERE user_id = ${userId}`;
+  await adminSql`DELETE FROM skill_verifications WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM job_matches WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM matching_runs WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM search_runs WHERE user_id = ${userId}`;

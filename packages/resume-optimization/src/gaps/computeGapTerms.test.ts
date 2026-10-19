@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { EvidenceCatalogEntry } from "@ai-career/resume-optimization";
+import type { EvidenceCatalogEntry } from "../optimization/buildResumeSnapshot";
 import { computeGapTerms, containsTerm } from "./computeGapTerms";
 
 const req = (
@@ -63,6 +63,12 @@ describe("computeGapTerms", () => {
       [entry("Python")]
     );
     expect(gaps).toEqual([{ term: "Google Cloud Platform BigQuery", requirementId: "2" }]);
+  });
+});
+
+describe("computeGapTerms whitespace", () => {
+  it("does not report a term whose only difference is internal whitespace", () => {
+    expect(computeGapTerms([req("1", "Apache  Kafka")], [entry("Apache Kafka")])).toEqual([]);
   });
 });
 

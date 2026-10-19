@@ -18,3 +18,13 @@ export {
   runResumeOptimization, ResumeOptimizationError,
   type ResumeOptimizationErrorClass, type RunResumeOptimizationEnv, type RunResumeOptimizationOptions, type RunResumeOptimizationResult,
 } from "./pipeline/runResumeOptimization";
+export {
+  computeGapTerms, containsTerm, isGapCandidate, MAX_GAP_TERM_WORDS,
+  type GapTerm, type RequirementForGapDetection, type RequirementTermType,
+} from "./gaps/computeGapTerms";
+export { normalizeTermKey } from "./gaps/normalizeTermKey";
+export { ALIAS_GROUPS, aliasGroupOf } from "./gaps/aliases";
+export { computeSkillGaps, type SkillGap, type SkillGapState, type SkillVerificationForGaps } from "./gaps/computeSkillGaps";
+export {
+  selectTopMatchJobs, ensureTopMatchRequirements, type TopMatchJob, type TopMatchRequirementsResult,
+} from "./gaps/topMatchRequirements";

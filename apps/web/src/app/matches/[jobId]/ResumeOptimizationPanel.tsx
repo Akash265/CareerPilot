@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SKILL_GAPS_CHANGED_EVENT } from "../../skills/SkillAnswerForm";
 import { DOCUMENTS_CHANGED_EVENT, DownloadButtons } from "./DownloadButtons";
 
 interface SelectedBulletView {
@@ -53,6 +54,7 @@ export function ResumeOptimizationPanel({ jobId }: { jobId: string }) {
   const [state, setState] = useState<ListState>({ kind: "loading" });
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [unansweredCount, setUnansweredCount] = useState(0);
 
   // A promise chain (state is set inside callbacks), matching SourcesClient/CareerGoalClient: the React lint rule
   // react-hooks/set-state-in-effect rejects setState calls in an async function that an effect invokes directly.
@@ -70,6 +72,20 @@ export function ResumeOptimizationPanel({ jobId }: { jobId: string }) {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
+  // Phase 13b: a non-blocking reminder; any failure just hides it.
+  const loadGaps = () =>
+    fetch(`/api/skill-gaps/${encodeURIComponent(jobId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((view) => setUnansweredCount(view?.requirementsStatus === "ready" ? view.unanswered.length : 0))
+      .catch(() => setUnansweredCount(0));
+
+  useEffect(() => {
+    loadGaps();
+    window.addEventListener(SKILL_GAPS_CHANGED_EVENT, loadGaps);
+    return () => window.removeEventListener(SKILL_GAPS_CHANGED_EVENT, loadGaps);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
@@ -112,6 +128,12 @@ export function ResumeOptimizationPanel({ jobId }: { jobId: string }) {
         </button>
       </div>
       {generateError && <p role="alert" className="text-sm text-red-600">{generateError}</p>}
+      {unansweredCount > 0 && (
+        <p className="text-sm text-amber-700">
+          {unansweredCount} required {unansweredCount === 1 ? "skill is" : "skills are"} unanswered —{" "}
+          <a href="#skill-gaps" className="underline">answer them</a> so the resume can use them.
+        </p>
+      )}
 
       {state.optimizations.length > 1 && (
         <label className="text-sm">

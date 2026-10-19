@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { MatchesClient } from "./MatchesClient";
 
 export default function MatchesPage() {
@@ -5,7 +6,8 @@ export default function MatchesPage() {
     <main className="mx-auto max-w-4xl p-8">
       <h1 className="mb-2 text-2xl font-semibold">Matches</h1>
       <p className="mb-6 text-sm text-gray-600">
-        Jobs ranked against your confirmed career goal, with why each one scored the way it did.
+        Jobs ranked against your confirmed career goal, with why each one scored the way it did.{" "}
+        <Link href="/skills" className="underline">Verify the skills they require</Link>.
       </p>
       <MatchesClient />
     </main>

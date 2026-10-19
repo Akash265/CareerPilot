@@ -72,3 +72,8 @@ package it calls); the exact schema is the reference, this page is the map.
 | POST | `/api/automation-sessions` | jobs | Start a guarded-autofill session for a job (§18). |
 | GET | `/api/automation-sessions/[id]` | | One session with its field audit. |
 | POST | `/api/automation-sessions/[id]/cancel` | | Cancel a session. |
+| GET | `/api/skill-gaps` | | Phase 13b: `{ topN, unanswered: [{ termKey, termDisplay, suggestion, jobCount, jobs: [{ jobId, title, companyName }] }], answered: [verification], jobsWithoutRequirements, profileSkills }` for the top `SKILL_GAP_TOP_N` matches. |
+| GET | `/api/skill-gaps/[jobId]` | | `{ requirementsStatus: "ready" \| "missing", unanswered: [{ termKey, termDisplay, suggestion }], coveredCount, declinedCount, profileSkills }`; `404` for a malformed id or a job without a match. |
+| POST | `/api/skill-gaps/[jobId]/requirements` | ai | Extract (or reuse the cached) requirements for one job, then answer as the route above; `404` unknown job, `429 ai_budget_exceeded`, `502` when the extraction fails. |
+| PUT | `/api/skill-verifications` | | Answer one skill: `{ status: "have", termDisplay, evidence }` (evidence 1-300 characters), `{ status: "dont_have", termDisplay }` or `{ status: "alias", termDisplay, aliasSkillName }`; `termDisplay` and `aliasSkillName` 1-200 characters, unknown fields rejected. → `{ verification: { id, termKey, termDisplay, status, evidence, aliasSkillName, updatedAt } }`; `400` invalid JSON or body, `422` when the alias is not a current profile skill. The last answer for a term wins. |
+| DELETE | `/api/skill-verifications/[id]` | | Undo an answer: `204`; `404` for an unknown or malformed id. |

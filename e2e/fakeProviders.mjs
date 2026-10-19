@@ -11,6 +11,13 @@ const PORT = Number(process.env.PORT ?? 4012);
 const DIM = 1024;
 
 const TOOL_INPUTS = {
+  // Phase 13b: every job "requires" SQL (in the profile) and Kubernetes (not), so /skills has exactly one gap.
+  record_job_requirements: {
+    requirements: [
+      { termText: "SQL", termType: "skill", requirementLevel: "required", evidenceQuote: null },
+      { termText: "Kubernetes", termType: "tool", requirementLevel: "required", evidenceQuote: null },
+    ],
+  },
   record_career_goal_extraction: {
     targetRoles: ["Data Engineer"], seniority: null, locations: [], workMode: "remote", minExperienceYears: 2,
     employmentType: null, salaryFloorRaw: null, salaryTargetRaw: null, visaSponsorshipRequired: null,

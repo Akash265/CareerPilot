@@ -1,4 +1,4 @@
-import type { AppliedBullet } from "@ai-career/resume-optimization";
+import { normalizeTermKey, type AppliedBullet } from "@ai-career/resume-optimization";
 import type { DocumentBlock, DocumentModel } from "./types";
 import { certDates, contactLine, dateRange, present, type ResumeProfile } from "./resumeProfile";
 
@@ -35,7 +35,7 @@ function joinPresent(parts: (string | null)[]): string | null {
 
 /**
  * The resume document (Phase 7b design §4.2, D82): the full profile, with the optimizer's guard-applied
- * rewordings replacing their originals and ordered first. Education, certifications and skill names are
+ * rewordings replacing their originals and ordered first. Education, certifications, skill names and verified skill terms are
  * never reworded. rejectedClaims are never an input. No street address.
  */
 export function buildResumeModel(profile: ResumeProfile, applied: AppliedBullet[]): DocumentModel {
@@ -48,6 +48,7 @@ export function buildResumeModel(profile: ResumeProfile, applied: AppliedBullet[
     ...profile.certifications.map((c) => `certification:${c.id}`),
     ...profile.education.map((e) => `education:${e.id}`),
     ...profile.skills.map((s) => `skill:${s.id}`),
+    ...profile.verifiedSkills.map((v) => `verified_skill:${v.id}`),
   ]);
   for (const a of applied) {
     if (!knownIds.has(`${a.sourceType}:${a.sourceFactId}`)) {
@@ -108,10 +109,17 @@ export function buildResumeModel(profile: ResumeProfile, applied: AppliedBullet[
     }
   }
 
-  if (profile.skills.length > 0) {
+  if (profile.skills.length > 0 || profile.verifiedSkills.length > 0) {
     blocks.push({ type: "heading", text: "Skills" });
-    // Profile names only: the order follows the optimizer's selection, the text never does.
-    const ordered = selectedFirst(profile.skills, applied, "skill", (s) => s.name).map(({ item }) => item.name);
+    // Names only, never the optimizer's text: profile skills in selection order, then verified skills (Phase 13b, R4)
+    // in selection order, each list followed by its unselected items.
+    const profileNames = selectedFirst(profile.skills, applied, "skill", (s) => s.name).map(({ item }) => item.name);
+    const listed = new Set(profileNames.map(normalizeTermKey));
+    // A verified term that normalizes to a skill already listed is not rendered twice.
+    const verifiedNames = selectedFirst(profile.verifiedSkills, applied, "verified_skill", (v) => v.term)
+      .map(({ item }) => item.term)
+      .filter((term) => !listed.has(normalizeTermKey(term)));
+    const ordered = [...profileNames, ...verifiedNames];
     blocks.push({ type: "paragraph", text: ordered.join(", ") });
   }
 

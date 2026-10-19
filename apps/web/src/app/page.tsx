@@ -26,6 +26,9 @@ export default function Home() {
         <Link href="/matches" className="underline">
           5. Matches — see jobs ranked against your career goal
         </Link>
+        <Link href="/skills" className="underline">
+          5a. Verify skills — confirm the skills your top matches require
+        </Link>
         <Link href="/applications" className="underline">
           6. Applications — track what you&apos;ve applied to
         </Link>

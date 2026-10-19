@@ -65,6 +65,10 @@ export const jobs = pgTable("jobs", {
   embeddingContentHash: text("embedding_content_hash"),
   embeddingModel: text("embedding_model"),
 
+  // D205: the descriptionHash the last requirements extraction ran against, set even when it found
+  // zero requirements (no job_requirements rows then), so such a job is not re-extracted forever.
+  requirementsExtractedHash: text("requirements_extracted_hash"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

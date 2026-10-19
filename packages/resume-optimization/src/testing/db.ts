@@ -46,6 +46,7 @@ export async function openTestDb(): Promise<TestDb> {
 
 /** Deletes in FK-dependency order: children before parents. */
 export async function wipeUser(adminSql: postgres.Sql, userId: string): Promise<void> {
+  await adminSql`DELETE FROM skill_verifications WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM ats_evaluations WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM resume_optimizations WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM job_requirements WHERE user_id = ${userId}`;

@@ -96,6 +96,26 @@ describe("runResumeOptimization", () => {
     expect(stored).toHaveLength(1);
   });
 
+  it("accepts a selected bullet that cites a verified_skill evidence entry", async () => {
+    const { jobId } = await seedFixture();
+    await testDb.adminSql`
+      INSERT INTO skill_verifications (user_id, term_key, term_display, status, evidence)
+      VALUES (${USER}, 'kubernetes', 'Kubernetes', 'have', 'Ran our staging cluster for a year.')`;
+    const [v] = await testDb.adminSql`SELECT id FROM skill_verifications WHERE user_id = ${USER}`;
+    const verificationId = v.id as string;
+    vi.mocked(optimizeResume).mockResolvedValue({
+      selectedBullets: [{ sourceFactId: verificationId, optimizedText: "Kubernetes: Ran our staging cluster for a year.", changeType: "unchanged", justification: "x" }],
+      addedTerms: [], unsupportedClaimsDetected: [], requiresReview: false,
+    });
+
+    const result = await runResumeOptimization(testDb.db, { userId: USER, jobId, anthropicFor: FAKE_FOR, usageSink: NoopUsageSink, env: ENV });
+
+    expect(result.optimization.selectedBullets).toEqual([
+      expect.objectContaining({ sourceFactId: verificationId, sourceType: "verified_skill", originalText: "Kubernetes: Ran our staging cluster for a year." }),
+    ]);
+    expect(result.optimization.rejectedClaims).toEqual([]);
+  });
+
   // Also a regression test for the pg_advisory_xact_lock added to the final transaction's
   // version-allocation query: two sequential calls must still get versions 1 and 2.
   it("increments version on a second call for the same job", async () => {

@@ -69,6 +69,7 @@ export async function prepareApplicationContext(db: DbClient, opts: PrepareAppli
     requirements = await inUserContext((tx) =>
       ensureJobRequirements(tx, env, anthropicFor("job_requirements_extraction"), {
         id: job.id, title: job.title, descriptionText: job.descriptionText, descriptionHash: job.descriptionHash,
+        requirementsExtractedHash: job.requirementsExtractedHash,
       })
     );
   } catch (error) {

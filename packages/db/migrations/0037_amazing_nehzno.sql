@@ -1,0 +1,1 @@
+ALTER TABLE "jobs" ADD COLUMN "requirements_extracted_hash" text;

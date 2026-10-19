@@ -4,13 +4,15 @@ import type { Env } from "@ai-career/config";
 import type { MessagesClient } from "@ai-career/ai";
 import { extractJobRequirements } from "./extractJobRequirements";
 
-const { jobRequirements } = schema;
+const { jobRequirements, jobs } = schema;
 
 export interface JobForRequirements {
   id: string;
   title: string;
   descriptionText: string;
   descriptionHash: string;
+  /** jobs.requirements_extracted_hash: set after any successful extraction, even one with zero requirements (D205). */
+  requirementsExtractedHash?: string | null;
 }
 
 /**
@@ -26,12 +28,15 @@ export async function ensureJobRequirements(
   job: JobForRequirements
 ): Promise<(typeof jobRequirements.$inferSelect)[]> {
   const existing = await tx.select().from(jobRequirements).where(eq(jobRequirements.jobId, job.id));
-  const isFresh = existing.length > 0 && existing.every((r) => r.extractionSourceDescriptionHash === job.descriptionHash);
-  if (isFresh) return existing;
+  const rowsFresh = existing.length > 0 && existing.every((r) => r.extractionSourceDescriptionHash === job.descriptionHash);
+  // D205: a zero-requirement extraction leaves no rows, so the job's own hash column records it.
+  const markedFresh = job.requirementsExtractedHash != null && job.requirementsExtractedHash === job.descriptionHash;
+  if (rowsFresh || (markedFresh && existing.length === 0)) return existing;
 
   const draft = await extractJobRequirements(anthropicClient, env, job.title, job.descriptionText);
 
   await tx.delete(jobRequirements).where(eq(jobRequirements.jobId, job.id));
+  await tx.update(jobs).set({ requirementsExtractedHash: job.descriptionHash }).where(eq(jobs.id, job.id));
   if (draft.requirements.length === 0) return [];
 
   return tx

@@ -82,4 +82,29 @@ describe("buildResumeSnapshot", () => {
 
     expect(after.contentHash).not.toBe(before.contentHash);
   });
+
+  it("adds 'have' answers and live aliases as verified_skill evidence, never 'dont_have' or stale aliases", async () => {
+    await testDb.adminSql`INSERT INTO skills (user_id, name) VALUES (${USER}, 'Postgres')`;
+    await testDb.adminSql`
+      INSERT INTO skill_verifications (user_id, term_key, term_display, status, evidence, alias_skill_name) VALUES
+        (${USER}, 'kubernetes', 'Kubernetes', 'have', 'Ran our staging cluster for a year.', NULL),
+        (${USER}, 'postgresql', 'PostgreSQL', 'alias', NULL, 'Postgres'),
+        (${USER}, 'mysql', 'MySQL', 'alias', NULL, 'MariaDB'),
+        (${USER}, 'dbt', 'dbt', 'dont_have', NULL, NULL)`;
+
+    const { catalog } = await withUserContext(testDb.db, USER, (tx) => buildResumeSnapshot(tx));
+
+    expect(catalog.filter((e) => e.sourceType === "verified_skill")).toEqual([
+      { sourceFactId: expect.any(String), sourceType: "verified_skill", text: "Kubernetes: Ran our staging cluster for a year.", context: "Verified by you" },
+      { sourceFactId: expect.any(String), sourceType: "verified_skill", text: "PostgreSQL (same as Postgres)", context: "Verified by you" },
+    ]);
+  });
+
+  it("changes the content hash when an answer is added", async () => {
+    const before = await withUserContext(testDb.db, USER, (tx) => buildResumeSnapshot(tx));
+    await testDb.adminSql`
+      INSERT INTO skill_verifications (user_id, term_key, term_display, status, evidence) VALUES (${USER}, 'rust', 'Rust', 'have', 'Wrote a CLI.')`;
+    const after = await withUserContext(testDb.db, USER, (tx) => buildResumeSnapshot(tx));
+    expect(after.contentHash).not.toBe(before.contentHash);
+  });
 });

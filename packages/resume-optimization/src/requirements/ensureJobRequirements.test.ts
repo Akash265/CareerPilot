@@ -99,4 +99,23 @@ describe("ensureJobRequirements", () => {
     );
     expect(result).toEqual([]);
   });
+
+  it("does not re-extract a zero-requirement job, but re-extracts when the description hash changes (D205)", async () => {
+    vi.mocked(extractJobRequirements).mockResolvedValue({ requirements: [] });
+    const jobId = await seedJob("hash-1");
+    const readJob = async (hash: string) => {
+      const [row] = await withUserContext(testDb.db, USER, (tx) =>
+        tx.select({ requirementsExtractedHash: schema.jobs.requirementsExtractedHash }).from(schema.jobs).where(eq(schema.jobs.id, jobId)));
+      return { id: jobId, title: "Engineer", descriptionText: "text", descriptionHash: hash, requirementsExtractedHash: row.requirementsExtractedHash };
+    };
+    await withUserContext(testDb.db, USER, async (tx) => ensureJobRequirements(tx, ENV, FAKE_CLIENT, await readJob("hash-1")));
+    expect(extractJobRequirements).toHaveBeenCalledTimes(1);
+
+    const second = await withUserContext(testDb.db, USER, async (tx) => ensureJobRequirements(tx, ENV, FAKE_CLIENT, await readJob("hash-1")));
+    expect(second).toEqual([]);
+    expect(extractJobRequirements).toHaveBeenCalledTimes(1);
+
+    await withUserContext(testDb.db, USER, async (tx) => ensureJobRequirements(tx, ENV, FAKE_CLIENT, await readJob("hash-2")));
+    expect(extractJobRequirements).toHaveBeenCalledTimes(2);
+  });
 });
