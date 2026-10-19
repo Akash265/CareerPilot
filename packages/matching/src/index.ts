@@ -20,3 +20,4 @@ export * from "./pipeline/upsertMatch";
 export * from "./explanation/explanationStaleness";
 export * from "./pipeline/runMatching";
 export * from "./queue";
+export * from "./enqueue";

@@ -1,16 +1,9 @@
 import IORedis from "ioredis";
 import { Queue } from "bullmq";
-import {
-  MATCHING_JOB_NAME,
-  MATCHING_JOB_OPTIONS,
-  MATCHING_QUEUE_NAME,
-  matchingJobId,
-  type MatchingJobData,
-} from "@ai-career/matching";
+import { MATCHING_QUEUE_NAME, pushMatching, type MatchingJobData } from "@ai-career/matching";
 
 export type EnqueueResult = "enqueued" | "already_queued";
 
-const PENDING_STATES = new Set(["waiting", "active", "delayed", "prioritized", "waiting-children"]);
 const ENQUEUE_TIMEOUT_MS = 5000;
 const CLOSE_TIMEOUT_MS = 1000;
 
@@ -66,8 +59,7 @@ export async function enqueueMatching(
 }
 
 async function push(queue: Queue<MatchingJobData>, userId: string): Promise<EnqueueResult> {
-  const existing = await queue.getJob(matchingJobId(userId));
-  if (existing && PENDING_STATES.has(await existing.getState())) return "already_queued";
-  await queue.add(MATCHING_JOB_NAME, { userId }, { ...MATCHING_JOB_OPTIONS, jobId: matchingJobId(userId) });
-  return "enqueued";
+  // A click wants a run now: promote a debounced one; a run in progress counts as already queued (Phase 13a).
+  const result = await pushMatching(queue, userId, { promoteDelayed: true });
+  return result === "enqueued" ? "enqueued" : "already_queued";
 }
