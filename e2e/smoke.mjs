@@ -205,7 +205,7 @@ export async function runSmoke(ctx) {
       !((await discovery())?.boards?.recent ?? []).some((b) => b.slug === "evil"));
     const appliedJobId = best.jobId;
     const ranked = await json(await api.get(`${ctx.base}/api/matches?eligible=true`));
-    await check("the job already applied to is not in the ranked results", !ranked?.matches?.some((m) => m.jobId === appliedJobId), ranked);
+    await check("the job already applied to is not in the ranked results", Array.isArray(ranked?.matches) && ranked.matches.length >= 1 && !ranked.matches.some((m) => m.jobId === appliedJobId), ranked);
     await page.goto(`${ctx.base}/matches`);
     await check("/matches shows the Find matching jobs button", await visible(page.getByRole("button", { name: "Find matching jobs" })));
 

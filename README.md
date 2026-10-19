@@ -39,8 +39,11 @@ rationale behind each architectural choice.
    it is not running, a click stays `queued` and the page says so after 30 s.
 8. Start the matching worker (needed for "Find Matches" runs):
    `pnpm --filter @ai-career/matching-worker start`. Also a plain Node
-   process with no scheduler -- matching only ever runs when the `/matches`
-   page's "Find Matches" button enqueues it. Run exactly one worker process
+   process with no scheduler. Matching runs when "Find matching jobs" (after
+   refreshing sources) or "Find Matches" on `/matches` requests it, and an
+   ingestion run that changed jobs triggers a debounced re-match
+   (`MATCH_DEBOUNCE_SECONDS`, with a follow-up flag if a run is in progress);
+   this worker must be running for either. Run exactly one worker process
    (concurrency is 1 either way).
 9. Start the maintenance worker (needed for the Phase 9 retention sweep to
    run on its own): `pnpm --filter @ai-career/maintenance-worker start`, or

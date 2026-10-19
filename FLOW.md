@@ -1781,8 +1781,9 @@ validatePendingBoards (discover.ts) → checkCompany (companyCheck.ts) for name_
 ### 20c. Re-match outside a click
 
 ```
-ingest worker afterRun (main.ts) → afterRunRematch (rematch.ts): changed jobs and no queued/running search run
-  → requestRematchSafely (a failure is logged rematch_failed and never skips board discovery)
+ingest worker afterRun (main.ts) → requestRematchSafely(check = afterRunRematch, rematch = requestRematch)   rematch.ts
+  (a failure is logged rematch_failed and never skips board discovery)
+  check afterRunRematch (rematch.ts): changed jobs and no queued/running search run
   → requestRematch (packages/matching/src/enqueue.ts): delayed MATCH_DEBOUNCE_SECONDS; a run in progress → Redis flag
 matching worker completed / final failure (exhausted attempts or UnrecoverableError) → createFollowUp (followUp.ts): takeRematchFlag → pushMatching
 ```
