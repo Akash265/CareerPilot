@@ -30,7 +30,7 @@ async function job(sourceId: string, name: string, daysAgo = 1) {
   await t.adminSql`INSERT INTO job_postings (user_id, job_id, source_id, external_id, fingerprint, content_hash, normalized, first_seen_at, last_seen_at)
                    VALUES (${USER}, ${row.id}, ${sourceId}, ${name}, ${name}, ${name}, '{}'::jsonb, ${seen}::timestamptz, ${seen}::timestamptz)`;
 }
-const probe = (maxNames = 30) => withUserContext(t.db, USER, (tx) => probeEmployerNames(tx, { goalId: null, now: NOW, maxNames }));
+const probe = (maxNames = 30) => withUserContext(t.db, USER, (tx) => probeEmployerNames(tx, { now: NOW, maxNames }));
 const boards = () => t.adminSql`SELECT kind, slug, found_via, expected_company FROM discovered_boards WHERE user_id = ${USER} ORDER BY kind, slug`;
 
 describe("probeEmployerNames (Phase 13a)", () => {

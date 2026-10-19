@@ -117,7 +117,7 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
   // 3. Seed: name probing, then the web search when due. Each step is isolated.
   const seeding: SearchRunSeeding = {};
   try {
-    const probe = await inUser((tx) => probeEmployerNames(tx, { goalId: goal.constraintsId, now: now(), maxNames: deps.env.DISCOVERY_PROBE_MAX_NAMES }));
+    const probe = await inUser((tx) => probeEmployerNames(tx, { now: now(), maxNames: deps.env.DISCOVERY_PROBE_MAX_NAMES }));
     seeding.probe = { state: "ran", ...probe };
   } catch {
     seeding.probe = { state: "failed", names: 0, boardsQueued: 0, reason: "unknown" };

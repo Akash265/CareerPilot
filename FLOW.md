@@ -1757,8 +1757,10 @@ setInterval 60 s → reconcile schedules + validateBoards() (picks up pasted boa
     no active confirmed goal → 409 no_active_goal → link to /career-goal
     failStalled (no heartbeat 10 min → failed/stalled); a run in progress → 200 { run } (idempotent)
     insert search_runs (queued) → enqueueSearchRun (queue "search-runs", jobId = run id) → 202 { run }
-    queue down → run failed/queue_unavailable → 503
+    queue down → failQueued (only while still queued: a run the coordinator already claimed is left alone) → 503
 FindJobsPanel polls GET /api/search-runs/latest every 3 s while queued/running/matching; on finish → MatchesClient.load()
+  each loaded run → onRunLoaded → MatchesClient hides its own matching-run alert when the run failed with
+  matching_failed / matching_timeout (explainsMatchingFailure, lib/searchRuns/format.ts) -- one alert, the panel's
   a run that ended with late sources → results reload every 30 s for 10 minutes after it finished (their jobs arrive via the 20c re-match)
 ```
 
@@ -1767,14 +1769,20 @@ FindJobsPanel polls GET /api/search-runs/latest every 3 s while queued/running/m
 ```
 search-runs Worker (searchRunWorker.ts, concurrency 1) → coordinateSearchRun   packages/ingestion/src/searchRun/coordinateSearchRun.ts
  1. claim queued → running; re-check goal + consent (else failed with the code)
-    any unexpected error after the claim → run failed/coordinator_error, error rethrown (no phantom run)
+    every later write is status-guarded (WHERE id AND status IN running/matching); a write that updates no row
+    (the web marked the run stalled/failed) stops here: nothing more is written, matching is not requested,
+    the row's current status is returned
+    any unexpected error after the claim → run failed/coordinator_error (guarded too), error rethrown (no phantom run)
  2. planSourceRefresh (plan.ts): enabled, consented, non-upload sources → reused | queued → ingest queue (fixed job id)
- 3. probeEmployerNames → pending name_probe boards; webSearchDue → searchWebForBoards (anthropicFor("discovery_web_search"))
+ 3. probeEmployerNames → pending name_probe boards; webSearchDue → searchWebForBoards (anthropicFor("discovery_web_search"),
+    120 s request timeout WEB_SEARCH_TIMEOUT_MS)
     → pending web_search boards, stamp discovery_settings.last_web_search_*; startValidation() (background validateBoards)
  4. every 2 s: heartbeat; applyRunUpdates from the latest ingestion_runs row per queued source that started >= run start,
     or is still in flight (finished_at IS NULL), or finished >= run start; deadline → markLate
- 5. status matching → requestMatching (pushMatching, promote delayed; "running" → set re-match flag)
-    → wait for a matching_runs row started after the request: completed | failed (matching_failed) | timeout (matching_timeout)
+ 5. status matching → requestMatching (pushMatching, promote delayed; then flagRematchIfRunning)
+    → every 2 s read all matching_runs started since the request: any completed → completed;
+      at the match deadline: latest failed → matching_failed (a failed attempt may still be retried, so keep waiting
+      until then), else matching_timeout
 validatePendingBoards (discover.ts) → checkCompany (companyCheck.ts) for name_probe/web_search boards
 ```
 
@@ -1784,6 +1792,9 @@ validatePendingBoards (discover.ts) → checkCompany (companyCheck.ts) for name_
 ingest worker afterRun (main.ts) → requestRematchSafely(check = afterRunRematch, rematch = requestRematch)   rematch.ts
   (a failure is logged rematch_failed and never skips board discovery)
   check afterRunRematch (rematch.ts): changed jobs and no queued/running search run
-  → requestRematch (packages/matching/src/enqueue.ts): delayed MATCH_DEBOUNCE_SECONDS; a run in progress → Redis flag
+  → requestRematch (packages/matching/src/enqueue.ts): delayed MATCH_DEBOUNCE_SECONDS; then flagRematchIfRunning
+flagRematchIfRunning (enqueue.ts; also the coordinator's requestMatching): result "running" → SET flag EX 3600
+  (REMATCH_FLAG_TTL_SECONDS) → re-check queue.getJob(matching-<user>): gone (the run finished meanwhile) →
+  takeRematchFlag → if taken, pushMatching now (never both this and the follow-up)
 matching worker completed / final failure (exhausted attempts or UnrecoverableError) → createFollowUp (followUp.ts): takeRematchFlag → pushMatching
 ```

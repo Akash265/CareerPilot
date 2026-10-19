@@ -15,7 +15,7 @@ const LOOKBACK_DAYS = 14;
  * matched the goal's roles. A (kind, slug) already recorded -- even rejected -- is never inserted again.
  */
 export async function probeEmployerNames(
-  tx: DbClient, opts: { goalId: string | null; now: Date; maxNames: number },
+  tx: DbClient, opts: { now: Date; maxNames: number },
 ): Promise<{ names: number; boardsQueued: number }> {
   const [settings] = await tx.select().from(discoverySettings).limit(1);
   if (!settings?.consentedAt || !settings.autoDiscover || opts.maxNames <= 0) return { names: 0, boardsQueued: 0 };

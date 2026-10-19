@@ -234,3 +234,20 @@ created. Boards from posting links/paste are unchanged.
     finished.
 15. Search-run types are read through the `schema` namespace of @ai-career/db (the package exports tables as one
     namespace).
+
+Final-review fixes (D198):
+
+16. Every coordinator write after the claim, including the `coordinator_error` write, only updates a run that is
+    `running`/`matching`; the first write that updates no row stops the coordinator (no further writes, no matching
+    request) and returns the row's current status. `failQueued` only fails a `queued` run.
+17. The web search call has a 120 s request timeout (`WEB_SEARCH_TIMEOUT_MS`).
+18. (Amends §3.3 step 5) The match wait reads every matching run started since the request: any completed one
+    completes the run; `matching_failed` only at the match deadline with a failed latest run (a retry may follow);
+    otherwise `matching_timeout`. The timeout text asks the user to start the matching worker and click again.
+19. When the latest search run failed with `matching_failed`/`matching_timeout`, `/matches` shows only the panel's
+    alert, not its own "last matching run failed" one.
+20. (D193) `flagRematchIfRunning` (TTL `REMATCH_FLAG_TTL_SECONDS` = 3600) is shared by `requestRematch` and the
+    coordinator; after setting the flag it re-checks the matching job and, if the run already finished, takes the
+    flag back and queues a run now.
+21. (D196) The Sources page shows each recent board's origin and reject reason in plain words.
+22. `probeEmployerNames` has no `goalId` option.
