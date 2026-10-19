@@ -33,6 +33,10 @@ Each row is one `operation` label as recorded in `ai_calls` and shown on `/usage
 
 Embeddings are called through `embedTexts` (`packages/ai/src/embeddings.ts`): up to 3 attempts on network errors, 429 and 5xx, honouring `retry-after`. `VOYAGE_API_BASE` overrides the endpoint (the E2E suite points it at a local stand-in, [D183](../DECISIONS.md)).
 
+## Skill verification (Phase 13b)
+
+No new prompt or operation. The user can confirm a missing required skill ("I have it" with an evidence sentence, "same as" a profile skill, or "I don't have it"); a confirmed skill enters the evidence catalog as a `verified_skill` entry, so every existing citation guard accepts it without change. One sentence was added to the resume optimizer's prompt saying such entries are the candidate's own confirmation. Requirements extraction (`job_requirements_extraction`, cached by description hash) now also runs after each matching run for the top `SKILL_GAP_TOP_N` matches, so it appears on `/usage` earlier than before; a budget block stops that step and never fails matching. The evidence text is user-written and untrusted: it travels inside the catalog under the same tagged-data rule as other profile evidence, and is never logged. Alias suggestions are a fixed table, not a model call ([D199](../DECISIONS.md)-[D204](../DECISIONS.md)).
+
 ## Prompts
 
 Prompts are code: each lives next to its call in the files above, beside the tool's JSON schema and the Zod schema that validates it, and changes go through review and the evals below. There is no separate prompt registry or version field; a prompt change is a commit.

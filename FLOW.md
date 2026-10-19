@@ -1798,3 +1798,55 @@ flagRematchIfRunning (enqueue.ts; also the coordinator's requestMatching): resul
   takeRematchFlag → if taken, pushMatching now (never both this and the follow-up)
 matching worker completed / final failure (exhausted attempts or UnrecoverableError) → createFollowUp (followUp.ts): takeRematchFlag → pushMatching
 ```
+
+## 21. Phase 13b — Missing-Skill Verification
+
+### 21a. After matching (process-driven)
+
+```
+matching worker "completed" event (services/matching-worker/src/main.ts)
+  → refreshRequirements = createRequirementsRefresh (requirementsRefresh.ts; single-flight per user,
+    a request during a pass schedules exactly one more; never rejects, errors → requirements_refresh_failed)
+  → ensureTopMatchRequirements (packages/resume-optimization/src/gaps/topMatchRequirements.ts)
+     ├─ selectTopMatchJobs: eligible matches of open jobs by overall_score DESC (ties by job id), limit SKILL_GAP_TOP_N
+     └─ per job, own withUserContext transaction: ensureJobRequirements (hash cache hit = no AI call)
+        AiBudgetExceededError → stop the step (budgetStopped); any other error → skipped, requirements_failed logged by job id
+  → log requirements_checked { jobs, failed, budgetStopped }
+```
+
+### 21b. Reading gaps (request-driven)
+
+```
+GET /api/skill-gaps → lib/skillGaps/loadSkillGaps.ts loadSkillGapsOverview(tx, env.SKILL_GAP_TOP_N)
+  ├─ loadAnswerContext: buildResumeSnapshot (catalog incl. verified_skill) + skill_verifications + skills names
+  ├─ selectTopMatchJobs + job_requirements; freshRequirements keeps a job only if every row's
+  │  extraction_source_description_hash = jobs.description_hash (else counted in jobsWithoutRequirements)
+  └─ computeSkillGaps per job (gaps/computeSkillGaps.ts) → unanswered grouped by term_key, jobCount desc
+GET /api/skill-gaps/[jobId] → loadJobSkillGaps (any job with a match row; 404 otherwise)
+POST /api/skill-gaps/[jobId]/requirements (rate limit "ai")
+  → ensureJobRequirements(anthropicFor("job_requirements_extraction")) → loadJobSkillGaps
+  (AiBudgetExceededError → 429; Anthropic.APIError / JobRequirementExtractionValidationError → 502)
+```
+
+### 21c. Answering (request-driven)
+
+```
+SkillAnswerForm (app/skills; also SkillGapsPanel on /matches/[jobId])
+  → PUT /api/skill-verifications → readJsonBody → SkillVerificationBodySchema (verificationBody.ts)
+  → saveVerification (lib/skillGaps/saveVerification.ts): term_key = normalizeTermKey(termDisplay);
+    alias must name a current profile skill (else 422); upsert on (user_id, term_key), last answer wins
+  → SKILL_GAPS_CHANGED_EVENT → /skills and the job panel reload
+Undo (SkillsClient) → DELETE /api/skill-verifications/[id] → row deleted (404 if unknown) → same event
+```
+
+### 21d. Where answers are used
+
+```
+buildResumeSnapshot (packages/resume-optimization/src/optimization/buildResumeSnapshot.ts) → verified_skill catalog entries
+  ("have": "<term>: <evidence>"; alias whose profile skill still exists: "<term> (same as <skill>)")
+  → runResumeOptimization / optimizeResume (prompt: verified_skill entries are the candidate's own confirmation)
+  → applyDeterministicGuard (unchanged: checks catalog ids)
+  → cover letter / interview prep: computeGapTerms haystack is the catalog, so a verified term is no longer a gap
+document-export: loadResumeProfile.verifiedSkills (have + live alias rows)
+  → buildResumeModel Skills section: profile skills, then verified terms (selected first, every one rendered)
+```

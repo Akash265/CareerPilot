@@ -1444,4 +1444,39 @@ Minor cleanups: `probeEmployerNames` lost its unused `goalId` option.
 **Why:** the stall rule and the coordinator could both decide a run's end; only one may. A retry that succeeds must not be reported as a failure.
 **What it affects:** `packages/ingestion/src/searchRun/{coordinateSearchRun,webSearchBoards,probeEmployerNames}.ts`, `apps/web/src/lib/searchRuns/{searchRuns,format}.ts`, `apps/web/src/app/matches/{FindJobsPanel,MatchesClient}.tsx`, `packages/matching/src/enqueue.ts`, `services/job-ingestion/src/main.ts`, `apps/web/src/lib/discovery/discovery.ts`, `apps/web/src/app/sources/DiscoveryPanel.tsx`.
 
+### D199. Phase 13b: verified skills live in their own table
+**Decision:** answers are rows of `skill_verifications` (migration for this phase; RLS `user_isolation`), one per user and normalized term (`term_key` = `normalizeTermKey(term)`, unique with `user_id`); `status` is `have` (with an evidence sentence), `dont_have`, or `alias` (by profile skill *name*, spelling stored).
+**Alternatives considered:** writing the skill into `skills` (`saveProfile` rewrites that table on every profile save, so the answer would vanish); storing answers per job (the same question would be asked once per job).
+**Why:** an answer survives profile edits and applies to every job; an alias stored by name is checked against the live profile each time, so a renamed or removed skill makes the alias stale instead of silently wrong.
+**What it affects:** `packages/db` (schema, migration), `apps/web/src/lib/skillGaps/saveVerification.ts`.
+
+### D200. Phase 13b: "I have it" needs evidence and becomes a `verified_skill` catalog entry
+**Decision:** a `have` answer requires 1-300 characters of evidence (user's choice B) and `buildResumeSnapshot` adds `{ sourceType: "verified_skill", text: "<term>: <evidence>", context: "Verified by you" }`. A live alias adds `"<term> (same as <profile skill>)"` (R2); an alias whose profile skill is gone adds nothing. The optimizer prompt gained one sentence saying such entries are the candidate's own confirmation.
+**Alternatives considered:** a bare checkbox (nothing for the optimizer to cite, and nothing the user must stand behind); a separate guard for verified skills.
+**Why:** the evidence catalog is the single source for every guard (D60/D61), so no guard changed: the optimizer, cover letter and interview prep can cite a verified skill exactly like profile evidence, and `computeGapTerms` (which only sees the catalog) stops listing it as missing. The evidence is user-written text and stays untrusted data inside the catalog.
+**What it affects:** `packages/resume-optimization/src/optimization/{buildResumeSnapshot,optimizeResume}.ts`.
+
+### D201. Phase 13b: gap detection moved to resume-optimization; `computeSkillGaps`
+**Decision:** `computeGapTerms` and the candidate rule (D104) moved from application-package to `packages/resume-optimization/src/gaps/` (application-package re-exports them), next to the new `computeSkillGaps(requirements, catalog, verifications, profileSkillNames)`. It groups candidates by term key and classifies each: covered (user said "have", a live alias, or profile text contains it), declined ("dont_have"), unanswered (the rest, with a suggestion). Profile text beats "dont_have".
+**Alternatives considered:** leaving the function in application-package (resume-optimization would depend on it; the web page needs it without the application package).
+**Why:** one boundary-aware rule decides coverage everywhere; a user who later adds the skill to the profile no longer sees a stale "declined".
+**What it affects:** `packages/resume-optimization/src/gaps/*`, `packages/application-package/src/interviewPrep/computeGapTerms.ts`.
+
+### D202. Phase 13b: deterministic alias suggestions only
+**Decision:** a fixed table of about 50 unambiguous equivalence groups (`gaps/aliases.ts`; R6: ambiguous ones such as `tf`, `cv`, `dl` are left out) proposes a profile skill for an unanswered term. A suggestion pre-selects "Same as..." in the form but never covers the term; only the user's answer does.
+**Alternatives considered:** an AI suggester (cost, a new prompt and eval, and a model could confidently pair unrelated skills) -- deferred.
+**Why:** the user chose no new model calls for this phase; unambiguous groups give no wrong suggestions. Other synonyms are typed by hand via "Same as...".
+**What it affects:** `packages/resume-optimization/src/gaps/{aliases,computeSkillGaps}.ts`.
+
+### D203. Phase 13b: requirements for the top N after matching, outside the job
+**Decision:** the matching worker's `completed` event calls `createRequirementsRefresh` (single-flight per user; a request during a pass schedules exactly one more), which runs `ensureTopMatchRequirements` over the top `SKILL_GAP_TOP_N` (default 25) open, eligible matches by score. One transaction per job; a cache hit costs no AI call; a budget error stops the step; any other error is skipped and logged by job id; nothing here can fail matching.
+**Alternatives considered:** extracting inside the matching job (a 13a search run waits on matching and would be delayed by up to 25 calls -- R3); extracting on page open (slow first load).
+**Why:** `/skills` can list gaps without making the user wait, and the same cached `job_requirements` serve the resume optimizer later.
+**What it affects:** `services/matching-worker/src/{main,requirementsRefresh}.ts`, `packages/resume-optimization/src/gaps/topMatchRequirements.ts`, `packages/config` (`SKILL_GAP_TOP_N`).
+
+### D204. Phase 13b: answer routes keyed by body / id; every verified skill rendered in Skills
+**Decision:** `PUT /api/skill-verifications` takes the term in the body (the server derives `term_key`) and `DELETE /api/skill-verifications/[id]` takes the row's uuid (R1: terms such as `ci/cd` or `c#` do not survive a path segment). A request body that is not valid JSON gets `readJsonBody`'s own 400. `buildResumeModel` renders every verified skill in the resume's Skills section, the selected ones first (R4, consistent with D82). On `/skills` the answer form seeds "Same as..." from the suggestion only when it is a current profile skill, an undo that fails shows "Could not undo your answer.", and the edit form passes no suggestion. `apps/web` gained a direct `@anthropic-ai/sdk` dependency for `Anthropic.APIError` in the requirements route.
+**Why:** the user said these are facts about themselves, so none may be silently dropped from the resume; a path-free key avoids encoding bugs.
+**What it affects:** `apps/web/src/app/api/skill-{verifications,gaps}/**`, `apps/web/src/app/skills/*`, `packages/document-export/src/{model/buildResumeModel,pipeline/loadResumeProfile}.ts`.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
