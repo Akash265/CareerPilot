@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { asc } from "drizzle-orm";
 import { schema, type DbClient } from "@ai-career/db";
+import { normalizeTermKey } from "../gaps/normalizeTermKey";
 
-const { workExperiences, workExperienceBullets, achievements, projects, certifications, education, skills } = schema;
+const { workExperiences, workExperienceBullets, achievements, projects, certifications, education, skills, skillVerifications } = schema;
+
 
 export type EvidenceSourceType =
-  | "work_experience_bullet" | "achievement" | "project" | "certification" | "education" | "skill";
+  | "work_experience_bullet" | "achievement" | "project" | "certification" | "education" | "skill" | "verified_skill";
 
 export interface EvidenceCatalogEntry {
   sourceFactId: string;
@@ -29,7 +31,7 @@ function stableStringifyCatalog(entries: EvidenceCatalogEntry[]): string {
 /**
  * Builds the flat evidence catalog the optimizer may select/reword from (design doc §4) directly
  * from the user's structured profile tables -- not from profile_facts -- so every sourceFactId
- * applyDeterministicGuard (Task 6) checks is a real row id in one of these six tables, not an
+ * applyDeterministicGuard (Task 6) checks is a real row id in one of the six profile tables plus skill_verifications (Phase 13b), not an
  * indirection through another cache (D60). Order follows each of the six tables' own displayOrder
  * column, matching the order a resume would actually present them in. (A tied displayOrder, e.g.
  * the common default of 0, leaves Postgres free to return those rows in any order -- this only
@@ -37,7 +39,7 @@ function stableStringifyCatalog(entries: EvidenceCatalogEntry[]): string {
  * sourceFactId before hashing.)
  */
 export async function buildResumeSnapshot(tx: DbClient): Promise<ResumeSnapshot> {
-  const [expRows, bulletRows, achievementRows, projectRows, certRows, eduRows, skillRows] = await Promise.all([
+  const [expRows, bulletRows, achievementRows, projectRows, certRows, eduRows, skillRows, verificationRows] = await Promise.all([
     tx.select().from(workExperiences).orderBy(asc(workExperiences.displayOrder)),
     tx.select().from(workExperienceBullets).orderBy(asc(workExperienceBullets.displayOrder)),
     tx.select().from(achievements).orderBy(asc(achievements.displayOrder)),
@@ -45,6 +47,7 @@ export async function buildResumeSnapshot(tx: DbClient): Promise<ResumeSnapshot>
     tx.select().from(certifications).orderBy(asc(certifications.displayOrder)),
     tx.select().from(education).orderBy(asc(education.displayOrder)),
     tx.select().from(skills).orderBy(asc(skills.displayOrder)),
+    tx.select().from(skillVerifications).orderBy(asc(skillVerifications.termKey)),
   ]);
 
   const experienceById = new Map(expRows.map((e) => [e.id, e]));
@@ -78,6 +81,17 @@ export async function buildResumeSnapshot(tx: DbClient): Promise<ResumeSnapshot>
   }
   for (const s of skillRows) {
     catalog.push({ sourceFactId: s.id, sourceType: "skill", text: s.name, context: null });
+  }
+
+  // Phase 13b: the user's own answers. A "have" carries their evidence sentence; an alias counts only while the
+  // profile skill it names still exists (saveProfile re-creates skills, so it is matched by name, not id).
+  const profileSkillKeys = new Set(skillRows.map((s) => normalizeTermKey(s.name)));
+  for (const v of verificationRows) {
+    if (v.status === "have" && v.evidence) {
+      catalog.push({ sourceFactId: v.id, sourceType: "verified_skill", text: `${v.termDisplay}: ${v.evidence}`, context: "Verified by you" });
+    } else if (v.status === "alias" && v.aliasSkillName && profileSkillKeys.has(normalizeTermKey(v.aliasSkillName))) {
+      catalog.push({ sourceFactId: v.id, sourceType: "verified_skill", text: `${v.termDisplay} (same as ${v.aliasSkillName})`, context: "Verified by you" });
+    }
   }
 
   const contentHash = createHash("sha256").update(stableStringifyCatalog(catalog)).digest("hex");
