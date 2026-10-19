@@ -34,6 +34,9 @@ rationale behind each architectural choice.
    source is fetched every `INGEST_INTERVAL_MINUTES` (default 360). Run
    exactly one worker process; two would race on the same source (an advisory
    lock per source is future work).
+   The same process also runs the Phase 13a search-run coordinator (queue
+   `search-runs`) that the "Find matching jobs" button on `/matches` starts; if
+   it is not running, a click stays `queued` and the page says so after 30 s.
 8. Start the matching worker (needed for "Find Matches" runs):
    `pnpm --filter @ai-career/matching-worker start`. Also a plain Node
    process with no scheduler -- matching only ever runs when the `/matches`

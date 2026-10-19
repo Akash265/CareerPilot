@@ -1745,3 +1745,44 @@ main.ts afterRun:
 setInterval 60 s → reconcile schedules + validateBoards() (picks up pasted boards)
 /sources paste → POST /api/discovery/boards {text} → importBoards → pending boards (found_via null)
 ```
+
+## 20. Phase 13a — One-Click Discovery
+
+### 20a. The click (request-driven)
+
+```
+/matches FindJobsPanel "Find matching jobs" → POST /api/search-runs        apps/web/src/app/api/search-runs/route.ts
+  startRun (lib/searchRuns/searchRuns.ts, advisory lock per user):
+    no discovery consent → 409 consent_required → inline consent → POST /api/discovery/quick-start (quickStart) → retry
+    no active confirmed goal → 409 no_active_goal → link to /career-goal
+    failStalled (no heartbeat 10 min → failed/stalled); a run in progress → 200 { run } (idempotent)
+    insert search_runs (queued) → enqueueSearchRun (queue "search-runs", jobId = run id) → 202 { run }
+    queue down → run failed/queue_unavailable → 503
+FindJobsPanel polls GET /api/search-runs/latest every 3 s while queued/running/matching; on finish → MatchesClient.load()
+  a run that ended with late sources → results reload every 30 s for 10 minutes after it finished (their jobs arrive via the 20c re-match)
+```
+
+### 20b. The coordinator (process-driven) — services/job-ingestion
+
+```
+search-runs Worker (searchRunWorker.ts, concurrency 1) → coordinateSearchRun   packages/ingestion/src/searchRun/coordinateSearchRun.ts
+ 1. claim queued → running; re-check goal + consent (else failed with the code)
+    any unexpected error after the claim → run failed/coordinator_error, error rethrown (no phantom run)
+ 2. planSourceRefresh (plan.ts): enabled, consented, non-upload sources → reused | queued → ingest queue (fixed job id)
+ 3. probeEmployerNames → pending name_probe boards; webSearchDue → searchWebForBoards (anthropicFor("discovery_web_search"))
+    → pending web_search boards, stamp discovery_settings.last_web_search_*; startValidation() (background validateBoards)
+ 4. every 2 s: heartbeat; applyRunUpdates from the latest ingestion_runs row per queued source that started >= run start,
+    or is still in flight (finished_at IS NULL), or finished >= run start; deadline → markLate
+ 5. status matching → requestMatching (pushMatching, promote delayed; "running" → set re-match flag)
+    → wait for a matching_runs row started after the request: completed | failed (matching_failed) | timeout (matching_timeout)
+validatePendingBoards (discover.ts) → checkCompany (companyCheck.ts) for name_probe/web_search boards
+```
+
+### 20c. Re-match outside a click
+
+```
+ingest worker afterRun (main.ts) → afterRunRematch (rematch.ts): changed jobs and no queued/running search run
+  → requestRematchSafely (a failure is logged rematch_failed and never skips board discovery)
+  → requestRematch (packages/matching/src/enqueue.ts): delayed MATCH_DEBOUNCE_SECONDS; a run in progress → Redis flag
+matching worker completed / final failure (exhausted attempts or UnrecoverableError) → createFollowUp (followUp.ts): takeRematchFlag → pushMatching
+```

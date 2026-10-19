@@ -186,6 +186,29 @@ export async function runSmoke(ctx) {
     await check("/sources shows the discovery panel and the discovered board",
       await visible(page.getByRole("heading", { name: "Discover jobs automatically" })) && await visible(page.getByText("Discovered boards (1)")));
 
+    // --- Phase 13a one-click discovery --------------------------------------------------------------------------
+    const start = await api.post(`${ctx.base}/api/search-runs`);
+    await check("Find matching jobs starts a search run", start.status() === 202, await json(start));
+    const again = await api.post(`${ctx.base}/api/search-runs`);
+    await check("a second click returns the same run", again.status() === 200, await json(again));
+    const searchRun = await waitFor("the search run to finish", async () => {
+      const latest = (await json(await api.get(`${ctx.base}/api/search-runs/latest`)))?.run;
+      return latest && !["queued", "running", "matching"].includes(latest.status) ? latest : null;
+    }, 240_000);
+    await check("the search run completed", searchRun.status === "completed", searchRun);
+    await check("the web search ran and queued the Globex board, ignoring model text and counting the unsupported site",
+      searchRun.seeding?.webSearch?.state === "ran" && searchRun.seeding.webSearch.boardsQueued === 1 && searchRun.seeding.webSearch.unsupported === 1, searchRun.seeding);
+    const globex = await waitFor("the web-searched board to be validated", async () =>
+      ((await discovery())?.boards?.recent ?? []).find((b) => b.kind === "ashby" && b.slug === "globex" && b.status === "enabled") ?? null);
+    await check("the Globex board became a source", Boolean(globex));
+    await check("the planted lever URL was never recorded",
+      !((await discovery())?.boards?.recent ?? []).some((b) => b.slug === "evil"));
+    const appliedJobId = best.jobId;
+    const ranked = await json(await api.get(`${ctx.base}/api/matches?eligible=true`));
+    await check("the job already applied to is not in the ranked results", !ranked?.matches?.some((m) => m.jobId === appliedJobId), ranked);
+    await page.goto(`${ctx.base}/matches`);
+    await check("/matches shows the Find matching jobs button", await visible(page.getByRole("button", { name: "Find matching jobs" })));
+
     // --- 11c rate limits ----------------------------------------------------------------------------------------
     // 2 x limit + 2 calls: even if a 60 s window rolls over mid-loop, one of the two windows sees limit + 1.
     let limited = null;
