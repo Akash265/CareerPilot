@@ -209,6 +209,25 @@ export async function runSmoke(ctx) {
     await page.goto(`${ctx.base}/matches`);
     await check("/matches shows the Find matching jobs button", await visible(page.getByRole("button", { name: "Find matching jobs" })));
 
+    // --- Phase 13b missing-skill verification ---------------------------------------------------------------------
+    const gaps = await waitFor("the top matches' requirements to be checked", async () => {
+      const o = await json(await api.get(`${ctx.base}/api/skill-gaps`));
+      return o?.unanswered?.some((g) => g.termKey === "kubernetes") ? o : null;
+    });
+    const k8s = gaps.unanswered.find((g) => g.termKey === "kubernetes");
+    await check("/api/skill-gaps lists Kubernetes for the top matches, not SQL", k8s.jobCount >= 1 && !gaps.unanswered.some((g) => g.termKey === "sql"), gaps);
+    const jobGaps = await json(await api.get(`${ctx.base}/api/skill-gaps/${k8s.jobs[0].jobId}`));
+    await check("the job's panel data lists the same gap", jobGaps?.unanswered?.some((g) => g.termKey === "kubernetes"), jobGaps);
+    const answer = await api.put(`${ctx.base}/api/skill-verifications`, { data: { status: "have", termDisplay: "Kubernetes", evidence: "Ran the staging cluster." } });
+    await check("answering 'I have it' with evidence is saved", answer.status() === 200, await json(answer));
+    const after = await json(await api.get(`${ctx.base}/api/skill-gaps`));
+    await check("the answered skill leaves the list and shows as an answer",
+      !after.unanswered.some((g) => g.termKey === "kubernetes") && after.answered.some((a) => a.termKey === "kubernetes" && a.status === "have"), after);
+    const afterJob = await json(await api.get(`${ctx.base}/api/skill-gaps/${k8s.jobs[0].jobId}`));
+    await check("the job's panel data no longer lists it", !afterJob.unanswered.some((g) => g.termKey === "kubernetes"), afterJob);
+    await page.goto(`${ctx.base}/skills`);
+    await check("/skills renders the answer", await visible(page.getByText(/Kubernetes — you have it/)));
+
     // --- 11c rate limits ----------------------------------------------------------------------------------------
     // 2 x limit + 2 calls: even if a 60 s window rolls over mid-loop, one of the two windows sees limit + 1.
     let limited = null;
