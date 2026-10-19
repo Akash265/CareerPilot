@@ -20,6 +20,7 @@ export function DownloadButtons({
   formats = DEFAULT_FORMATS,
   onExported,
   disabled = false,
+  labelPrefix = "Download",
   navigate = (url: string) => window.location.assign(url),
 }: {
   jobId: string;
@@ -28,6 +29,8 @@ export function DownloadButtons({
   formats?: readonly Format[];
   onExported?: (body: ExportBody) => void;
   disabled?: boolean;
+  /** Accessible-name prefix; a panel with several export groups gives each a distinct one. */
+  labelPrefix?: string;
   navigate?: (url: string) => void;
 }) {
   const [busy, setBusy] = useState<Format | null>(null);
@@ -82,7 +85,7 @@ export function DownloadButtons({
             disabled={disabled || busy !== null}
             className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
           >
-            {busy === format ? "Exporting..." : `Download ${format === "tex" ? ".tex" : format.toUpperCase()}`}
+            {busy === format ? "Exporting..." : `${labelPrefix} ${format === "tex" ? ".tex" : format.toUpperCase()}`}
           </button>
         ))}
       </div>

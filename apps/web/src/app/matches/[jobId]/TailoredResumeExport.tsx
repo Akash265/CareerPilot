@@ -21,7 +21,7 @@ export function TailoredResumeExport({ jobId, optimizationId, navigate }: { jobI
     <section aria-labelledby="tailored-resume-heading" className="flex flex-col gap-2 rounded border p-3">
       <h3 id="tailored-resume-heading" className="text-sm font-medium">Tailored resume (LaTeX, 1 page)</h3>
       <p className="text-sm text-gray-600">Keeps the optimizer&apos;s wording first, then the items that mention this job&apos;s requirements. Nothing new is written.</p>
-      <DownloadButtons jobId={jobId} kind="tailored_resume" sourceId={optimizationId} formats={["pdf", "tex"]} onExported={setResult} {...(navigate ? { navigate } : {})} />
+      <DownloadButtons jobId={jobId} kind="tailored_resume" sourceId={optimizationId} formats={["pdf", "tex"]} onExported={setResult} labelPrefix="Download tailored" {...(navigate ? { navigate } : {})} />
       {details && <p className="text-sm">{tailoredSummary(details)}</p>}
       {omitted.length > 0 && (
         <details className="text-sm">

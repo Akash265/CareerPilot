@@ -111,8 +111,7 @@ describe("ResumeOptimizationPanel", () => {
     render(<ResumeOptimizationPanel jobId="j1" />);
     await screen.findByText("92.5/100");
 
-    // Two PDF buttons now (plain resume first, then the tailored LaTeX one); this test is about the plain resume export.
-    fireEvent.click(screen.getAllByRole("button", { name: "Download PDF" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Download PDF" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Your profile changed since this optimization");
 
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "opt2" } });

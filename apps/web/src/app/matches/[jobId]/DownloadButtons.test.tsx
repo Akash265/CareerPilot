@@ -83,6 +83,13 @@ describe("DownloadButtons", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it("uses a custom label prefix for the accessible names", () => {
+    render(<DownloadButtons jobId="j1" kind="tailored_resume" sourceId="o1" formats={["pdf", "tex"]} labelPrefix="Download tailored" navigate={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Download tailored PDF" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download tailored .tex" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Download PDF" })).toBeNull();
+  });
+
   it("disables both buttons when disabled", () => {
     render(<DownloadButtons jobId="j1" kind="pitch" sourceId="p1" disabled navigate={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Download PDF" })).toBeDisabled();

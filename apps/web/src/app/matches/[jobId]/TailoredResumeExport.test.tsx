@@ -27,7 +27,8 @@ describe("TailoredResumeExport", () => {
     }));
     render(<TailoredResumeExport jobId="j1" optimizationId="o1" navigate={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "Tailored resume (LaTeX, 1 page)" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Download PDF" }));
+    expect(screen.getByRole("button", { name: "Download tailored .tex" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download tailored PDF" }));
     await waitFor(() => expect(screen.getByText("Included 2 of 4 items · 1 page")).toBeTruthy());
     fireEvent.click(screen.getByText("Left out (2)"));
     expect(screen.getByText("Blog: Cooking blog")).toBeTruthy();
