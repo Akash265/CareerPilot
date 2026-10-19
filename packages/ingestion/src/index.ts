@@ -31,3 +31,5 @@ export * from "./discovery/discover";
 export * from "./searchRun/plan";
 export * from "./searchRun/probeEmployerNames";
 export * from "./searchRun/webSearchBoards";
+export * from "./searchRun/queue";
+export * from "./searchRun/coordinateSearchRun";
