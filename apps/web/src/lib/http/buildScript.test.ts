@@ -14,4 +14,11 @@ describe("web build script", () => {
   it("clears the runtime route cache before building", () => {
     expect(pkg.scripts.build).toMatch(/rmSync\('\.next\/server\/route-cache', \{ recursive: true, force: true \}\).*&& .*next build/);
   });
+
+  // D206: a turbo cache hit restores .next without running the build script, so the build-time clear is skipped and
+  // the old route cache survives (found when merged Phase 13b main served the pre-13a /matches page). `next start`
+  // always runs, so it clears the folder too.
+  it("clears the runtime route cache before starting", () => {
+    expect(pkg.scripts.start).toMatch(/rmSync\('\.next\/server\/route-cache', \{ recursive: true, force: true \}\).*&& .*next start/);
+  });
 });
