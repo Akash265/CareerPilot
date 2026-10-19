@@ -33,3 +33,4 @@ export * from "./applicationEvents";
 export * from "./automationSessions";
 export * from "./aiCalls";
 export * from "./searchRuns";
+export * from "./skillVerifications";

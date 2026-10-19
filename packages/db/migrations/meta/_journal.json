@@ -246,6 +246,20 @@
       "when": 1792391364912,
       "tag": "0034_search_runs_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792427718024,
+      "tag": "0035_safe_excalibur",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1792427723934,
+      "tag": "0036_skill_verifications_rls",
+      "breakpoints": true
     }
   ]
 }
