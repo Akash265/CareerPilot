@@ -1809,7 +1809,8 @@ matching worker "completed" event (services/matching-worker/src/main.ts)
     a request during a pass schedules exactly one more; never rejects, errors → requirements_refresh_failed)
   → ensureTopMatchRequirements (packages/resume-optimization/src/gaps/topMatchRequirements.ts)
      ├─ selectTopMatchJobs: eligible matches of open jobs by overall_score DESC (ties by job id), limit SKILL_GAP_TOP_N
-     └─ per job, own withUserContext transaction: ensureJobRequirements (hash cache hit = no AI call)
+     └─ per job, own withUserContext transaction: ensureJobRequirements (hash cache hit = no AI call; fresh = rows match description_hash, or no rows and
+        jobs.requirements_extracted_hash = description_hash, which a zero-requirement extraction sets -- D205)
         AiBudgetExceededError → stop the step (budgetStopped); any other error → skipped, requirements_failed logged by job id
   → log requirements_checked { jobs, failed, budgetStopped }
 ```
@@ -1820,7 +1821,8 @@ matching worker "completed" event (services/matching-worker/src/main.ts)
 GET /api/skill-gaps → lib/skillGaps/loadSkillGaps.ts loadSkillGapsOverview(tx, env.SKILL_GAP_TOP_N)
   ├─ loadAnswerContext: buildResumeSnapshot (catalog incl. verified_skill) + skill_verifications + skills names
   ├─ selectTopMatchJobs + job_requirements; freshRequirements keeps a job only if every row's
-  │  extraction_source_description_hash = jobs.description_hash (else counted in jobsWithoutRequirements)
+  │  extraction_source_description_hash = jobs.description_hash, or the job has zero rows and
+  │  jobs.requirements_extracted_hash = jobs.description_hash (D205, ready with no gaps); else counted in jobsWithoutRequirements
   └─ computeSkillGaps per job (gaps/computeSkillGaps.ts) → unanswered grouped by term_key, jobCount desc
 GET /api/skill-gaps/[jobId] → loadJobSkillGaps (any job with a match row; 404 otherwise)
 POST /api/skill-gaps/[jobId]/requirements (rate limit "ai")

@@ -1479,4 +1479,9 @@ Minor cleanups: `probeEmployerNames` lost its unused `goalId` option.
 **Why:** the user said these are facts about themselves, so none may be silently dropped from the resume; a path-free key avoids encoding bugs.
 **What it affects:** `apps/web/src/app/api/skill-{verifications,gaps}/**`, `apps/web/src/app/skills/*`, `packages/document-export/src/{model/buildResumeModel,pipeline/loadResumeProfile}.ts`.
 
+### D205. Phase 13b: a zero-requirement extraction is cached via jobs.requirements_extracted_hash
+**Decision:** `jobs` gained a nullable `requirements_extracted_hash` (migration 0037). `ensureJobRequirements` sets it to the job's `description_hash` in the same transaction as the delete/insert after every successful extraction, including one that found zero requirements. A job is fresh when its rows all match the hash, or when it has no rows and `requirementsExtractedHash === descriptionHash` (callers pass the column in `JobForRequirements`). The web `freshRequirements` applies the same rule, so such a job is `requirementsStatus: "ready"` with no gaps and is not counted in `jobsWithoutRequirements`.
+**Why:** "no rows" meant "never extracted", so a job with nothing extractable cost one AI call per matching run forever and "Check requirements" kept answering "missing". Storing the hash on the job (not a sentinel row in `job_requirements`) keeps that table free of fake rows that every reader would have to filter.
+**What it affects:** `packages/db/src/schema/jobs.ts`, migration `0037`, `packages/resume-optimization/src/{requirements/ensureJobRequirements,gaps/topMatchRequirements,pipeline/runResumeOptimization}.ts`, `packages/application-package/src/pipeline/prepareApplicationContext.ts`, `apps/web/src/lib/skillGaps/loadSkillGaps.ts`, the requirements route.
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

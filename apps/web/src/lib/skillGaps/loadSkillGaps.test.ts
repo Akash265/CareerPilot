@@ -57,6 +57,18 @@ describe("loadSkillGapsOverview", () => {
   });
 });
 
+describe("zero-requirement jobs (D205)", () => {
+  it("counts a job extracted with zero requirements as ready, not as missing", async () => {
+    const id = await jobWith("Z", 90, []);
+    await admin`UPDATE jobs SET requirements_extracted_hash = description_hash WHERE id = ${id}`;
+    const o = await withUserContext(db, USER, (tx) => loadSkillGapsOverview(tx, 25));
+    expect(o).toMatchObject({ unanswered: [], jobsWithoutRequirements: 0 });
+    expect(await withUserContext(db, USER, (tx) => loadJobSkillGaps(tx, id))).toMatchObject({
+      requirementsStatus: "ready", unanswered: [], coveredCount: 0, declinedCount: 0,
+    });
+  });
+});
+
 describe("loadJobSkillGaps", () => {
   it("returns one job's unanswered gaps with covered and declined counts", async () => {
     const id = await jobWith("A", 90, ["Kubernetes", "dbt", "PostgreSQL", "Python"]);

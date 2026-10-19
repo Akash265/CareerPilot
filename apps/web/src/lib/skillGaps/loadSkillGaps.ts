@@ -41,8 +41,11 @@ async function loadAnswerContext(tx: DbClient) {
 }
 
 /** Requirements count only when every row was extracted from the job's current description (ensureJobRequirements' rule). */
-function freshRequirements(rows: RequirementRow[], descriptionHash: string): RequirementRow[] | null {
-  return rows.length > 0 && rows.every((r) => r.extractionSourceDescriptionHash === descriptionHash) ? rows : null;
+function freshRequirements(
+  rows: RequirementRow[], job: { descriptionHash: string; requirementsExtractedHash?: string | null }
+): RequirementRow[] | null {
+  if (rows.length === 0) return job.requirementsExtractedHash === job.descriptionHash ? [] : null; // D205: zero-requirement job
+  return rows.every((r) => r.extractionSourceDescriptionHash === job.descriptionHash) ? rows : null;
 }
 
 function gapsFor(rows: RequirementRow[], ctx: Awaited<ReturnType<typeof loadAnswerContext>>): SkillGap[] {
@@ -58,7 +61,7 @@ export async function loadSkillGapsOverview(tx: DbClient, topN: number): Promise
   let jobsWithoutRequirements = 0;
   const byKey = new Map<string, UnansweredGapView>();
   for (const job of top) {
-    const fresh = freshRequirements(rows.filter((r) => r.jobId === job.id), job.descriptionHash);
+    const fresh = freshRequirements(rows.filter((r) => r.jobId === job.id), job);
     if (!fresh) {
       jobsWithoutRequirements++;
       continue;
@@ -78,14 +81,14 @@ export async function loadSkillGapsOverview(tx: DbClient, topN: number): Promise
 /** Phase 13b design §6.2: one job's gaps (any job with a match row, not only the top N). Null when there is no match row. */
 export async function loadJobSkillGaps(tx: DbClient, jobId: string): Promise<JobSkillGapsView | null> {
   const [job] = await tx
-    .select({ descriptionHash: jobs.descriptionHash })
+    .select({ descriptionHash: jobs.descriptionHash, requirementsExtractedHash: jobs.requirementsExtractedHash })
     .from(jobMatches)
     .innerJoin(jobs, eq(jobMatches.jobId, jobs.id))
     .where(eq(jobMatches.jobId, jobId))
     .limit(1);
   if (!job) return null;
   const ctx = await loadAnswerContext(tx);
-  const fresh = freshRequirements(await tx.select().from(jobRequirements).where(eq(jobRequirements.jobId, jobId)), job.descriptionHash);
+  const fresh = freshRequirements(await tx.select().from(jobRequirements).where(eq(jobRequirements.jobId, jobId)), job);
   if (!fresh) return { requirementsStatus: "missing", unanswered: [], coveredCount: 0, declinedCount: 0, profileSkills: ctx.profileSkills };
   const gaps = gapsFor(fresh, ctx);
   return {

@@ -15,6 +15,7 @@ export async function selectTopMatchJobs(tx: DbClient, limit: number): Promise<T
     .select({
       id: jobs.id, title: jobs.title, companyName: jobs.companyName,
       descriptionText: jobs.descriptionText, descriptionHash: jobs.descriptionHash,
+      requirementsExtractedHash: jobs.requirementsExtractedHash,
     })
     .from(jobMatches)
     .innerJoin(jobs, eq(jobMatches.jobId, jobs.id))

@@ -23,7 +23,7 @@ async function handlePOST(_request: Request, { params }: { params: Promise<{ job
   try {
     const inUserContext = <T>(fn: (tx: typeof db) => Promise<T>) => withUserContext(db, env.DEFAULT_USER_ID, fn);
     const [job] = await inUserContext((tx) =>
-      tx.select({ id: schema.jobs.id, title: schema.jobs.title, descriptionText: schema.jobs.descriptionText, descriptionHash: schema.jobs.descriptionHash })
+      tx.select({ id: schema.jobs.id, title: schema.jobs.title, descriptionText: schema.jobs.descriptionText, descriptionHash: schema.jobs.descriptionHash, requirementsExtractedHash: schema.jobs.requirementsExtractedHash })
         .from(schema.jobMatches).innerJoin(schema.jobs, eq(schema.jobMatches.jobId, schema.jobs.id))
         .where(eq(schema.jobMatches.jobId, jobId)).limit(1));
     if (!job) return notFound();

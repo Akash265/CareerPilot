@@ -59,6 +59,18 @@ describe("ensureTopMatchRequirements", () => {
     expect(create).toHaveBeenCalledTimes(2);
   });
 
+  it("makes no second AI call for a job whose extraction found zero requirements (D205)", async () => {
+    await seedMatch("A", 90);
+    const create = vi.fn(async () => ({
+      content: [{ type: "tool_use", id: "t1", name: "record_job_requirements", input: { requirements: [] } }],
+      stop_reason: "tool_use", usage: { input_tokens: 1, output_tokens: 1 },
+    }));
+    const anthropicFor: AnthropicFor = () => ({ messages: { create } }) as never;
+    await ensureTopMatchRequirements(t.db, { userId: USER, env: ENV, anthropicFor });
+    await ensureTopMatchRequirements(t.db, { userId: USER, env: ENV, anthropicFor });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it("skips a failing job and reports it, then stops at the AI budget", async () => {
     const a = await seedMatch("A", 90);
     await seedMatch("B", 80);
