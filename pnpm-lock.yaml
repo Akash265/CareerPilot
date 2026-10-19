@@ -433,12 +433,18 @@ importers:
 
   packages/ingestion:
     dependencies:
+      '@ai-career/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@ai-career/config':
         specifier: workspace:*
         version: link:../config
       '@ai-career/db':
         specifier: workspace:*
         version: link:../db
+      '@anthropic-ai/sdk':
+        specifier: ^0.128.0
+        version: 0.128.0(zod@3.25.76)
       csv-parse:
         specifier: ^5.6.0
         version: 5.6.0
