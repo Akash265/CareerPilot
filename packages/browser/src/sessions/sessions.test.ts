@@ -125,6 +125,19 @@ describe("reads", () => {
     expect(ctx.coverLetterDocument?.id).toBe(coverLetterDocumentId);
   });
 
+  it("prefers the newest tailored resume PDF for autofill, falling back to the full resume", async () => {
+    const { jobId, resumeDocumentId, tailoredResumeDocumentId } = await seedAutofillJob(t.adminSql, USER, { withTailoredResume: true });
+    const id = await insertSessionRow(t.adminSql, USER, jobId);
+    const ctx = await loadAutofillContext(t.db, USER, id);
+    expect(ctx.resumeDocument?.id).toBe(tailoredResumeDocumentId);
+    expect(ctx.resumeDocument?.id).not.toBe(resumeDocumentId);
+  });
+
+  it("counts a tailored resume as an available resume", async () => {
+    const { jobId } = await seedAutofillJob(t.adminSql, USER, { withResume: false, withTailoredResume: true });
+    expect((await getJobAutofillOverview(t.db, USER, jobId))?.resumeAvailable).toBe(true);
+  });
+
   it("loads a null goal when there is no active goal", async () => {
     const { jobId } = await seedAutofillJob(t.adminSql, USER, { goal: null, withResume: false });
     const ctx = await loadAutofillContext(t.db, USER, await insertSessionRow(t.adminSql, USER, jobId));

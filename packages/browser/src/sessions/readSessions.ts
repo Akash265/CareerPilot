@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { getAutofillSupport, type AutofillSupport } from "./support";
 import type { SessionRow } from "./createSession";
@@ -28,7 +28,7 @@ export async function getJobAutofillOverview(db: DbClient, userId: string, jobId
     const [resume] = await tx
       .select({ id: generatedDocuments.id })
       .from(generatedDocuments)
-      .where(and(eq(generatedDocuments.jobId, jobId), eq(generatedDocuments.kind, "resume"), eq(generatedDocuments.format, "pdf")))
+      .where(and(eq(generatedDocuments.jobId, jobId), inArray(generatedDocuments.kind, ["resume", "tailored_resume"]), eq(generatedDocuments.format, "pdf")))
       .limit(1);
     const [application] = await tx.select({ id: applications.id }).from(applications).where(eq(applications.jobId, jobId)).limit(1);
     const sessions = await tx

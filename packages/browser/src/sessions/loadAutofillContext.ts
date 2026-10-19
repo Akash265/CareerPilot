@@ -43,7 +43,7 @@ export async function loadAutofillContext(db: DbClient, userId: string, sessionI
       .innerJoin(careerGoals, eq(careerGoals.id, careerGoalConstraints.careerGoalId))
       .where(eq(careerGoals.isActive, true))
       .limit(1);
-    const newestPdf = async (kind: "resume" | "cover_letter") => {
+    const newestPdf = async (kind: "resume" | "tailored_resume" | "cover_letter") => {
       const [doc] = await tx
         .select({ id: generatedDocuments.id, objectKey: generatedDocuments.objectKey })
         .from(generatedDocuments)
@@ -56,7 +56,8 @@ export async function loadAutofillContext(db: DbClient, userId: string, sessionI
       session,
       profile,
       goal: goal ?? null,
-      resumeDocument: await newestPdf("resume"),
+      // Phase 13c (D212): the job-tailored LaTeX resume when one was exported, else the full-profile resume.
+      resumeDocument: (await newestPdf("tailored_resume")) ?? (await newestPdf("resume")),
       coverLetterDocument: await newestPdf("cover_letter"),
     };
   });
