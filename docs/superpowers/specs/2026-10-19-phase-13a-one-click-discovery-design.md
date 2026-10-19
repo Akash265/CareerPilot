@@ -1,6 +1,6 @@
 # Phase 13a — One-Click Discovery ("Find Matching Jobs") — Design
 
-Status: implemented on branch phase-13a-one-click-discovery, 2026-10-19 (merge date to be filled at merge time).
+Status: implemented and merged to main 2026-10-19 (merge commit 47b452e; branch phase-13a-one-click-discovery, deleted).
 Part of Phase 13 (user's 2026-10-19 refinement request), split by user choice into
 13a one-click discovery (this spec) → 13b missing-skill verification → 13c job-specific LaTeX resume.
 
