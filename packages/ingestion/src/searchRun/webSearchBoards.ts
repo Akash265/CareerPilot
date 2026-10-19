@@ -8,6 +8,7 @@ export const MAX_PAUSE_CONTINUATIONS = 2;
 const MAX_ROLES = 5;
 const MAX_LOCATIONS = 5;
 const MAX_SKILLS = 10;
+const WEB_SEARCH_ERROR_CODES = new Set(["invalid_tool_input", "unavailable", "max_uses_exceeded", "too_many_requests", "query_too_long"]);
 
 export interface GoalSearchInput {
   roles: string[];
@@ -78,7 +79,7 @@ export async function searchWebForBoards(
   for (const block of collected) {
     if (block.type === "web_search_tool_result") {
       if (Array.isArray(block.content)) for (const r of block.content) found.push({ url: r.url, title: r.title ?? null });
-      else searchError = block.content.error_code;
+      else searchError = WEB_SEARCH_ERROR_CODES.has(block.content.error_code) ? block.content.error_code : "web_search_error";
     } else if (block.type === "text" && block.citations) {
       for (const c of block.citations) if (c.type === "web_search_result_location") found.push({ url: c.url, title: c.title ?? null });
     }

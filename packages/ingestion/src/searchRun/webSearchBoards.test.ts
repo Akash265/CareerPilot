@@ -64,4 +64,11 @@ describe("searchWebForBoards (Phase 13a)", () => {
     ]));
     expect(await searchWebForBoards(client, ENV, GOAL)).toEqual({ state: "failed", reason: "too_many_requests", boards: [], unsupported: 0 });
   });
+
+  it("maps an unknown web search error code to a fixed code", async () => {
+    const { client } = clientFrom(message([
+      { type: "web_search_tool_result", tool_use_id: "s1", content: { type: "web_search_tool_result_error", error_code: "some_new_provider_code" } },
+    ]));
+    expect(await searchWebForBoards(client, ENV, GOAL)).toEqual({ state: "failed", reason: "web_search_error", boards: [], unsupported: 0 });
+  });
 });
