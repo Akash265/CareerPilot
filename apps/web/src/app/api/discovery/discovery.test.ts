@@ -161,3 +161,23 @@ describe("POST /api/discovery/boards", () => {
     expect((await paste("x".repeat(100_001))).status).toBe(400);
   });
 });
+
+describe("POST /api/discovery/quick-start (Phase 13a)", () => {
+  it("records consent and auto-discovery and enables every provider whose keys are set", async () => {
+    const { POST: quickStart } = await import("./quick-start/route");
+    const res = await quickStart();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.enabled).toEqual(["remotive", "remoteok", "arbeitnow", "themuse", "hn_hiring", "usajobs"]);
+    expect(body.skipped).toEqual([
+      { kind: "adzuna", missingKeys: ["ADZUNA_APP_ID", "ADZUNA_APP_KEY"] },
+      { kind: "jooble", missingKeys: ["JOOBLE_API_KEY"] },
+    ]);
+    const v = await view();
+    expect(v.settings.autoDiscover).toBe(true);
+    expect(v.settings.consentedAt).not.toBeNull();
+    // A second call keeps the original consent time.
+    await quickStart();
+    expect((await view()).settings.consentedAt).toBe(v.settings.consentedAt);
+  });
+});

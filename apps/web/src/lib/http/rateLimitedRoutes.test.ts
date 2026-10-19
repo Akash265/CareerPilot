@@ -23,6 +23,7 @@ const LIMITED: Record<string, Record<string, "ai" | "jobs" | "unlock" | "health"
   "/api/job-sources/upload": { POST: "jobs" },
   "/api/automation-sessions": { POST: "jobs" },
   "/api/discovery/boards": { POST: "jobs" },
+  "/api/search-runs": { POST: "jobs" },
   "/api/unlock": { POST: "unlock" },
   "/api/health": { GET: "health" },
 };

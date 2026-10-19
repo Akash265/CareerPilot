@@ -43,6 +43,7 @@ export async function wipeMatchingData(adminSql: postgres.Sql, userId: string): 
   await adminSql`DELETE FROM ai_calls WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM job_matches WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM matching_runs WHERE user_id = ${userId}`;
+  await adminSql`DELETE FROM search_runs WHERE user_id = ${userId}`;
   await adminSql`DELETE FROM career_goals WHERE user_id = ${userId}`;
   // Phase 7a: company_research is keyed by company, not job, so it does not cascade from jobs.
   await adminSql`DELETE FROM company_research WHERE user_id = ${userId}`;

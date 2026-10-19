@@ -123,7 +123,27 @@ export async function setProvider(tx: DbClient, kind: string, enabled: boolean, 
   return { ok: true };
 }
 
-export type ImportResult = { ok: true; recognized: number; added: number } | { ok: false; status: 409; error: string };
+/**
+ * Phase 13a: the one-time setup behind the first "Find matching jobs" click -- the standing consent (D185) with
+ * auto-discovery, and every search provider whose keys are configured. The consent text is shown by the panel.
+ */
+export async function quickStart(tx: DbClient, env: KeyEnv, now: Date): Promise<{ enabled: string[]; skipped: { kind: string; missingKeys: string[] }[] }> {
+  await applySettings(tx, { consent: true, autoDiscover: true }, now);
+  const enabled: string[] = [];
+  const skipped: { kind: string; missingKeys: string[] }[] = [];
+  for (const p of SEARCH_PROVIDERS) {
+    const missing = missingKeys(env, p.keys);
+    if (missing.length) {
+      skipped.push({ kind: p.kind, missingKeys: missing });
+      continue;
+    }
+    const result = await setProvider(tx, p.kind, true, env, now);
+    if (result.ok) enabled.push(p.kind);
+  }
+  return { enabled, skipped };
+}
+
+export type ImportResult ={ ok: true; recognized: number; added: number } | { ok: false; status: 409; error: string };
 
 /** Pasted board links become pending boards (validated by the ingestion worker); ones already added are skipped. */
 export async function importBoards(tx: DbClient, text: string): Promise<ImportResult> {
