@@ -3,7 +3,25 @@
 import { useCallback, useEffect, useState } from "react";
 import type { DiscoveryView } from "../../lib/discovery/discovery";
 
-const STATUS_TEXT: Record<string, string> = { pending: "waiting to be checked", enabled: "added", rejected: "no open jobs", gone: "gone" };
+const STATUS_TEXT: Record<string, string> = { pending: "waiting to be checked", enabled: "added", rejected: "rejected", gone: "gone" };
+const ORIGIN_TEXT: Record<string, string> = {
+  posting_link: "found in a job posting", pasted: "added by you", name_probe: "found by name guess", web_search: "found by web search",
+};
+// Fixed codes written by validateBoards (discover.ts) and checkCompany (companyCheck.ts).
+const REJECT_TEXT: Record<string, string> = {
+  company_mismatch: "different company", company_unverified: "company could not be confirmed", no_jobs: "no open jobs",
+  not_found: "board not found", invalid_slug: "not a valid board address", http_error: "the site returned an error",
+  response_too_large: "the site's answer was too large", gave_up: "could not be checked for a week",
+};
+
+type RecentBoard = DiscoveryView["boards"]["recent"][number];
+function boardLine(b: RecentBoard): string {
+  const status = b.status === "rejected" && b.rejectReason
+    ? `rejected: ${REJECT_TEXT[b.rejectReason] ?? b.rejectReason}`
+    : STATUS_TEXT[b.status] ?? b.status;
+  const origin = ORIGIN_TEXT[b.origin] ?? b.origin;
+  return `(${b.kind}) — ${status} · ${origin}${b.foundVia ? ` via ${b.foundVia}` : ""}`;
+}
 
 /**
  * Phase 12 (D185-D187): the standing permission, the goal-driven search providers, automatic discovery of company
@@ -131,7 +149,7 @@ export function DiscoveryPanel({ onChanged }: { onChanged?: () => void }) {
         <ul aria-label="Recently discovered boards" className="flex flex-col gap-1 text-sm">
           {view.boards.recent.map((b) => (
             <li key={`${b.kind}:${b.slug}`}>
-              {b.label ?? b.slug} <span className="text-gray-500">({b.kind}) — {STATUS_TEXT[b.status] ?? b.status}{b.foundVia ? ` · via ${b.foundVia}` : ""}</span>
+              {b.label ?? b.slug} <span className="text-gray-500">{boardLine(b)}</span>
             </li>
           ))}
         </ul>

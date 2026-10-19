@@ -9,6 +9,7 @@ export const AI_OPERATIONS = [
   "job_requirements_extraction",
   "resume_optimization",
   "company_research",
+  "discovery_web_search",
   "pitch_generation",
   "cover_letter_generation",
   "interview_prep_generation",

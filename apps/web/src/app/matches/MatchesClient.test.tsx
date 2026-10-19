@@ -41,6 +41,7 @@ describe("MatchesClient", () => {
   it("shows a helpful empty state", async () => {
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -50,6 +51,7 @@ describe("MatchesClient", () => {
   it("lists eligible matches with score and factor chips", async () => {
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [matchItem()], page: 1, pageSize: 25, total: 1 } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -59,27 +61,15 @@ describe("MatchesClient", () => {
     expect(screen.getByText("A strong overall match.")).toBeInTheDocument();
   });
 
-  it("queues a matching run and shows a notice", async () => {
-    const fn = mockFetch({
-      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
-      "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
-      "POST /api/matches/run": () => ({ status: 202, body: { status: "queued" } }),
-    });
-    render(<MatchesClient />);
-    const button = await screen.findByRole("button", { name: "Find Matches" });
-    fireEvent.click(button);
-    expect(await screen.findByRole("status")).toHaveTextContent(/Queued a matching run/);
-    expect(fn).toHaveBeenCalledWith("/api/matches/run", expect.objectContaining({ method: "POST" }));
-  });
-
   it("dismisses a match: it stays in the eligible list (no recompute has run yet) but the row shows dismissed feedback", async () => {
     // Per design spec §8, a dismissal only takes effect on the NEXT matching recompute --
     // evaluateEligibility's previouslyDismissed check runs during runMatching, not retroactively. So
     // the real, immediate behavior after a successful dismiss PATCH is: the job stays eligible=true in
-    // the list (GET /api/matches?eligible=true still returns it) until "Find Matches" is run again.
+    // the list (GET /api/matches?eligible=true still returns it) until "Find matching jobs" is run again.
     let match = matchItem().match;
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [{ ...matchItem(), match }], page: 1, pageSize: 25, total: 1 } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
       "PATCH /api/matches/j1": () => {
         match = { ...match, userAction: "dismissed" };
@@ -99,6 +89,7 @@ describe("MatchesClient", () => {
   it("shows an alert for a run that already failed before this page loaded", async () => {
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({
         body: { run: { status: "failed", errorClass: "no_active_goal", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 } },
       }),
@@ -107,37 +98,33 @@ describe("MatchesClient", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/last matching run failed \(no_active_goal\)/i);
   });
 
-  it("does not resurface a stale failed run's alert immediately after a successful re-queue", async () => {
-    // POST /api/matches/run only pushes a queue job — it does not create the matching_runs row. That row is
-    // only created later by the worker once it dequeues the job. So immediately after a successful re-queue,
-    // GET /api/matches/runs/latest can still legitimately report the *previous* (failed) run for a while, as
-    // simulated here by always returning "failed" regardless of whether a new run was queued. The regression
-    // this guards against: MatchesClient must not re-check run status synchronously right after enqueuing —
-    // doing so would read this still-stale "failed" row and resurface the old failure as if the retry had
-    // already failed too, even though the new run has barely started.
-    mockFetch({
-      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
-      "GET /api/matches/runs/latest": () => ({
-        body: { run: { status: "failed", errorClass: "no_active_goal", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 } },
-      }),
-      "POST /api/matches/run": () => ({ status: 202, body: { status: "queued" } }),
-    });
-    render(<MatchesClient />);
-    // The prior failure is surfaced on mount, same as the test above.
-    await screen.findByRole("alert");
-
-    fireEvent.click(screen.getByRole("button", { name: "Find Matches" }));
-    // findMatches() clears the banner immediately and only the poll loop (not started synchronously by this
-    // click) re-checks run status, so the stale "failed" row must not reappear right after the notice shows.
-    expect(await screen.findByRole("status")).toHaveTextContent(/Queued a matching run/);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
+  it.each(["matching_failed", "matching_timeout"])(
+    "shows one alert, the search panel's, when the latest search run already explains the matching failure (%s)",
+    async (errorCode) => {
+      mockFetch({
+        "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+        "GET /api/search-runs/latest": () => ({
+          body: { run: { id: "r1", status: "failed", errorCode, createdAt: "2026-09-22T00:00:00Z", startedAt: null, finishedAt: "2026-09-22T00:01:00Z", sources: [], seeding: {} } },
+        }),
+        "GET /api/matches/runs/latest": () => ({
+          body: { run: { status: "failed", errorClass: "llm_error", startedAt: "2026-09-22T00:00:00Z", finishedAt: "2026-09-22T00:00:05Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 } },
+        }),
+      });
+      render(<MatchesClient />);
+      expect(await screen.findByText(/Jobs were fetched, but ranking/)).toBeInTheDocument();
+      // Let the matching-run check settle too, then expect exactly one alert.
+      await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(screen.queryByText(/last matching run failed/i)).not.toBeInTheDocument();
+    },
+  );
 
   it("toggles to show ineligible matches with their reason", async () => {
     const ineligible = matchItem({ eligible: false, ineligibleReason: "You dismissed this job.", overallScore: null, factors: null, explanation: null });
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
       "GET /api/matches?eligible=false&page=1": () => ({ body: { matches: [ineligible], page: 1, pageSize: 25, total: 1 } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -156,6 +143,7 @@ describe("MatchesClient", () => {
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
       "GET /api/matches?eligible=false&page=1": () => ({ body: { matches: [ineligibleWithStaleExplanation], page: 1, pageSize: 25, total: 1 } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -168,6 +156,7 @@ describe("MatchesClient", () => {
   it("disables Rank with my history and says why while the model is not active", async () => {
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [matchItem()], page: 1, pageSize: 25, total: 1, ranking: "default", model: MODEL_OFF } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -183,6 +172,7 @@ describe("MatchesClient", () => {
   it("links no description to the toggle while the model is active", async () => {
     mockFetch({
       "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [matchItem()], page: 1, pageSize: 25, total: 1, ranking: "default", model: MODEL_ON } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -200,6 +190,7 @@ describe("MatchesClient", () => {
       "GET /api/matches?eligible=false&page=1": () => ({
         body: { matches: [ineligible], page: 1, pageSize: 25, total: 1, ranking: "default", model: MODEL_ON },
       }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -221,6 +212,7 @@ describe("MatchesClient", () => {
       "GET /api/matches?eligible=true&page=1&rank=personal": () => ({
         body: { matches: [matchItem({ personal: PERSONAL })], page: 1, pageSize: 25, total: 1, ranking: "personal", model: MODEL_ON },
       }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -241,6 +233,7 @@ describe("MatchesClient", () => {
       "GET /api/matches?eligible=true&page=1&rank=personal": () => ({
         body: { matches: [matchItem({ personal: PERSONAL })], page: 1, pageSize: 25, total: 1, ranking: "personal", model: MODEL_ON },
       }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
       "GET /api/matches/runs/latest": () => ({ body: { run: null } }),
     });
     render(<MatchesClient />);
@@ -253,6 +246,7 @@ describe("MatchesClient", () => {
     const defaultBody = { matches: [matchItem({ personal: PERSONAL })], page: 1, pageSize: 25, total: 1, ranking: "default", model: MODEL_ON };
     const personalBody = { ...defaultBody, ranking: "personal" };
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/search-runs/latest") return { ok: true, status: 200, json: async () => ({ run: null }) } as Response;
       if (url === "/api/matches/runs/latest") return { ok: true, status: 200, json: async () => ({ run: null }) } as Response;
       if (url === "/api/matches?eligible=true&page=1") {
         await new Promise<void>((resolve) => {

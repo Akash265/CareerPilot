@@ -127,6 +127,15 @@ const envSchema = z
     DISCOVERY_MAX_NEW_PER_RUN: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(25)),
     DISCOVERY_MIN_INTERVAL_MS: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(1000)),
     DISCOVERY_STALE_DAYS: z.preprocess(blankAsUnset, z.coerce.number().int().min(1).default(14)),
+    // Phase 13a: one-click discovery ("Find matching jobs") and goal seeding.
+    FIND_JOBS_FRESH_MINUTES: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).default(360)),
+    FIND_JOBS_MAX_WAIT_SECONDS: z.preprocess(blankAsUnset, z.coerce.number().int().min(10).max(3600).default(180)),
+    FIND_JOBS_MATCH_WAIT_SECONDS: z.preprocess(blankAsUnset, z.coerce.number().int().min(10).max(3600).default(300)),
+    MATCH_DEBOUNCE_SECONDS: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).max(3600).default(120)),
+    DISCOVERY_PROBE_MAX_NAMES: z.preprocess(blankAsUnset, z.coerce.number().int().min(0).max(200).default(30)),
+    DISCOVERY_WEB_SEARCH: z.preprocess(blankAsUnset, z.enum(["true", "false"]).default("true").transform((v) => v === "true")),
+    DISCOVERY_WEB_SEARCH_INTERVAL_DAYS: z.preprocess(blankAsUnset, z.coerce.number().int().min(1).max(90).default(7)),
+    DISCOVERY_WEB_SEARCH_MAX_USES: z.preprocess(blankAsUnset, z.coerce.number().int().min(1).max(20).default(5)),
   })
   .superRefine((val, ctx) => {
     if (val.EMBEDDING_PROVIDER === "voyage" && !val.VOYAGE_API_KEY) {

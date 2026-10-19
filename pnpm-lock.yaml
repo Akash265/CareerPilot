@@ -433,12 +433,18 @@ importers:
 
   packages/ingestion:
     dependencies:
+      '@ai-career/ai':
+        specifier: workspace:*
+        version: link:../ai
       '@ai-career/config':
         specifier: workspace:*
         version: link:../config
       '@ai-career/db':
         specifier: workspace:*
         version: link:../db
+      '@anthropic-ai/sdk':
+        specifier: ^0.128.0
+        version: 0.128.0(zod@3.25.76)
       csv-parse:
         specifier: ^5.6.0
         version: 5.6.0
@@ -537,9 +543,15 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.128.0
         version: 0.128.0(zod@3.25.76)
+      bullmq:
+        specifier: ^5.34.0
+        version: 5.81.5
       drizzle-orm:
         specifier: ^0.45.3
         version: 0.45.3(postgres@3.4.9)
+      ioredis:
+        specifier: ^5.4.0
+        version: 5.11.1
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -728,6 +740,9 @@ importers:
 
   services/job-ingestion:
     dependencies:
+      '@ai-career/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@ai-career/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -740,6 +755,9 @@ importers:
       '@ai-career/logging':
         specifier: workspace:*
         version: link:../../packages/logging
+      '@ai-career/matching':
+        specifier: workspace:*
+        version: link:../../packages/matching
       '@ai-career/monitoring':
         specifier: workspace:*
         version: link:../../packages/monitoring

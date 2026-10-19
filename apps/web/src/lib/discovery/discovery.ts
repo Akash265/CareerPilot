@@ -32,7 +32,16 @@ export interface DiscoveryView {
   providers: { kind: SearchKind; label: string; keyRequired: boolean; keyConfigured: boolean; missingKeys: string[]; enabled: boolean; sourceId: string | null }[];
   boards: {
     counts: Record<(typeof BOARD_STATUSES)[number], number>;
-    recent: { kind: string; slug: string; status: string; label: string | null; foundVia: string | null; firstSeenAt: string }[];
+    recent: {
+      kind: string; slug: string; status: string; label: string | null;
+      /** The label of the source whose posting linked to the board, when there is one. */
+      foundVia: string | null;
+      /** How the board was found (fixed code): posting_link, pasted, name_probe or web_search. */
+      origin: string;
+      /** Why it was rejected (fixed code), or null. */
+      rejectReason: string | null;
+      firstSeenAt: string;
+    }[];
   };
 }
 
@@ -69,6 +78,7 @@ export async function loadDiscoveryView(tx: DbClient, env: KeyEnv): Promise<Disc
         kind: b.kind, slug: b.slug, status: b.status,
         label: b.sourceId ? labels.get(b.sourceId) ?? null : null,
         foundVia: b.foundViaSourceId ? labels.get(b.foundViaSourceId) ?? null : null,
+        origin: b.foundVia, rejectReason: b.rejectReason,
         firstSeenAt: b.firstSeenAt.toISOString(),
       })),
     },
@@ -123,6 +133,26 @@ export async function setProvider(tx: DbClient, kind: string, enabled: boolean, 
   return { ok: true };
 }
 
+/**
+ * Phase 13a: the one-time setup behind the first "Find matching jobs" click -- the standing consent (D185) with
+ * auto-discovery, and every search provider whose keys are configured. The consent text is shown by the panel.
+ */
+export async function quickStart(tx: DbClient, env: KeyEnv, now: Date): Promise<{ enabled: string[]; skipped: { kind: string; missingKeys: string[] }[] }> {
+  await applySettings(tx, { consent: true, autoDiscover: true }, now);
+  const enabled: string[] = [];
+  const skipped: { kind: string; missingKeys: string[] }[] = [];
+  for (const p of SEARCH_PROVIDERS) {
+    const missing = missingKeys(env, p.keys);
+    if (missing.length) {
+      skipped.push({ kind: p.kind, missingKeys: missing });
+      continue;
+    }
+    const result = await setProvider(tx, p.kind, true, env, now);
+    if (result.ok) enabled.push(p.kind);
+  }
+  return { enabled, skipped };
+}
+
 export type ImportResult = { ok: true; recognized: number; added: number } | { ok: false; status: 409; error: string };
 
 /** Pasted board links become pending boards (validated by the ingestion worker); ones already added are skipped. */
@@ -135,5 +165,5 @@ export async function importBoards(tx: DbClient, text: string): Promise<ImportRe
       .filter((s) => s.config.slug).map((s) => `${s.kind}:${s.config.slug!.toLowerCase()}`),
   );
   const fresh = links.filter((l) => !known.has(`${l.kind}:${l.slug.toLowerCase()}`));
-  return { ok: true, recognized: links.length, added: await insertPendingBoards(tx, fresh, null) };
+  return { ok: true, recognized: links.length, added: await insertPendingBoards(tx, fresh, { foundVia: "pasted" }) };
 }

@@ -17,8 +17,10 @@
     "eval:extraction": "tsx eval/scoreExtraction.ts"
   },
   "dependencies": {
+    "@ai-career/ai": "workspace:*",
     "@ai-career/config": "workspace:*",
     "@ai-career/db": "workspace:*",
+    "@anthropic-ai/sdk": "^0.128.0",
     "csv-parse": "^5.6.0",
     "drizzle-orm": "^0.45.3",
     "zod": "^3.24.0"

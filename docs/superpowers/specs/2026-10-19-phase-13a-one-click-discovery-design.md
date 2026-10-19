@@ -1,6 +1,6 @@
 # Phase 13a — One-Click Discovery ("Find Matching Jobs") — Design
 
-Status: approved in conversation 2026-10-19; awaiting written-spec review.
+Status: implemented on branch phase-13a-one-click-discovery, 2026-10-19 (merge date to be filled at merge time).
 Part of Phase 13 (user's 2026-10-19 refinement request), split by user choice into
 13a one-click discovery (this spec) → 13b missing-skill verification → 13c job-specific LaTeX resume.
 
@@ -206,3 +206,48 @@ created. Boards from posting links/paste are unchanged.
 - Newly discovered boards are validated in the background (≤25 per pass); their jobs arrive on later
   ingestion runs and appear through the automatic re-match, not necessarily in the first click's results.
 - Adzuna/Jooble/USAJobs need keys; web search needs a working Anthropic key and budget.
+
+## 10. Planning refinements (2026-10-19)
+
+1. `enqueueMatching` stays in apps/web; it and the workers share `pushMatching` (packages/matching), which reports
+   `running` separately and lets a click promote a debounced run (D193).
+2. Re-match is suppressed only by a `queued`/`running` search run; a `matching` run does not suppress it, so late
+   sources' jobs are ranked (D193). The matching worker's flag follow-up runs immediately (the flag already coalesces).
+3. Validation treats only `found_via = 'pasted'` as the user's own choice (a probed board also has no source) (D196).
+4. Unknown company names (slug fallback): probed boards need the description to name the company; web-searched boards
+   are accepted (D196).
+5. Web search reads URLs from `web_search_tool_result` results and citations, both API-produced (D195).
+6. After 30 s in `queued`, the panel says the job-ingestion worker may not be running.
+7. The coordinator receives its side effects as injected functions (no ingestion → matching import).
+8. Setup endpoint is `POST /api/discovery/quick-start` (spec §3.2 called it accept-and-enable).
+9. (D192) The coordinator marks its run `failed` with `coordinator_error` and rethrows on any unexpected error
+   after claiming (no 10-minute phantom run).
+10. (D192; amends §3.3 step 4) A queued source's progress also counts an ingestion run already in flight at claim
+    time: the latest row with started_at >= run start OR finished_at IS NULL OR finished_at >= run start.
+11. (D195) A web-search error code is stored only if it is one of invalid_tool_input, unavailable,
+    max_uses_exceeded, too_many_requests, query_too_long; otherwise `web_search_error`.
+12. (D193) A matching job that becomes active between its state read and promote() is reported as running/already
+    queued, not as a queue failure; a final failure includes UnrecoverableError (not only exhausted attempts) for
+    the follow-up.
+13. (D193) A re-match failure is logged as `rematch_failed` and never skips board discovery for that run.
+14. (D197/§5) After a run ends with late sources, the panel reloads results every 30 s for 10 minutes after it
+    finished.
+15. Search-run types are read through the `schema` namespace of @ai-career/db (the package exports tables as one
+    namespace).
+
+Final-review fixes (D198):
+
+16. Every coordinator write after the claim, including the `coordinator_error` write, only updates a run that is
+    `running`/`matching`; the first write that updates no row stops the coordinator (no further writes, no matching
+    request) and returns the row's current status. `failQueued` only fails a `queued` run.
+17. The web search call has a 120 s request timeout (`WEB_SEARCH_TIMEOUT_MS`).
+18. (Amends §3.3 step 5) The match wait reads every matching run started since the request: any completed one
+    completes the run; `matching_failed` only at the match deadline with a failed latest run (a retry may follow);
+    otherwise `matching_timeout`. The timeout text asks the user to start the matching worker and click again.
+19. When the latest search run failed with `matching_failed`/`matching_timeout`, `/matches` shows only the panel's
+    alert, not its own "last matching run failed" one.
+20. (D193) `flagRematchIfRunning` (TTL `REMATCH_FLAG_TTL_SECONDS` = 3600) is shared by `requestRematch` and the
+    coordinator; after setting the flag it re-checks the matching job and, if the run already finished, takes the
+    flag back and queues a run now.
+21. (D196) The Sources page shows each recent board's origin and reject reason in plain words.
+22. `probeEmployerNames` has no `goalId` option.

@@ -18,6 +18,7 @@ const OPERATION_LABELS: Record<AiOperation, string> = {
   job_requirements_extraction: "Job requirements extraction",
   resume_optimization: "Resume optimization",
   company_research: "Company research",
+  discovery_web_search: "Discovery web search",
   pitch_generation: "Hiring manager pitch",
   cover_letter_generation: "Cover letter",
   interview_prep_generation: "Interview prep",

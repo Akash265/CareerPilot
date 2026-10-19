@@ -19,6 +19,7 @@
     "db:generate:custom:applications-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=applications_rls",
     "db:generate:custom:automation-sessions-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=automation_sessions_rls",
     "db:generate:custom:ai-calls-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=ai_calls_rls",
+    "db:generate:custom:search-runs-rls": "dotenv -e ../../.env -- drizzle-kit generate --custom --name=search_runs_rls",
     "db:migrate": "dotenv -e ../../.env -- drizzle-kit migrate"
   },
   "dependencies": {

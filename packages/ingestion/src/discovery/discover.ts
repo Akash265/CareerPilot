@@ -3,6 +3,7 @@ import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { normalizeRecord } from "../normalize/normalizeRecord";
 import { IngestError, type BoardKind, type RawRecord, type SourceAdapter, type SourceRef } from "../types";
 import { extractBoardLinks } from "./boardLinks";
+import { checkCompany, type BoardFoundVia } from "./companyCheck";
 
 const { discoveredBoards, discoverySettings, jobSources, rawJobPostings, ingestionRuns } = schema;
 
@@ -21,14 +22,24 @@ async function settingsOf(tx: DbClient): Promise<{ autoDiscover: boolean; consen
   return row ? { autoDiscover: row.autoDiscover, consentedAt: row.consentedAt } : null;
 }
 
+export interface PendingBoard {
+  kind: BoardKind;
+  slug: string;
+  /** Phase 13a: the employer a probed or web-searched board should belong to. */
+  expectedCompany?: string | null;
+}
+
 /** Inserts each link as a pending board (once per kind + slug, whatever the case). Returns how many were new. */
 export async function insertPendingBoards(
-  tx: DbClient, links: { kind: BoardKind; slug: string }[], foundViaSourceId: string | null,
+  tx: DbClient, links: PendingBoard[], provenance: { foundVia: BoardFoundVia; foundViaSourceId?: string | null },
 ): Promise<number> {
   if (links.length === 0) return 0;
   const inserted = await tx
     .insert(discoveredBoards)
-    .values(links.map((l) => ({ kind: l.kind, slug: l.slug, foundViaSourceId })))
+    .values(links.map((l) => ({
+      kind: l.kind, slug: l.slug, foundVia: provenance.foundVia, foundViaSourceId: provenance.foundViaSourceId ?? null,
+      expectedCompany: l.expectedCompany ?? null,
+    })))
     .onConflictDoNothing()
     .returning({ id: discoveredBoards.id });
   return inserted.length;
@@ -66,7 +77,7 @@ export async function recordBoardsFromRun(
     );
     const links = extractBoardLinks(rows.map((r) => stringsIn(r.payload).join("\n")).join("\n"))
       .filter((l) => !known.has(`${l.kind}:${l.slug.toLowerCase()}`));
-    return insertPendingBoards(tx, links, opts.sourceId);
+    return insertPendingBoards(tx, links, { foundVia: "posting_link", foundViaSourceId: opts.sourceId });
   });
 }
 
@@ -119,14 +130,15 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
   // only what discovery adds on its own.
   let fetches = opts.maxPerRun;
   let discoveredRoom = Math.max(0, opts.maxSources - existing);
-  const reject = async (id: string) => {
-    await inUser((tx) => tx.update(discoveredBoards).set({ status: "rejected", checkedAt: now() }).where(eq(discoveredBoards.id, id)));
+  const reject = async (id: string, reason: string) => {
+    await inUser((tx) => tx.update(discoveredBoards).set({ status: "rejected", rejectReason: reason, checkedAt: now() }).where(eq(discoveredBoards.id, id)));
     result.rejected++;
     result.pending--;
   };
   for (const board of pending) {
     if (fetches <= 0) break;
-    const pasted = board.foundViaSourceId === null;
+    // Phase 13a: probed and web-searched boards also have no source; only a paste is the user's own choice.
+    const pasted = board.foundVia === "pasted";
     if (!pasted && (!settings.autoDiscover || discoveredRoom <= 0)) continue;
     if (board.checkedAt && now().getTime() - board.checkedAt.getTime() < RETRY_AFTER_MS) continue; // backing off
     fetches--;
@@ -137,7 +149,7 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
     } catch (error) {
       const errorClass = error instanceof IngestError ? error.errorClass : "unknown";
       if (REJECTING.has(errorClass) || now().getTime() - board.firstSeenAt.getTime() > GIVE_UP_AFTER_MS) {
-        await reject(board.id);
+        await reject(board.id, REJECTING.has(errorClass) ? errorClass : "gave_up");
       } else {
         // Transient (network, rate limit, timeout, server error, an unexpected shape): try again after a while.
         await inUser((tx) => tx.update(discoveredBoards).set({ checkedAt: now() }).where(eq(discoveredBoards.id, board.id)));
@@ -145,14 +157,24 @@ export async function validatePendingBoards(db: DbClient, opts: ValidateOptions)
       continue;
     }
     if (!record) {
-      await reject(board.id);
+      await reject(board.id, "no_jobs");
       continue;
     }
     let label = board.slug;
+    let companyName: string | null = null;
+    let descriptionText: string | null = null;
     try {
-      label = normalizeRecord(ref, record).companyName; // falls back to the slug when the board names no company
+      const job = normalizeRecord(ref, record);
+      label = job.companyName; // falls back to the slug when the board names no company
+      companyName = job.companyName;
+      descriptionText = job.descriptionText;
     } catch {
       // An unreadable first record still proves the board exists; the slug names it.
+    }
+    const company = checkCompany({ foundVia: board.foundVia, expectedCompany: board.expectedCompany, slug: board.slug, companyName, descriptionText });
+    if (company !== "ok") {
+      await reject(board.id, company);
+      continue;
     }
     const created = await inUser(async (tx) => {
       // A pass can take minutes: re-read the settings in the same transaction as the insert, so a withdrawn consent
