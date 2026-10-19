@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { EvidenceCatalogEntry } from "@ai-career/resume-optimization";
+import type { EvidenceCatalogEntry } from "../optimization/buildResumeSnapshot";
 import { computeGapTerms, containsTerm } from "./computeGapTerms";
 
 const req = (
