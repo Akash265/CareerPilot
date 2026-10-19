@@ -158,6 +158,36 @@ describe("coordinateSearchRun (Phase 13a)", () => {
     expect((await runRow(runId)).error_code).toBe("matching_failed");
   });
 
+  it("observes a source already ingesting when the run started", async () => {
+    const { goalId } = await goal();
+    const busy = await insertSource(t.adminSql, USER, { kind: "lever", label: "Busy" });
+    await ingestion(busy, "running", 0, null, new Date(clock.getTime() - 60_000));
+    const runId = await newRun();
+    let tick = 0;
+    onTick = async () => {
+      tick++;
+      if (tick === 1) {
+        await t.adminSql`UPDATE ingestion_runs SET status = 'succeeded', complete = true, new_count = 2, finished_at = ${clock.toISOString()}::timestamptz WHERE source_id = ${busy}`;
+      }
+      if ((await runRow(runId)).status === "matching") await matchingRun(goalId, "completed");
+    };
+    const d = deps();
+    expect(await coordinateSearchRun(d, runId)).toBe("completed");
+    expect(d.enqueueSource).toHaveBeenCalledWith(busy);
+    expect((await runRow(runId)).sources).toEqual([{ sourceId: busy, name: "Busy", kind: "lever", state: "done", newCount: 2 }]);
+  });
+
+  it("marks the run failed with coordinator_error and rethrows on an unexpected error", async () => {
+    await goal();
+    const runId = await newRun();
+    onTick = async () => undefined;
+    const d = deps({ startValidation: vi.fn(() => { throw new Error("boom"); }) });
+    await expect(coordinateSearchRun(d, runId)).rejects.toThrow("boom");
+    const row = await runRow(runId);
+    expect(row.status).toBe("failed");
+    expect(row.error_code).toBe("coordinator_error");
+  });
+
   it("ignores a run that is not queued (already handled or stalled)", async () => {
     await goal();
     const runId = (await t.adminSql`INSERT INTO search_runs (user_id, status) VALUES (${USER}, 'failed') RETURNING id`)[0].id as string;

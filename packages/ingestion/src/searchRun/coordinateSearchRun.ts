@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import { insertPendingBoards } from "../discovery/discover";
 import { allSourcesSettled, applyRunUpdates, markLate, planSourceRefresh, webSearchDue, type IngestionRunUpdate } from "./plan";
@@ -55,6 +55,7 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
     const [row] = await inUser((tx) => tx.select({ status: searchRuns.status }).from(searchRuns).where(eq(searchRuns.id, runId)));
     return row?.status ?? "failed";
   }
+  try {
   const context = await inUser(async (tx) => {
     const [settings] = await tx.select().from(discoverySettings).limit(1);
     const [goal] = await tx
@@ -137,7 +138,11 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
       sourceId: ingestionRuns.sourceId, status: ingestionRuns.status, newCount: ingestionRuns.newCount, errorClass: ingestionRuns.errorClass,
     })
       .from(ingestionRuns)
-      .where(and(inArray(ingestionRuns.sourceId, queuedIds), gte(ingestionRuns.startedAt, startedAt)))
+      // Also a run already in flight (enqueue dedupes on the job id, so it started before this search run).
+      .where(and(
+        inArray(ingestionRuns.sourceId, queuedIds),
+        or(gte(ingestionRuns.startedAt, startedAt), isNull(ingestionRuns.finishedAt), gte(ingestionRuns.finishedAt, startedAt)),
+      ))
       .orderBy(ingestionRuns.sourceId, desc(ingestionRuns.startedAt)));
   while (queuedIds.length > 0 && !allSourcesSettled(sources)) {
     if (now() >= deadlineAt) {
@@ -172,4 +177,9 @@ export async function coordinateSearchRun(deps: CoordinatorDeps, runId: string):
     if (run?.status === "failed") return fail("matching_failed");
   }
   return fail("matching_timeout");
+  } catch (err) {
+    // Unexpected (DB) error: leave the row terminal rather than for the 10-minute stall rule, then surface it.
+    try { await update({ status: "failed", errorCode: "coordinator_error", finishedAt: now() }); } catch { /* best effort */ }
+    throw err;
+  }
 }
