@@ -135,5 +135,5 @@ export async function importBoards(tx: DbClient, text: string): Promise<ImportRe
       .filter((s) => s.config.slug).map((s) => `${s.kind}:${s.config.slug!.toLowerCase()}`),
   );
   const fresh = links.filter((l) => !known.has(`${l.kind}:${l.slug.toLowerCase()}`));
-  return { ok: true, recognized: links.length, added: await insertPendingBoards(tx, fresh, null) };
+  return { ok: true, recognized: links.length, added: await insertPendingBoards(tx, fresh, { foundVia: "pasted" }) };
 }

@@ -30,7 +30,7 @@ async function storeRaw(sourceId: string, externalId: string, payload: unknown, 
   await t.adminSql`INSERT INTO raw_job_postings (user_id, source_id, external_id, payload, content_hash, fetched_at)
                    VALUES (${USER}, ${sourceId}, ${externalId}, ${JSON.stringify(payload)}::jsonb, ${externalId}, ${fetchedAt.toISOString()}::timestamptz)`;
 }
-const boards = () => t.adminSql`SELECT kind, slug, status, source_id, found_via_source_id FROM discovered_boards WHERE user_id = ${USER} ORDER BY slug`;
+const boards = () => t.adminSql`SELECT kind, slug, status, source_id, found_via_source_id, found_via FROM discovered_boards WHERE user_id = ${USER} ORDER BY slug`;
 
 /** Boards answer from this map: a list of records, or an error class to throw. */
 function adapterFor(boardsBySlug: Record<string, RawRecord[] | string>) {
@@ -59,8 +59,8 @@ describe("recordBoardsFromRun (Phase 12, D186)", () => {
     expect(await recordBoardsFromRun(t.db, { userId: USER, sourceId: hn, since: new Date("2026-10-12T00:00:00Z") })).toBe(2);
     expect(await recordBoardsFromRun(t.db, { userId: USER, sourceId: hn, since: new Date("2026-10-12T00:00:00Z") })).toBe(0);
     expect(await boards()).toEqual([
-      { kind: "workable", slug: "huggingface", status: "pending", source_id: null, found_via_source_id: hn },
-      { kind: "ashby", slug: "linear", status: "pending", source_id: null, found_via_source_id: hn },
+      { kind: "workable", slug: "huggingface", status: "pending", source_id: null, found_via_source_id: hn, found_via: "posting_link" },
+      { kind: "ashby", slug: "linear", status: "pending", source_id: null, found_via_source_id: hn, found_via: "posting_link" },
     ].sort((a, b) => a.slug.localeCompare(b.slug)));
     void own;
   });
@@ -95,7 +95,7 @@ describe("validatePendingBoards", () => {
 
   it("rejects a board that does not exist or has no jobs, and keeps one whose fetch failed transiently", async () => {
     await consent();
-    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug) VALUES (${USER}, 'ashby', 'gone'), (${USER}, 'ashby', 'empty'), (${USER}, 'ashby', 'flaky')`;
+    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via) VALUES (${USER}, 'ashby', 'gone', 'pasted'), (${USER}, 'ashby', 'empty', 'pasted'), (${USER}, 'ashby', 'flaky', 'pasted')`;
     const result = await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ empty: [], flaky: "server_error" }), ...limits, now: () => NOW });
     expect(result).toEqual({ enabled: 0, rejected: 2, pending: 1 });
     expect((await boards()).map((b) => [b.slug, b.status])).toEqual([["empty", "rejected"], ["flaky", "pending"], ["gone", "rejected"]]);
@@ -113,7 +113,7 @@ describe("validatePendingBoards", () => {
   it("validates pasted boards (found via no source) with auto-discovery off, as manual sources", async () => {
     await consent(false);
     const hn = await insertSource(t.adminSql, USER, { kind: "hn_hiring", label: "HN" });
-    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug) VALUES (${USER}, 'ashby', 'pasted')`;
+    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via) VALUES (${USER}, 'ashby', 'pasted', 'pasted')`;
     await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via_source_id) VALUES (${USER}, 'ashby', 'linked', ${hn})`;
     const result = await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ pasted: [ashbyJob("1")], linked: [ashbyJob("2")] }), ...limits, now: () => NOW });
     expect(result).toEqual({ enabled: 1, rejected: 0, pending: 1 });
@@ -122,7 +122,7 @@ describe("validatePendingBoards", () => {
   });
 
   it("does nothing without consent", async () => {
-    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug) VALUES (${USER}, 'ashby', 'a')`;
+    await t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via) VALUES (${USER}, 'ashby', 'a', 'pasted')`;
     expect(await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ a: [ashbyJob("1")] }), ...limits, now: () => NOW }))
       .toEqual({ enabled: 0, rejected: 0, pending: 1 });
   });
@@ -232,5 +232,68 @@ describe("retireIfGone", () => {
                        VALUES (${USER}, ${source}, ${iso(m)}::timestamptz, ${iso(m)}::timestamptz, 'failed', 'not_found')`;
     }
     expect(await retireIfGone(t.db, { userId: USER, sourceId: source })).toBe(false);
+  });
+});
+
+describe("validatePendingBoards — provenance and company check (Phase 13a)", () => {
+  const limits = { maxSources: 300, maxPerRun: 25 };
+  const insertBoard = (slug: string, foundVia: string, expectedCompany: string | null, kind = "workable") =>
+    t.adminSql`INSERT INTO discovered_boards (user_id, kind, slug, found_via, expected_company)
+               VALUES (${USER}, ${kind}, ${slug}, ${foundVia}, ${expectedCompany})`;
+  const state = () => t.adminSql`SELECT slug, status, reject_reason FROM discovered_boards WHERE user_id = ${USER} ORDER BY slug`;
+  const named = (name: string) => [{ externalId: "W1", payload: { shortcode: "W1", title: "ML Engineer", account_name: name } }];
+
+  it("enables a probed board whose company matches, rejects one that names another company", async () => {
+    await consent();
+    await insertBoard("acme", "name_probe", "Acme");
+    await insertBoard("globex", "name_probe", "Globex Labs");
+    const result = await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ acme: named("ACME Inc."), globex: named("Initech") }), ...limits, now: () => NOW });
+    expect(result).toMatchObject({ enabled: 1, rejected: 1 });
+    expect(await state()).toEqual([
+      { slug: "acme", status: "enabled", reject_reason: null },
+      { slug: "globex", status: "rejected", reject_reason: "company_mismatch" },
+    ]);
+    const [source] = await t.adminSql`SELECT origin FROM job_sources WHERE user_id = ${USER} AND config->>'slug' = 'acme'`;
+    expect(source.origin).toBe("discovered");
+  });
+
+  it("rejects a probed board with no company name unless its description names the company", async () => {
+    await consent();
+    await insertBoard("acmeco", "name_probe", "Acme Co", "ashby");
+    await insertBoard("initech", "name_probe", "Initech", "ashby");
+    const ashby = (id: string, slug: string, desc: string) => [{
+      externalId: id,
+      payload: {
+        id, title: "Data Engineer", location: "Remote", isListed: true, workplaceType: "Remote", employmentType: "FullTime",
+        publishedAt: "2026-10-10T10:00:00Z", jobUrl: `https://jobs.ashbyhq.com/${slug}/${id}`, descriptionPlain: desc,
+      },
+    }];
+    await validatePendingBoards(t.db, {
+      userId: USER,
+      adapterFor: adapterFor({ acmeco: ashby("A1", "acmeco", "Join Acme Co to build pipelines."), initech: ashby("A2", "initech", "A great place to work.") }),
+      ...limits, now: () => NOW,
+    });
+    expect(await state()).toEqual([
+      { slug: "acmeco", status: "enabled", reject_reason: null },
+      { slug: "initech", status: "rejected", reject_reason: "company_unverified" },
+    ]);
+  });
+
+  it("treats probed and web-searched boards as discovered (they need auto-discovery), unlike pasted ones", async () => {
+    await consent(false);
+    await insertBoard("acme", "name_probe", "Acme");
+    await insertBoard("pasted", "pasted", null);
+    await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ acme: named("Acme"), pasted: named("Pasted Co") }), ...limits, now: () => NOW });
+    expect(await state()).toEqual([
+      { slug: "acme", status: "pending", reject_reason: null },
+      { slug: "pasted", status: "enabled", reject_reason: null },
+    ]);
+  });
+
+  it("records the fetch's error class as the reject reason", async () => {
+    await consent();
+    await insertBoard("missing", "web_search", "Missing Co");
+    await validatePendingBoards(t.db, { userId: USER, adapterFor: adapterFor({ missing: "not_found" }), ...limits, now: () => NOW });
+    expect(await state()).toEqual([{ slug: "missing", status: "rejected", reject_reason: "not_found" }]);
   });
 });
