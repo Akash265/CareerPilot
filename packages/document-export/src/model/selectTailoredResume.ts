@@ -9,7 +9,7 @@ export interface TailoredSelection {
   model: DocumentModel;
   includedCount: number;
   totalCount: number;
-  /** In profile order. */
+  /** Rankable items in profile order, then skills / verified terms that did not fit the skills line. Counts above cover rankable items only. */
   omitted: OmittedItem[];
   /** True when every remaining rankable item is protected by a floor (nothing more can be removed). */
   exhausted: boolean;
@@ -75,30 +75,44 @@ function assertKnownApplied(profile: ResumeProfile, applied: AppliedBullet[]): v
   }
 }
 
-function skillNames(profile: ResumeProfile, requirements: Requirement[], paperSize: PaperSize): string[] {
-  const all: string[] = [];
+interface SkillsLine { names: string[]; omitted: OmittedItem[] }
+
+/** The skills line (2-line cap) and the skills / verified terms that did not fit (deduped terms are neither). */
+function skillsLine(profile: ResumeProfile, requirements: Requirement[], paperSize: PaperSize): SkillsLine {
+  const all: { name: string; sourceType: "skill" | "verified_skill"; id: string }[] = [];
   const seen = new Set<string>();
-  for (const name of [...profile.skills.map((s) => s.name), ...profile.verifiedSkills.map((v) => v.term)]) {
-    if (!present(name)) continue;
-    const key = normalizeTermKey(name);
+  const candidates = [
+    ...profile.skills.map((s) => ({ name: s.name, sourceType: "skill" as const, id: s.id })),
+    ...profile.verifiedSkills.map((v) => ({ name: v.term, sourceType: "verified_skill" as const, id: v.id })),
+  ];
+  for (const c of candidates) {
+    if (!present(c.name)) continue;
+    const key = normalizeTermKey(c.name);
     if (seen.has(key)) continue;
     seen.add(key);
-    all.push(name);
+    all.push(c);
   }
   const reqOrder = new Map(requirements.map((r, i) => [r.key, i]));
   const order = (name: string) => reqOrder.get(normalizeTermKey(name));
-  const matched = all.filter((n) => order(n) !== undefined).sort((a, b) => order(a)! - order(b)!);
-  const rest = all.filter((n) => order(n) === undefined);
+  const matched = all.filter((c) => order(c.name) !== undefined).sort((a, b) => order(a.name)! - order(b.name)!);
+  const rest = all.filter((c) => order(c.name) === undefined);
   const cap = SKILLS_MAX_LINES * LINE_METRICS[paperSize].charsPerLine;
-  const out: string[] = [];
+  const names: string[] = [];
+  const omittedIds = new Set<string>();
   let length = 0;
-  for (const name of [...matched, ...rest]) {
-    const add = (out.length > 0 ? 2 : 0) + name.length;
-    if (length + add > cap) continue;
-    out.push(name);
+  for (const c of [...matched, ...rest]) {
+    const add = (names.length > 0 ? 2 : 0) + c.name.length;
+    if (length + add > cap) {
+      omittedIds.add(`${c.sourceType}:${c.id}`);
+      continue;
+    }
+    names.push(c.name);
     length += add;
   }
-  return out;
+  const omitted = all
+    .filter((c) => omittedIds.has(`${c.sourceType}:${c.id}`))
+    .map((c): OmittedItem => ({ sourceType: c.sourceType, sourceFactId: c.id, reason: "page_limit" }));
+  return { names, omitted };
 }
 
 /**
@@ -143,7 +157,7 @@ export function selectTailoredResume(
     ...worstFirst.filter((i) => !(i.sourceType !== "work_experience_bullet" && isIrrelevant(i))),
   ];
 
-  const skills = skillNames(profile, requirements, opts.paperSize);
+  const { names: skills, omitted: omittedSkills } = skillsLine(profile, requirements, opts.paperSize);
   const projectsById = new Map(profile.projects.map((p) => [p.id, p]));
 
   const build = (removed: Set<string>): DocumentModel => {
@@ -206,8 +220,9 @@ export function selectTailoredResume(
     model = build(removed);
   }
 
-  const omitted: OmittedItem[] = items
+  const omittedRankable: OmittedItem[] = items
     .filter((i) => removed.has(i.key))
     .map((i) => ({ sourceType: i.sourceType, sourceFactId: i.id, reason: isIrrelevant(i) ? "no_requirement_match" : "page_limit" }));
+  const omitted = [...omittedRankable, ...omittedSkills];
   return { model, includedCount: items.length - removed.size, totalCount: items.length, omitted, exhausted: nextIncluded() === undefined };
 }

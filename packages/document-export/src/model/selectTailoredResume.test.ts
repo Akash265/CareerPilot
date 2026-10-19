@@ -140,4 +140,30 @@ describe("selectTailoredResume", () => {
     expect(sel.includedCount).toBe(5);
     expect(sel.exhausted).toBe(false);
   });
+
+  it("reports skills and verified-skill terms that do not fit the skills cap as omitted (page_limit), not deduped terms", () => {
+    const skills = Array.from({ length: 30 }, (_, i) => ({ id: `s${i}`, name: `Skill-number-${i}` }));
+    const verifiedSkills = [{ id: "v1", term: "Verified-extra-term" }, { id: "v2", term: "skill-NUMBER-0" }];
+    const sel = selectTailoredResume(profileWith({ skills, verifiedSkills }), [], [], { paperSize: "a4" });
+    const listed = paragraphAfter(sel.model, "Skills")!.split(", ");
+    const skillOmits = sel.omitted.filter((o) => o.sourceType === "skill" || o.sourceType === "verified_skill");
+    expect(listed.length).toBeLessThan(31);
+    expect(skillOmits.every((o) => o.reason === "page_limit")).toBe(true);
+    // Every non-deduped skill is either listed or omitted, never both, never neither.
+    const omittedIds = new Set(skillOmits.map((o) => o.sourceFactId));
+    for (const s of skills) expect(listed.includes(s.name) !== omittedIds.has(s.id)).toBe(true);
+    expect(listed.includes("Verified-extra-term") !== omittedIds.has("v1")).toBe(true);
+    expect(omittedIds.has("v1")).toBe(true);
+    expect(skillOmits.find((o) => o.sourceFactId === "v1")?.sourceType).toBe("verified_skill");
+    expect(skillOmits.find((o) => o.sourceFactId === "s29")?.sourceType).toBe("skill");
+    expect(omittedIds.has("v2")).toBe(false); // same normalized key as skill s0: deduped, not omitted
+    // Counts stay rankable-only.
+    expect(sel.totalCount).toBe(10);
+    expect(sel.includedCount).toBe(10);
+  });
+
+  it("omits nothing skill-related when all skills fit", () => {
+    const sel = selectTailoredResume(profileWith(), [], reqs, { paperSize: "a4" });
+    expect(sel.omitted.filter((o) => o.sourceType === "skill" || o.sourceType === "verified_skill")).toEqual([]);
+  });
 });

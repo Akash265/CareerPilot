@@ -3,7 +3,7 @@ import type { Client } from "minio";
 import { schema, withUserContext, type DbClient } from "@ai-career/db";
 import type { AppliedBullet } from "@ai-career/resume-optimization";
 import {
-  TEX_TEMPLATE_VERSION, type DocumentModel, type OmittedItem, type PaperSize, type RankableSourceType, type TailoredResumeDetails,
+  TEX_TEMPLATE_VERSION, type DocumentModel, type OmittedItem, type PaperSize, type TailoredResumeDetails,
 } from "../model/types";
 import type { ResumeProfile } from "../model/resumeProfile";
 import { selectTailoredResume, type TailoredSelection } from "../model/selectTailoredResume";
@@ -25,7 +25,7 @@ const { jobRequirements } = schema;
 const COMPILER_DOWN: ReadonlySet<DocumentExportErrorClass> = new Set(["compiler_unavailable", "compiler_busy", "compiler_timeout"]);
 
 export interface ExportTailoredResumeInput { userId: string; jobId: string; optimizationId: string; format: "pdf" | "tex"; paperSize: PaperSize }
-export interface OmittedItemView { sourceType: RankableSourceType; text: string; reason: OmittedItem["reason"] }
+export interface OmittedItemView { sourceType: OmittedItem["sourceType"]; text: string; reason: OmittedItem["reason"] }
 export interface TailoredExportResult { document: GeneratedDocumentRow; omittedItems: OmittedItemView[] }
 
 function omittedText(profile: ResumeProfile, item: OmittedItem): string {
@@ -38,6 +38,10 @@ function omittedText(profile: ResumeProfile, item: OmittedItem): string {
     }
     case "achievement":
       return profile.achievements.find((a) => a.id === item.sourceFactId)?.description ?? "";
+    case "skill":
+      return profile.skills.find((x) => x.id === item.sourceFactId)?.name ?? "";
+    case "verified_skill":
+      return profile.verifiedSkills.find((x) => x.id === item.sourceFactId)?.term ?? "";
   }
 }
 

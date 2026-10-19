@@ -28,7 +28,8 @@ export type PaperSize = "a4" | "letter";
 export type RankableSourceType = "work_experience_bullet" | "project" | "achievement";
 
 export interface OmittedItem {
-  sourceType: RankableSourceType;
+  /** Skills and verified skills are reported only when they do not fit the skills line. */
+  sourceType: RankableSourceType | "skill" | "verified_skill";
   sourceFactId: string;
   reason: "no_requirement_match" | "page_limit";
 }

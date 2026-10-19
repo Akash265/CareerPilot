@@ -50,7 +50,7 @@ export const generatedDocuments = pgTable(
       pageVerified: boolean;
       includedCount: number;
       totalCount: number;
-      omitted: { sourceType: "work_experience_bullet" | "project" | "achievement"; sourceFactId: string; reason: "no_requirement_match" | "page_limit" }[];
+      omitted: { sourceType: "work_experience_bullet" | "project" | "achievement" | "skill" | "verified_skill"; sourceFactId: string; reason: "no_requirement_match" | "page_limit" }[];
     }>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
