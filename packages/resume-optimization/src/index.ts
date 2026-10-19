@@ -24,3 +24,4 @@ export {
 } from "./gaps/computeGapTerms";
 export { normalizeTermKey } from "./gaps/normalizeTermKey";
 export { ALIAS_GROUPS, aliasGroupOf } from "./gaps/aliases";
+export { computeSkillGaps, type SkillGap, type SkillGapState, type SkillVerificationForGaps } from "./gaps/computeSkillGaps";
