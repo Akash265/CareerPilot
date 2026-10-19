@@ -51,15 +51,16 @@ The "Tailored resume (LaTeX)" PDF export compiles in a sandboxed Docker service;
 
 ```bash
 # Once: a token for the app and the service (32+ characters). .env may lack a trailing newline, hence printf.
-grep -q '^LATEX_COMPILER_TOKEN=' .env || printf '\nLATEX_COMPILER_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
-# Also in .env: LATEX_COMPILER_URL=http://127.0.0.1:8090   (and optionally RESUME_PAPER_SIZE=a4|letter, default a4)
+# The app requires both variables together (or neither), so add them together.
+grep -q '^LATEX_COMPILER_TOKEN=' .env || printf '\nLATEX_COMPILER_URL=http://127.0.0.1:8090\nLATEX_COMPILER_TOKEN=%s\n' "$(openssl rand -hex 32)" >> .env
+# Optionally also: RESUME_PAPER_SIZE=a4|letter (default a4)
 
 # From the repo root (builds the image on first use, about 1.2 GB):
 docker compose -f infra/docker-compose.yml --env-file .env --profile latex up -d latex-compiler
 curl -s http://127.0.0.1:8090/health      # {"ok":true,"texVersion":"..."}
 ```
 
-Restart the web app after changing `.env`. If either `LATEX_COMPILER_URL` or `LATEX_COMPILER_TOKEN` is unset the app treats the compiler as not running: PDF export answers 503 with the start command, and `.tex` still downloads.
+Restart the web app after changing `.env`. Set `LATEX_COMPILER_URL` and `LATEX_COMPILER_TOKEN` together: setting only one makes environment validation fail at startup (and in `pnpm test`). With both unset, or with the service not running, PDF export answers 503 with the start command and `.tex` still downloads.
 
 `pnpm test` does not need the compiler (the web route tests use a local fake). The real-compile test (`packages/document-export/src/latex.integration.test.ts`) is skipped unless `LATEX_COMPILER_URL` is set and needs a container in test mode, which adds `POST /extract` (PDF to text):
 
