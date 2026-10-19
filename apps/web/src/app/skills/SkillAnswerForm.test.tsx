@@ -56,4 +56,14 @@ describe("SkillAnswerForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Pick one of your profile skills");
   });
+
+  it("falls back to the first profile skill when the suggestion is no longer in the profile", async () => {
+    const fetchFn = okFetch();
+    render(<SkillAnswerForm termDisplay="MySQL" suggestion="MariaDB" profileSkills={["Postgres"]} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Same as…" }));
+    expect(screen.getByLabelText("Same as which of your skills")).toHaveValue("Postgres");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(fetchFn).toHaveBeenCalled());
+    expect(sent(fetchFn)).toEqual({ status: "alias", termDisplay: "MySQL", aliasSkillName: "Postgres" });
+  });
 });

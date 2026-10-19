@@ -14,7 +14,7 @@ export function SkillAnswerForm({ termDisplay, suggestion, profileSkills, onSave
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [evidence, setEvidence] = useState("");
-  const [alias, setAlias] = useState(suggestion ?? profileSkills[0] ?? "");
+  const [alias, setAlias] = useState(suggestion && profileSkills.includes(suggestion) ? suggestion : (profileSkills[0] ?? ""));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

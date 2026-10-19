@@ -24,6 +24,7 @@ function answerText(v: VerificationView): string {
 export function SkillsClient() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [editing, setEditing] = useState<string | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
 
   // A promise chain, as in ResumeOptimizationPanel (react-hooks/set-state-in-effect).
   const load = () =>
@@ -40,7 +41,12 @@ export function SkillsClient() {
   }, []);
 
   const undo = async (v: VerificationView) => {
-    await fetch(`/api/skill-verifications/${v.id}`, { method: "DELETE" }).catch(() => null);
+    setUndoError(null);
+    const res = await fetch(`/api/skill-verifications/${v.id}`, { method: "DELETE" }).catch(() => null);
+    if (!res || !res.ok) {
+      setUndoError("Could not undo your answer.");
+      return;
+    }
     window.dispatchEvent(new Event(SKILL_GAPS_CHANGED_EVENT));
     await load();
   };
@@ -79,6 +85,7 @@ export function SkillsClient() {
       </section>
       <section aria-labelledby="answered-heading" className="flex flex-col gap-2">
         <h2 id="answered-heading" className="font-medium">Your answers</h2>
+        {undoError && <p role="alert" className="text-sm text-red-600">{undoError}</p>}
         {overview.answered.length === 0 ? (
           <p className="text-sm text-gray-600">No answers yet.</p>
         ) : (
@@ -91,7 +98,7 @@ export function SkillsClient() {
                   <button type="button" onClick={() => undo(v)} className="underline" aria-label={`Undo ${v.termDisplay}`}>Undo</button>
                 </div>
                 {editing === v.id && (
-                  <SkillAnswerForm termDisplay={v.termDisplay} suggestion={v.aliasSkillName} profileSkills={overview.profileSkills}
+                  <SkillAnswerForm termDisplay={v.termDisplay} suggestion={null} profileSkills={overview.profileSkills}
                     onSaved={() => { setEditing(null); load(); }} />
                 )}
               </li>

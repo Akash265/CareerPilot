@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { SkillsClient } from "./SkillsClient";
+import { SKILL_GAPS_CHANGED_EVENT } from "./SkillAnswerForm";
 
 const overview = {
   topN: 25, jobsWithoutRequirements: 2, profileSkills: ["Postgres"],
@@ -35,5 +36,26 @@ describe("SkillsClient", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(respond({ ...overview, unanswered: [], answered: [], jobsWithoutRequirements: 0 })));
     render(<SkillsClient />);
     expect(await screen.findByText(/no unanswered required skills/i)).toBeInTheDocument();
+  });
+
+  it("shows an error and does not announce a change when undo fails", async () => {
+    const listener = vi.fn();
+    window.addEventListener(SKILL_GAPS_CHANGED_EVENT, listener);
+    const fetchFn = vi.fn().mockResolvedValueOnce(respond(overview)).mockResolvedValueOnce(respond({ error: "x" }, 500));
+    vi.stubGlobal("fetch", fetchFn);
+    render(<SkillsClient />);
+    fireEvent.click(await screen.findByRole("button", { name: "Undo dbt" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not undo your answer.");
+    expect(listener).not.toHaveBeenCalled();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    window.removeEventListener(SKILL_GAPS_CHANGED_EVENT, listener);
+  });
+
+  it("opens the answer form for an existing answer without labelling it a suggestion", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(respond({ ...overview, unanswered: [], answered: [{ ...overview.answered[0], status: "alias", aliasSkillName: "Postgres" }] })));
+    render(<SkillsClient />);
+    fireEvent.click(await screen.findByRole("button", { name: "Change dbt" }));
+    expect(screen.getByRole("button", { name: "I have it" })).toBeInTheDocument();
+    expect(screen.queryByText(/suggested/i)).not.toBeInTheDocument();
   });
 });
