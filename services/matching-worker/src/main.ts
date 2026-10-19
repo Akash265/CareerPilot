@@ -7,7 +7,7 @@ import { createShutdown, originalJobError, startHeartbeat } from "@ai-career/mon
 import { createAnthropicFor, withLangfuseExport, type AiUsageSink } from "@ai-career/ai";
 import { MATCHING_QUEUE_NAME, type MatchingJobData } from "@ai-career/matching";
 import { createMatchingWorker } from "./worker";
-import { createFollowUp } from "./followUp";
+import { createFollowUp, isFinalFailure } from "./followUp";
 
 // Structured logs only: ids and error classes, never job or profile content (CLAUDE.md §9, Phase 11b).
 const log = createLogger({ service: "matching-worker" });
@@ -46,9 +46,9 @@ async function main(): Promise<void> {
   });
   // Phase 13a (D193): one follow-up run if new jobs arrived while this run was in progress.
   worker.on("completed", (job) => void followUp(job.data.userId));
-  worker.on("failed", (job) => {
+  worker.on("failed", (job, error) => {
     // Only a final failure frees the job id; a failure that will be retried keeps it (attempts: 2).
-    if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) void followUp(job.data.userId);
+    if (job && isFinalFailure(job, error)) void followUp(job.data.userId);
   });
   // Redis connection errors are re-emitted here; with no listener the worker would crash with Node's raw print.
   worker.on("error", throttleErrorLog(log, "worker_error"));

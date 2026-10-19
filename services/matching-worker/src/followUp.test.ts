@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { createFollowUp } from "./followUp";
+import { createFollowUp, isFinalFailure } from "./followUp";
 
 vi.mock("@ai-career/matching", async (orig) => ({ ...(await orig<typeof import("@ai-career/matching")>()), pushMatching: vi.fn(async () => "enqueued") }));
 import { pushMatching } from "@ai-career/matching";
@@ -20,4 +20,15 @@ describe("createFollowUp (Phase 13a)", () => {
     await createFollowUp({ redis: { del: vi.fn(async () => { throw new Error("down"); }) }, queue: {} as never, onError })("u1");
     expect(onError).toHaveBeenCalled();
   });
+});
+
+describe("isFinalFailure", () => {
+  const job = { attemptsMade: 1, opts: { attempts: 2 } };
+  it("is true for an UnrecoverableError on attempt 1 of 2", () => {
+    const e = new Error("x");
+    e.name = "UnrecoverableError";
+    expect(isFinalFailure(job, e)).toBe(true);
+  });
+  it("is false for a plain error on attempt 1 of 2", () => expect(isFinalFailure(job, new Error("x"))).toBe(false));
+  it("is true for a plain error on attempt 2 of 2", () => expect(isFinalFailure({ attemptsMade: 2, opts: { attempts: 2 } }, new Error("x"))).toBe(true));
 });

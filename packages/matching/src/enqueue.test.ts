@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import IORedis from "ioredis";
 import { Queue, Worker } from "bullmq";
@@ -43,6 +43,17 @@ describe("pushMatching", () => {
     expect(await pushMatching(queue, USER)).toBe("running");
     release();
     await worker.close();
+  });
+});
+
+describe("pushMatching promote race", () => {
+  it("reports running when the job became active between the state read and promote", async () => {
+    const job = {
+      getState: vi.fn().mockResolvedValueOnce("delayed").mockResolvedValueOnce("active"),
+      promote: vi.fn().mockRejectedValue(new Error("Job is not in the delayed state")),
+    };
+    const fakeQueue = { getJob: vi.fn(async () => job) };
+    expect(await pushMatching(fakeQueue as never, USER, { promoteDelayed: true })).toBe("running");
   });
 });
 

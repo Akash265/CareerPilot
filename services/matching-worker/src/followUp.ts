@@ -13,3 +13,8 @@ export function createFollowUp(deps: { redis: Pick<IORedis, "del">; queue: Queue
     }
   };
 }
+
+/** A failure that frees the job id: out of attempts, or an UnrecoverableError (BullMQ fails it at once, retries skipped). */
+export function isFinalFailure(job: { attemptsMade: number; opts: { attempts?: number } }, error: Error): boolean {
+  return error.name === "UnrecoverableError" || job.attemptsMade >= (job.opts.attempts ?? 1);
+}

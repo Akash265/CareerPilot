@@ -20,8 +20,14 @@ export async function pushMatching(
     if (state === "active") return "running";
     if (state === "delayed") {
       if (!opts.promoteDelayed) return "already_queued";
-      await existing.promote();
-      return "enqueued";
+      try {
+        await existing.promote();
+        return "enqueued";
+      } catch {
+        // The debounce timer fired (and maybe a worker picked it up) between the state read and promote: the job
+        // exists and will run, so report that instead of failing the caller.
+        return (await existing.getState()) === "active" ? "running" : "already_queued";
+      }
     }
     if (WAITING_STATES.has(state)) return "already_queued";
   }
