@@ -1,6 +1,6 @@
 # Phase 13c — Job-Specific LaTeX Resume — Design
 
-Status: implemented on branch phase-13c-latex-resume (not yet merged).
+Status: implemented and merged to main 2026-10-20 (merge commit 7cde598; branch phase-13c-latex-resume, deleted). Final review fix wave (refill after trim, last page-count match, skills in omitted, distinct button names, emitted-character ligature check, compiler env both-or-neither) included.
 Part of Phase 13 (user's 2026-10-19 refinement request), split by user choice into
 13a one-click discovery (merged) → 13b missing-skill verification (merged) → 13c job-specific LaTeX resume
 (this spec).
