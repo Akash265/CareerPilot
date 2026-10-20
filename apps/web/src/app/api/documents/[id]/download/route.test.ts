@@ -59,6 +59,21 @@ describe("GET /api/documents/[id]/download", () => {
     expect(bytes.length).toBe(document.byteSize);
   });
 
+  it("serves a tailored .tex with the x-tex content type", async () => {
+    const { jobId, optimizationId } = await seedResumeExport(admin, USER);
+    const created = await POST(new Request("http://localhost/api/documents", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "tailored_resume", jobId, sourceId: optimizationId, format: "tex" }),
+    }));
+    expect(created.status).toBe(201);
+    const { document } = await created.json();
+
+    const res = await download(document.id);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/x-tex; charset=utf-8");
+    expect(Buffer.from(await res.arrayBuffer()).toString("utf8")).toContain("\\documentclass");
+  });
+
   it("returns 404 for a non-UUID id, an unknown id, and another user's document", async () => {
     expect((await download("nope")).status).toBe(404);
     expect((await download("33333333-3333-3333-3333-333333333333")).status).toBe(404);

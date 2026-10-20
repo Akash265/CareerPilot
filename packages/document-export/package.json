@@ -11,6 +11,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:latex": "vitest run src/latex.integration.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src scripts",
     "embed-fonts": "node scripts/embed-fonts.mjs"

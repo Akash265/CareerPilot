@@ -49,3 +49,10 @@ describe("buildDownloadFilename", () => {
     expect(buildDownloadFilename("Jane Doe", "GitLab", "interview_prep", "docx")).toBe("Jane Doe - GitLab - Interview Prep.docx");
   });
 });
+
+describe("buildDownloadFilename for tailored resumes", () => {
+  it("labels a tailored resume as Resume and supports the tex extension", () => {
+    expect(buildDownloadFilename("Jane Doe", "GitLab", "tailored_resume", "tex")).toBe("Jane Doe - GitLab - Resume.tex");
+    expect(buildDownloadFilename("Jane Doe", "GitLab", "tailored_resume", "pdf")).toBe("Jane Doe - GitLab - Resume.pdf");
+  });
+});

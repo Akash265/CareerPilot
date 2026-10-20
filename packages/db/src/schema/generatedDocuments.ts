@@ -1,13 +1,13 @@
 import { sql } from "drizzle-orm";
-import { pgTable, pgEnum, uuid, text, integer, timestamp, uniqueIndex, index, check } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, uuid, text, integer, timestamp, uniqueIndex, index, check, jsonb } from "drizzle-orm/pg-core";
 import { jobs } from "./jobs";
 import { resumeOptimizations } from "./resumeOptimizations";
 import { applicationPitches } from "./applicationPitches";
 import { coverLetters } from "./coverLetters";
 import { interviewPreparations } from "./interviewPreparations";
 
-export const generatedDocumentKindEnum = pgEnum("generated_document_kind", ["resume", "pitch", "cover_letter", "interview_prep"]);
-export const generatedDocumentFormatEnum = pgEnum("generated_document_format", ["pdf", "docx"]);
+export const generatedDocumentKindEnum = pgEnum("generated_document_kind", ["resume", "pitch", "cover_letter", "interview_prep", "tailored_resume"]);
+export const generatedDocumentFormatEnum = pgEnum("generated_document_format", ["pdf", "docx", "tex"]);
 
 /**
  * One stored, rendered file (Phase 7b design §3). The file itself lives in MinIO bucket
@@ -19,6 +19,8 @@ export const generatedDocumentFormatEnum = pgEnum("generated_document_format", [
  * The source column (resumeOptimizationId / applicationPitchId / coverLetterId / interviewPreparationId)
  * that does not match `kind` is always null; the matching one may later become null through ON DELETE
  * SET NULL, so it is not required non-null here (the pipeline always sets it).
+ * Phase 13c: kind tailored_resume uses resumeOptimizationId too; its content hash is tailoredContentHash
+ * (not the resume model hash), and `details` carries its page/omission summary.
  * Known gap: deleting a job cascades these rows but not their MinIO objects (Phase 9 retention sweeps them).
  */
 export const generatedDocuments = pgTable(
@@ -42,6 +44,14 @@ export const generatedDocuments = pgTable(
     contentHash: text("content_hash").notNull(),
     rendererVersion: text("renderer_version").notNull(),
     downloadFilename: text("download_filename").notNull(),
+    /** Phase 13c: tailored_resume only -- page count, counts, omitted item ids + reasons (no resume text). */
+    details: jsonb("details").$type<{
+      pageCount: number | null;
+      pageVerified: boolean;
+      includedCount: number;
+      totalCount: number;
+      omitted: { sourceType: "work_experience_bullet" | "project" | "achievement" | "skill" | "verified_skill"; sourceFactId: string; reason: "no_requirement_match" | "page_limit" }[];
+    }>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -53,10 +63,16 @@ export const generatedDocuments = pgTable(
     // rejects using an enum value added by ALTER TYPE ... ADD VALUE in the same transaction.
     sourceMatchesKind: check(
       "generated_documents_source_matches_kind",
-      sql`(${t.resumeOptimizationId} IS NULL OR ${t.kind}::text = 'resume')
+      sql`(${t.resumeOptimizationId} IS NULL OR ${t.kind}::text IN ('resume', 'tailored_resume'))
         AND (${t.applicationPitchId} IS NULL OR ${t.kind}::text = 'pitch')
         AND (${t.coverLetterId} IS NULL OR ${t.kind}::text = 'cover_letter')
         AND (${t.interviewPreparationId} IS NULL OR ${t.kind}::text = 'interview_prep')`
+    ),
+    // Phase 13c: LaTeX source exists only for the tailored resume; details only on tailored rows, always an object.
+    texOnlyTailored: check("generated_documents_tex_only_tailored", sql`${t.format}::text <> 'tex' OR ${t.kind}::text = 'tailored_resume'`),
+    detailsTailoredObject: check(
+      "generated_documents_details_tailored_object",
+      sql`${t.details} IS NULL OR (${t.kind}::text = 'tailored_resume' AND jsonb_typeof(${t.details}) = 'object')`
     ),
     // Phase 11c (D181): one index per foreign key, so a change to the parent row never scans this table.
     applicationPitchIdFkIdx: index("generated_documents_application_pitch_id_idx").on(t.applicationPitchId).where(sql`${t.applicationPitchId} IS NOT NULL`),

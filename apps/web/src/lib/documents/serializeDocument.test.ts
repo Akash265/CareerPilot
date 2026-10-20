@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toDocumentView, contentDisposition } from "./serializeDocument";
+import { toDocumentView, contentDisposition, CONTENT_TYPES } from "./serializeDocument";
 
 describe("toDocumentView", () => {
   it("serializes and builds the download URL", () => {
@@ -10,9 +10,22 @@ describe("toDocumentView", () => {
     } as never, 3);
     expect(view).toEqual({
       id: "d1", kind: "resume", format: "pdf", sourceVersion: 3, downloadFilename: "Jane - Acme - Resume.pdf",
-      byteSize: 1234, createdAt: "2026-09-24T00:00:00.000Z", downloadUrl: "/api/documents/d1/download",
+      byteSize: 1234, createdAt: "2026-09-24T00:00:00.000Z", downloadUrl: "/api/documents/d1/download", details: null,
     });
     expect(JSON.stringify(view)).not.toContain("u/x.pdf");
+  });
+});
+
+describe("tailored_resume rows", () => {
+  it("passes details through and serves .tex as x-tex", () => {
+    const details = { pageCount: 1, pageVerified: true, includedCount: 2, totalCount: 3 };
+    const view = toDocumentView({
+      id: "d2", userId: "u", jobId: "j", kind: "tailored_resume", format: "tex", resumeOptimizationId: "o", applicationPitchId: null,
+      objectKey: "u/x.tex", byteSize: 99, contentHash: "h", rendererVersion: "1", downloadFilename: "Jane - Acme - Resume.tex",
+      createdAt: new Date("2026-09-24T00:00:00Z"), details,
+    } as never, 2);
+    expect(view).toMatchObject({ kind: "tailored_resume", format: "tex", details });
+    expect(CONTENT_TYPES.tex).toBe("application/x-tex; charset=utf-8");
   });
 });
 

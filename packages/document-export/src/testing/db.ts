@@ -90,3 +90,11 @@ export async function insertOptimization(
     RETURNING id`;
   return row.id as string;
 }
+
+export async function insertRequirement(
+  testDb: TestDb, userId: string, jobId: string, termText: string, level: "required" | "preferred"
+): Promise<void> {
+  await testDb.adminSql`
+    INSERT INTO job_requirements (user_id, job_id, term_text, term_type, requirement_level, extraction_model, extraction_source_description_hash)
+    VALUES (${userId}, ${jobId}, ${termText}, 'skill', ${level}, 'm', 'dh')`;
+}

@@ -1,1 +1,1 @@
-export { openTestDb, wipeUser, testStorageClient, seedResumeFixture, insertOptimization, type TestDb } from "./db";
+export { openTestDb, wipeUser, testStorageClient, seedResumeFixture, insertOptimization, insertRequirement, type TestDb } from "./db";

@@ -46,6 +46,7 @@ describe("ResumeOptimizationPanel", () => {
     expect(await screen.findByText("92.5/100")).toBeInTheDocument();
     expect(screen.getByText("Built X using SQL")).toBeInTheDocument();
     expect(screen.getByText("SQL")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tailored resume (LaTeX, 1 page)" })).toBeTruthy();
   });
 
   it("shows a review banner when requiresReview is true", async () => {

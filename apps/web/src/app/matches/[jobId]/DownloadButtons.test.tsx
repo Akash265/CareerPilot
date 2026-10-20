@@ -83,9 +83,27 @@ describe("DownloadButtons", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it("uses a custom label prefix for the accessible names", () => {
+    render(<DownloadButtons jobId="j1" kind="tailored_resume" sourceId="o1" formats={["pdf", "tex"]} labelPrefix="Download tailored" navigate={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Download tailored PDF" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download tailored .tex" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Download PDF" })).toBeNull();
+  });
+
   it("disables both buttons when disabled", () => {
     render(<DownloadButtons jobId="j1" kind="pitch" sourceId="p1" disabled navigate={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Download PDF" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Download DOCX" })).toBeDisabled();
+  });
+
+  it("renders only the requested formats, labels tex as .tex, and reports the export body", async () => {
+    const body = { document: { downloadUrl: "/api/documents/t1/download", details: { pageCount: 1, pageVerified: true, includedCount: 3, totalCount: 4, omitted: [] } }, omittedItems: [] };
+    const fetchMock = mockPostThenHead(201, body, true);
+    const onExported = vi.fn();
+    render(<DownloadButtons jobId="j1" kind="tailored_resume" sourceId="o1" formats={["pdf", "tex"]} onExported={onExported} navigate={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Download DOCX" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Download .tex" }));
+    await waitFor(() => expect(onExported).toHaveBeenCalledWith(body));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]!.body as string)).toEqual({ kind: "tailored_resume", jobId: "j1", sourceId: "o1", format: "tex" });
   });
 });

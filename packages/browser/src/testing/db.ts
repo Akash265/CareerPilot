@@ -62,12 +62,15 @@ export interface SeedAutofillOptions {
   /** Default true: a resume PDF generated_documents row (object key is fake; tests that download must upload it). */
   withResume?: boolean;
   withCoverLetter?: boolean;
+  /** Phase 13c: also a tailored_resume PDF row, created after the resume row. */
+  withTailoredResume?: boolean;
 }
 
 export interface SeededAutofillJob {
   jobId: string;
   resumeDocumentId: string | null;
   coverLetterDocumentId: string | null;
+  tailoredResumeDocumentId: string | null;
 }
 
 export async function seedAutofillJob(adminSql: postgres.Sql, userId: string, opts: SeedAutofillOptions = {}): Promise<SeededAutofillJob> {
@@ -105,10 +108,18 @@ export async function seedAutofillJob(adminSql: postgres.Sql, userId: string, op
       RETURNING id`;
     return row.id as string;
   };
+  const tailoredDoc = async () => {
+    const [row] = await adminSql`
+      INSERT INTO generated_documents (user_id, job_id, kind, format, object_key, byte_size, content_hash, renderer_version, download_filename, created_at)
+      VALUES (${userId}, ${job.id}, 'tailored_resume', 'pdf', ${`${userId}/tailored-${job.id}.pdf`}, 10, 'tailored-h', 'tex-1', 'r.pdf', now() + interval '1 second')
+      RETURNING id`;
+    return row.id as string;
+  };
   return {
     jobId: job.id as string,
     resumeDocumentId: (opts.withResume ?? true) ? await doc("resume") : null,
     coverLetterDocumentId: opts.withCoverLetter ? await doc("cover_letter") : null,
+    tailoredResumeDocumentId: opts.withTailoredResume ? await tailoredDoc() : null,
   };
 }
 

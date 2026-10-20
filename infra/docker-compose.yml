@@ -76,6 +76,32 @@ services:
       minio:
         condition: service_healthy
 
+  # Opt-in: `docker compose -f infra/docker-compose.yml --env-file .env --profile latex up -d latex-compiler`
+  # (from the repo root). pdflatex sandbox for the tailored LaTeX resume (Phase 13c, DECISIONS.md D209).
+  # Only LATEX_COMPILER_TOKEN is passed in -- never the app's .env. Published on localhost only. Not on an
+  # `internal: true` network: Docker does not publish ports for such containers, and the host-run web app must
+  # reach it; pdflatex runs without shell-escape, so it has no way to open a network connection (R1).
+  latex-compiler:
+    profiles: ["latex"]
+    build:
+      context: ..
+      dockerfile: services/latex-compiler/Dockerfile
+    image: careerpilot-latex-compiler
+    restart: unless-stopped
+    environment:
+      LATEX_COMPILER_TOKEN: ${LATEX_COMPILER_TOKEN:-}
+    ports:
+      - "127.0.0.1:8090:8090"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 64
+
 volumes:
   postgres_data:
   minio_data:

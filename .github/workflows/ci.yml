@@ -188,3 +188,23 @@ jobs:
             echo "A .env file was baked into the image" >&2
             exit 1
           fi
+      - name: Build the latex-compiler image and run the real-compile tests (Phase 13c, DECISIONS.md D209)
+        # Proves the image builds, pdflatex can typeset every whitelisted character, TeX-looking text stays literal,
+        # and the one-page estimate is calibrated. Test mode enables /extract (pdftotext) for the text-layer checks.
+        env:
+          LATEX_COMPILER_TOKEN: ci-latex-token-0123456789abcdef0123456789
+          LATEX_COMPILER_URL: http://127.0.0.1:8090
+        run: |
+          for attempt in 1 2 3; do
+            if docker build -f services/latex-compiler/Dockerfile -t careerpilot-latex-compiler .; then break; fi
+            if [ "$attempt" = 3 ]; then echo "docker build failed 3 times" >&2; exit 1; fi
+            echo "docker build failed (attempt $attempt), retrying in 15s" >&2; sleep 15
+          done
+          if docker run --rm careerpilot-latex-compiler sh -c 'find / -name .env -not -path "/proc/*" 2>/dev/null' | grep -q .; then
+            echo "A .env file was baked into the image" >&2; exit 1
+          fi
+          docker run -d --name latex-compiler -p 127.0.0.1:8090:8090 --read-only --tmpfs /tmp:size=64m \
+            --cap-drop ALL --security-opt no-new-privileges:true --memory 512m --pids-limit 64 \
+            -e LATEX_COMPILER_TOKEN -e LATEX_COMPILER_TEST_MODE=1 careerpilot-latex-compiler
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8090/health && break; sleep 1; done
+          pnpm --filter @ai-career/document-export test:latex || { docker logs latex-compiler; exit 1; }

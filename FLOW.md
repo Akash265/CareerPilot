@@ -1852,3 +1852,64 @@ buildResumeSnapshot (packages/resume-optimization/src/optimization/buildResumeSn
 document-export: loadResumeProfile.verifiedSkills (have + live alias rows)
   → buildResumeModel Skills section: profile skills, then verified terms (selected first, every one rendered)
 ```
+
+## 22. Phase 13c — Tailored LaTeX Resume
+
+Files changed in this phase are marked **(new)** or **(changed)**; unmarked files are called unchanged.
+
+### 22a. Export (request-driven)
+
+```
+ResumeOptimizationPanel (changed) → TailoredResumeExport (new) → DownloadButtons (changed; PDF / .tex)
+  → POST /api/documents   apps/web/src/app/api/documents/route.ts (changed)
+     ExportBodySchema.superRefine: format "tex" only with kind "tailored_resume"; tailored_resume only pdf|tex (else 400)
+  → runExport (kind "tailored_resume") → texCompilerFromEnv (new; apps/web/src/lib/documents/texCompiler.ts):
+     LATEX_COMPILER_URL + LATEX_COMPILER_TOKEN both set → createHttpTexCompiler, else null
+  → exportTailoredResume (new; packages/document-export/src/pipeline/exportTailoredResume.ts)
+     1. format "pdf" with a null compiler → compiler_unavailable (503)
+     2. loadResumeExportContext (new; the D84 checks shared with exportResume, which now uses it):
+        job 404, source_mismatch 400, profile_changed 409, no_profile 409
+     3. job_requirements rows for the job (termText, requirementLevel)
+     4. build(extraRemovals) = selectTailoredResume (new; uses estimateLines (new), containsTerm): remove worst-first until it fits,
+        one greedy refill pass over the removed items (best-ranked first), then extraRemovals; skills past the 2-line cap go to omitted → normalizeModel
+     5. first model only: assertSafeModel, then findUnsupportedCharacter (new; render/tex/escapeTex.ts)
+        → unsupported_character 422 with a location
+     6. fitToPage (new; pipeline/fitToPage.ts), render = renderTex (new; render/tex/renderTex.ts, uses escapeTex)
+        loop: build(extra) → renderTex → compiler.compile
+        ├─ createHttpTexCompiler (new; render/compileTex.ts) → POST {LATEX_COMPILER_URL}/compile, Bearer token
+        │   ├─ services/latex-compiler/src/server.ts (new): auth → size limit 256 KB → limiter (2 running + 4 waiting, else 503)
+        │   │   → compileTex (compile.ts): mkdtemp → runPdflatex (runPdflatex.ts, no shell-escape, 20 s kill)
+        │   │   → parseOutput (page count) → 200 PDF + X-Page-Count + X-Tex-Version (temp dir removed in finally)
+        │   └─ failures → DocumentExportError: 503 busy → compiler_busy, 504 → compiler_timeout, 422 → compile_failed,
+        │      transport errors (request or PDF body read) → compiler_timeout (TimeoutError/AbortError) or compiler_unavailable
+        ├─ pageCount > 1 and extra < 3 and not exhausted → extra++ and again; otherwise stop (pageCount 2 is exported, flagged)
+        └─ format "tex" and the compiler was unavailable / busy / timed out → fitToPage(build, render, null): estimate only, pageVerified false
+     7. details = { pageCount, pageVerified, includedCount, totalCount, omitted } (ids and reasons)
+     8. tailoredContentHash (changed; model/hash.ts) → storeDocument (changed; pipeline/storeDocument.ts, `prerendered` buffer:
+        the compiled PDF or the .tex text) → MinIO (key extension .tex via storage/generatedDocumentStorage.ts, changed)
+        + generated_documents row (kind tailored_resume, details jsonb; migration 0038)
+     9. returns { document, omittedItems (text resolved from the profile, R3) }
+  → route: serializeDocument (changed; includes details) → 201 { document, omittedItems }
+  → exportErrorResponse (changed; lib/documents/exportErrors.ts): status per error class; compiler_unavailable carries the start command
+```
+
+### 22b. Download and listing
+
+```
+GET /api/documents/[id]/download (changed) → CONTENT_TYPES.tex = application/x-tex; filename "<Name> - <Company> - Resume.tex"
+  (buildDownloadFilename, changed: label + extension)
+GET /api/documents?jobId= → DocumentsList (changed): tailored rows show "Included N of M items · page summary" from details only
+TailoredResumeExport renders the page summary and the collapsible "Left out" list from the POST response (omittedItems)
+```
+
+### 22c. Autofill
+
+```
+automation-sessions start → loadAutofillContext (changed; packages/browser/src/sessions/loadAutofillContext.ts)
+  resumeDocument = newestPdf("tailored_resume") ?? newestPdf("resume")   (the file is still uploaded as resume.pdf)
+getJobAutofillOverview (changed; readSessions.ts): resumeAvailable counts kind resume or tailored_resume PDFs
+```
+
+### 22d. Not changed
+
+`exportResume` (full-profile PDF/DOCX), the pitch, cover letter and interview prep exports, and the optimizer, whose `selectedBullets` this feature reads and whose guard (D63) remains the only authority on applied bullets.

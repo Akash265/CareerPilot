@@ -12,7 +12,7 @@ async function ensureBucketExists(client: Client): Promise<void> {
 /** Keys are generated here and never contain user-supplied text (Phase 7b design §7). */
 export async function uploadGeneratedDocument(
   client: Client,
-  params: { userId: string; buffer: Buffer; extension: "pdf" | "docx" }
+  params: { userId: string; buffer: Buffer; extension: "pdf" | "docx" | "tex" }
 ): Promise<{ objectKey: string }> {
   await ensureBucketExists(client);
   const objectKey = `${params.userId}/${randomUUID()}.${params.extension}`;

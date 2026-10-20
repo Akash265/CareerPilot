@@ -100,6 +100,12 @@ rationale behind each architectural choice.
       `BROWSER_SESSION_TIMEOUT_MIN` (default 30 — how long an open window
       waits for you before the worker closes it).
 
+10. Optional: the LaTeX compiler for the job-tailored one-page resume PDF
+    (Phase 13c; the `.tex` download works without it). Set
+    `LATEX_COMPILER_TOKEN` and `LATEX_COMPILER_URL` in `.env`, then
+    `docker compose -f infra/docker-compose.yml --env-file .env --profile latex up -d latex-compiler`;
+    see [docs/development.md](docs/development.md#tailored-latex-resume-phase-13c).
+
 After adding new migrations, migrate the *test* database once before running
 the whole suite:
 `MIGRATIONS_DATABASE_URL=postgres://career_intel:career_intel@localhost:5432/career_intel_test pnpm --filter @ai-career/db db:migrate`.

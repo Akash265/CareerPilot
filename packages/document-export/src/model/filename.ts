@@ -1,4 +1,4 @@
-import type { DocumentFormat, DocumentKind } from "./types";
+import type { StoredDocumentFormat, DocumentKind } from "./types";
 
 const MAX_BASE = 120;
 const MAX_PART = 50;
@@ -17,7 +17,7 @@ function cleanPart(value: string, maxLen: number): string {
 }
 
 /** ASCII-only, filesystem- and header-safe download name (the real key in storage is generated). */
-export function sanitizeFilename(base: string, extension: DocumentFormat): string {
+export function sanitizeFilename(base: string, extension: StoredDocumentFormat): string {
   const cleaned = cleanPart(base, MAX_BASE);
   const safe = cleaned.replace(/^[.\s]+/, "");
   return `${safe.length > 0 ? safe : "document"}.${extension}`;
@@ -28,6 +28,7 @@ const KIND_LABELS: Record<DocumentKind, string> = {
   pitch: "Pitch",
   cover_letter: "Cover Letter",
   interview_prep: "Interview Prep",
+  tailored_resume: "Resume",
 };
 
 /**
@@ -37,7 +38,7 @@ const KIND_LABELS: Record<DocumentKind, string> = {
  * chars each -- well under half of `MAX_BASE`, leaving headroom for the separators and the kind suffix)
  * guarantees the suffix always survives.
  */
-export function buildDownloadFilename(fullName: string, companyName: string, kind: DocumentKind, format: DocumentFormat): string {
+export function buildDownloadFilename(fullName: string, companyName: string, kind: DocumentKind, format: StoredDocumentFormat): string {
   const name = cleanPart(fullName, MAX_PART);
   const company = cleanPart(companyName, MAX_PART);
   return sanitizeFilename(`${name} - ${company} - ${KIND_LABELS[kind]}`, format);

@@ -4,19 +4,33 @@ import { useState } from "react";
 
 export const DOCUMENTS_CHANGED_EVENT = "documents:changed";
 
-type Format = "pdf" | "docx";
+type Format = "pdf" | "docx" | "tex";
+
+export interface ExportBody {
+  document: { downloadUrl: string; details?: { pageCount: number | null; pageVerified: boolean; includedCount: number; totalCount: number } | null };
+  omittedItems?: { sourceType: string; text: string; reason: "no_requirement_match" | "page_limit" }[];
+}
+
+const DEFAULT_FORMATS: readonly Format[] = ["pdf", "docx"];
 
 export function DownloadButtons({
   jobId,
   kind,
   sourceId,
+  formats = DEFAULT_FORMATS,
+  onExported,
   disabled = false,
+  labelPrefix = "Download",
   navigate = (url: string) => window.location.assign(url),
 }: {
   jobId: string;
-  kind: "resume" | "pitch" | "cover_letter" | "interview_prep";
+  kind: "resume" | "pitch" | "cover_letter" | "interview_prep" | "tailored_resume";
   sourceId: string;
+  formats?: readonly Format[];
+  onExported?: (body: ExportBody) => void;
   disabled?: boolean;
+  /** Accessible-name prefix; a panel with several export groups gives each a distinct one. */
+  labelPrefix?: string;
   navigate?: (url: string) => void;
 }) {
   const [busy, setBusy] = useState<Format | null>(null);
@@ -37,6 +51,7 @@ export function DownloadButtons({
         return;
       }
       window.dispatchEvent(new Event(DOCUMENTS_CHANGED_EVENT));
+      onExported?.(body as ExportBody);
       const downloadUrl = body.document.downloadUrl as string;
       // Preflight before navigating: a 404/502 JSON error response would otherwise navigate the whole app
       // to a raw JSON page instead of showing an inline error. Own try/catch: the export already succeeded
@@ -62,7 +77,7 @@ export function DownloadButtons({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex gap-2">
-        {(["pdf", "docx"] as const).map((format) => (
+        {formats.map((format) => (
           <button
             key={format}
             type="button"
@@ -70,7 +85,7 @@ export function DownloadButtons({
             disabled={disabled || busy !== null}
             className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
           >
-            {busy === format ? "Exporting..." : `Download ${format.toUpperCase()}`}
+            {busy === format ? "Exporting..." : `${labelPrefix} ${format === "tex" ? ".tex" : format.toUpperCase()}`}
           </button>
         ))}
       </div>

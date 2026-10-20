@@ -533,3 +533,23 @@ call order and DECISIONS.md D127–D136 the rationale behind each piece.
 - **Discovery.** Board links in fetched postings become pending boards; the worker validates them in the background (25 attempts a pass, an hour's backoff after a failure) and adds the real ones as enabled sources, up to 300 enabled; boards that disappear are retired. Users can also paste board links ([D186](../DECISIONS.md), [D190](../DECISIONS.md)).
 - **Consent and politeness.** One recorded, revocable standing consent covers discovered and search sources (amends D3); every provider is fetched at most once a second per host ([D185](../DECISIONS.md), [D188](../DECISIONS.md)).
 - **Known gaps.** No LinkedIn, Indeed or Glassdoor (bot-protected; not scraped), and no Workday, iCIMS or Taleo boards. Discovery finds only boards that postings link to. HN titles are parsed heuristically. Jooble is verified by fixtures only until a key is configured. Third-party terms (attribution, quotas) are the user's responsibility under the standing consent; the app enforces politeness, not each provider's terms.
+
+## 25. Tailored LaTeX Resume (Phase 13c)
+
+- **Flow.** `POST /api/documents` with `kind: tailored_resume` selects the resume items for one job deterministically ([D207](../DECISIONS.md)), renders them through one escaping function into an ATS-safe single-column template ([D208](../DECISIONS.md)), compiles, trims and recompiles up to 3 times until the PDF has one page ([D211](../DECISIONS.md)), and stores the PDF or the `.tex` with a `details` summary of ids and reasons ([D210](../DECISIONS.md)). No model is called.
+- **The `latex-compiler` sidecar** (`services/latex-compiler`, compose profile `latex`, [D209](../DECISIONS.md)):
+
+```
+host: web app (route handler) ──HTTP, Bearer LATEX_COMPILER_TOKEN──▶ 127.0.0.1:8090 ─┐
+                                                                                      │ trust boundary
+┌ container: read-only root, tmpfs /tmp, uid 1000, cap_drop ALL, no-new-privileges,  │
+│ 512 MB / 1 CPU / 64 pids, only LATEX_COMPILER_TOKEN in its environment ◀───────────┘
+│  node:http → auth → ≤ 256 KB → limiter (2 running + 4 waiting) → per-request temp dir
+│  → pdflatex -no-shell-escape -halt-on-error, 20 s wall clock then SIGKILL of the group
+└ returns the PDF, page count and TeX version; logs sizes and timings, never resume text
+```
+
+  The `.tex` is built from the user's own profile (and, indirectly, from text that came from uploaded resumes), so it is treated as untrusted input. The sidecar is on the default compose network, not an `internal` one, because Docker does not publish ports for internal-only networks; egress is not blocked but pdflatex without shell-escape cannot open connections (R1).
+- **Fallbacks.** A PDF needs the compiler (503 with the start command otherwise). A `.tex` export falls back to the estimate fit when the compiler is down (`pageVerified: false`).
+- **Autofill.** The newest tailored PDF is the resume the browser worker attaches, else the full-profile resume ([D212](../DECISIONS.md)).
+- **Known gaps.** Only Latin characters (no CJK or emoji; the export names where the first one is). One template, A4 or Letter (`RESUME_PAPER_SIZE`). No DOCX for the tailored resume and no manual include/exclude of items. Compilation is synchronous inside the request, bounded by 20 s. The image is large (1.23 GB).

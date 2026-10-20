@@ -1,6 +1,7 @@
 import { normalizeTermKey, type AppliedBullet } from "@ai-career/resume-optimization";
 import type { DocumentBlock, DocumentModel } from "./types";
-import { certDates, contactLine, dateRange, present, type ResumeProfile } from "./resumeProfile";
+import { contactLine, dateRange, present, type ResumeProfile } from "./resumeProfile";
+import { certificationBlocks, educationBlocks, joinPresent } from "./resumeSections";
 
 /** Items the optimizer selected (in its order) with its text, then the rest (in profile order) with their own text. */
 function selectedFirst<T extends { id: string }>(
@@ -25,12 +26,6 @@ function selectedFirst<T extends { id: string }>(
   }
   for (const item of items) if (!used.has(item.id)) chosen.push({ item, text: originalText(item) });
   return chosen;
-}
-
-/** Joins the non-blank parts with " · ", or null if none are present. */
-function joinPresent(parts: (string | null)[]): string | null {
-  const kept = parts.filter(present);
-  return kept.length > 0 ? kept.join(" · ") : null;
 }
 
 /**
@@ -85,29 +80,9 @@ export function buildResumeModel(profile: ResumeProfile, applied: AppliedBullet[
     blocks.push({ type: "bullets", items: selectedFirst(profile.achievements, applied, "achievement", (a) => a.description).map((a) => a.text) });
   }
 
-  if (profile.education.length > 0) {
-    blocks.push({ type: "heading", text: "Education" });
-    for (const e of profile.education) {
-      blocks.push({
-        type: "entry",
-        title: present(e.fieldOfStudy) ? `${e.degree} in ${e.fieldOfStudy}` : e.degree,
-        subtitle: present(e.gpa) ? `${e.institution} · GPA ${e.gpa}` : e.institution,
-        meta: dateRange(e.startDate, e.endDate),
-      });
-    }
-  }
+  blocks.push(...educationBlocks(profile));
 
-  if (profile.certifications.length > 0) {
-    blocks.push({ type: "heading", text: "Certifications" });
-    for (const c of profile.certifications) {
-      blocks.push({
-        type: "entry",
-        title: c.name,
-        subtitle: c.issuer,
-        meta: certDates(c.issueDate, c.expiryDate),
-      });
-    }
-  }
+  blocks.push(...certificationBlocks(profile));
 
   if (profile.skills.length > 0 || profile.verifiedSkills.length > 0) {
     blocks.push({ type: "heading", text: "Skills" });
