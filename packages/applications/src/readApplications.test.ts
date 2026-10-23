@@ -21,8 +21,12 @@ const external = (companyName: string, extra: Record<string, unknown> = {}) =>
 describe("read applications", () => {
   it("getApplication returns the row with events oldest-first, or null", async () => {
     const row = await external("Globex");
+    // One minute after the creation event's own time, not Postgres now(): createApplication stamps that event with
+    // Node's clock, and the Docker VM's clock can lag the host's by more than a minute (e.g. after sleep), which
+    // flipped the order when the two clocks were compared.
     await t.adminSql`INSERT INTO application_events (user_id, application_id, type, occurred_at, detail)
-                     VALUES (${USER}, ${row.id}, 'note', now() + interval '1 minute', '{"text":"later"}'::jsonb)`;
+                     SELECT ${USER}, ${row.id}, 'note', occurred_at + interval '1 minute', '{"text":"later"}'::jsonb
+                     FROM application_events WHERE application_id = ${row.id} AND type = 'status_change'`;
     const got = await getApplication(t.db, USER, row.id);
     expect(got?.application.id).toBe(row.id);
     expect(got?.events.map((e) => e.type)).toEqual(["status_change", "note"]);
