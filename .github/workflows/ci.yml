@@ -166,14 +166,35 @@ jobs:
           name: e2e-output
           path: e2e/.out/
           if-no-files-found: ignore
+      - name: Pull the Node base image once, with registry fallback (DECISIONS.md D214)
+        # Both image builds below use this local tag, so neither contacts a registry for its base image.
+        # public.ecr.aws answers anonymous pulls from shared GitHub runner IPs with "429 Too Many Requests -
+        # Data limit exceeded" once the IP's quota is used up, which no short retry outlasts. mirror.gcr.io
+        # (Google's Docker Hub mirror) and Docker Hub serve the identical node:22-slim (same index digest).
+        run: |
+          pull_base() {
+            for src in public.ecr.aws/docker/library/node:22-slim mirror.gcr.io/library/node:22-slim docker.io/library/node:22-slim; do
+              for attempt in 1 2; do
+                if docker pull "$src"; then
+                  docker tag "$src" careerpilot-node-base:22-slim
+                  echo "Node base image from $src"
+                  return 0
+                fi
+                echo "pull of $src failed (attempt $attempt)" >&2
+                sleep 10
+              done
+            done
+            echo "node:22-slim could not be pulled from any registry" >&2
+            return 1
+          }
+          pull_base
       - name: Build the maintenance-worker image (DECISIONS.md D125)
         # Catches a broken Dockerfile. The step above wrote a .env into the build context, so this also
         # proves .dockerignore keeps it (and every other secret) out of the image.
-        # The base image comes from public.ecr.aws, not Docker Hub (anonymous Docker Hub token fetches failed
-        # here with "connection reset by peer"); the retry absorbs any remaining transient registry errors.
+        # The base image is the local tag pulled above (D214); the retry absorbs transient errors in the build itself.
         run: |
           for attempt in 1 2 3; do
-            if docker build -f services/maintenance-worker/Dockerfile -t careerpilot-maintenance-worker .; then
+            if docker build --build-arg NODE_IMAGE=careerpilot-node-base:22-slim -f services/maintenance-worker/Dockerfile -t careerpilot-maintenance-worker .; then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -196,7 +217,7 @@ jobs:
           LATEX_COMPILER_URL: http://127.0.0.1:8090
         run: |
           for attempt in 1 2 3; do
-            if docker build -f services/latex-compiler/Dockerfile -t careerpilot-latex-compiler .; then break; fi
+            if docker build --build-arg NODE_IMAGE=careerpilot-node-base:22-slim -f services/latex-compiler/Dockerfile -t careerpilot-latex-compiler .; then break; fi
             if [ "$attempt" = 3 ]; then echo "docker build failed 3 times" >&2; exit 1; fi
             echo "docker build failed (attempt $attempt), retrying in 15s" >&2; sleep 15
           done

@@ -1535,4 +1535,10 @@ Minor cleanups: `probeEmployerNames` lost its unused `goalId` option.
 **Alternatives considered:** extending the smoke suite (large fixture work), resolving the omitted text from the profile on every page load (a second query and the profile-changed case).
 **What it affects:** `apps/web/src/app/api/documents/route.ts`, `apps/web/src/app/matches/[jobId]/{TailoredResumeExport,DownloadButtons,DocumentsList,ResumeOptimizationPanel}.tsx`, `apps/web/src/lib/documents/*`.
 
+### D214. CI pulls the Node base image once, with registry fallback, and builds both images from a local tag
+**Decision:** A CI step pulls `node:22-slim` from `public.ecr.aws` (D125), falling back to `mirror.gcr.io/library/node:22-slim` and then `docker.io/library/node:22-slim` (two attempts each), and tags the first success `careerpilot-node-base:22-slim`. The maintenance-worker and latex-compiler builds pass `--build-arg NODE_IMAGE=careerpilot-node-base:22-slim`; with the default `docker` build driver BuildKit resolves that tag from the local image store, so neither build contacts a registry for its base. The Dockerfiles' defaults are unchanged, so local builds behave as before.
+**Why:** CI run #34 failed both maintenance-worker build attempts with `429 Too Many Requests - Server message: toomanyrequests: Data limit exceeded` from public.ecr.aws. That is ECR Public's anonymous data quota for the shared runner IP, which a 15 s retry cannot outlast. All three sources serve the same image (index digest `sha256:de170b39…` checked on each). Pulling once also halves registry traffic now that two images are built.
+**Alternatives considered:** Longer retries on ECR (the quota outlasts any reasonable wait); switching the default to Docker Hub (its anonymous token fetch was the original D125 failure); authenticating to a registry (needs a secret for a public base image).
+**What it affects:** `.github/workflows/ci.yml` (new pull step; `--build-arg` on both builds).
+
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*
