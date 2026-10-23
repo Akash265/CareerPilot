@@ -145,12 +145,18 @@ export function selectTailoredResume(
   profile.achievements.forEach((a) => add("achievement", a.id, a.description, null));
 
   const ranked = [...items].sort(compareRank);
+  const isIrrelevant = (i: Item) => i.selectedRank === null && i.score === 0;
+  // Floors (D216, amends D207): the two most recent roles keep their top 2 bullets; an older role keeps its top bullet
+  // only when it is relevant (optimizer-selected or matching a requirement), else it may shrink to its header.
   const isProtected = new Set<string>();
   profile.experiences.forEach((_, roleIndex) => {
     const floor = roleIndex < FLOOR_RECENT_ROLES ? 2 : 1;
-    ranked.filter((i) => i.roleIndex === roleIndex).slice(0, floor).forEach((i) => isProtected.add(i.key));
+    ranked
+      .filter((i) => i.roleIndex === roleIndex)
+      .slice(0, floor)
+      .filter((i) => roleIndex < FLOOR_RECENT_ROLES || !isIrrelevant(i))
+      .forEach((i) => isProtected.add(i.key));
   });
-  const isIrrelevant = (i: Item) => i.selectedRank === null && i.score === 0;
   const worstFirst = [...ranked].reverse().filter((i) => !isProtected.has(i.key));
   const removalQueue = [
     ...worstFirst.filter((i) => i.sourceType !== "work_experience_bullet" && isIrrelevant(i)),

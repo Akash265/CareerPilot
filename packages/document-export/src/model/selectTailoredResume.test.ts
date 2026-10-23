@@ -105,6 +105,36 @@ describe("selectTailoredResume", () => {
     expect(reasons.b3).toBeUndefined(); // floor-protected (second-best bullet of the first role)
   });
 
+  it("lets an older role (third onward) drop to its header when none of its bullets is relevant", () => {
+    const irrelevantIntern = profileWith({
+      experiences: [
+        ...profileWith().experiences.slice(0, 2),
+        { ...profileWith().experiences[2], bullets: [{ id: "b6", text: "Filed tickets" }, { id: "b8", text: "Sorted mail" }] },
+      ],
+    });
+    const sel = selectTailoredResume(irrelevantIntern, [], reqs, { paperSize: "a4", extraRemovals: 100 });
+    expect(sel.model.blocks.some((b) => b.type === "entry" && b.title === "Intern")).toBe(true); // header always kept
+    expect(bulletsOf(sel.model, "Intern")).toEqual([]);
+    const reasons = Object.fromEntries(sel.omitted.map((o) => [o.sourceFactId, o.reason]));
+    expect(reasons.b6).toBe("no_requirement_match");
+    expect(reasons.b8).toBe("no_requirement_match");
+    // The two most recent roles keep their 2-bullet floor even when the bullets match nothing (b2, b4 score 0).
+    expect(bulletsOf(sel.model, "Engineer")).toHaveLength(2);
+    expect(bulletsOf(sel.model, "Analyst")).toHaveLength(2);
+    expect(sel.exhausted).toBe(true);
+  });
+
+  it("keeps an older role's floor bullet when the optimizer selected it, even with no requirement match", () => {
+    const irrelevantIntern = profileWith({
+      experiences: [
+        ...profileWith().experiences.slice(0, 2),
+        { ...profileWith().experiences[2], bullets: [{ id: "b6", text: "Filed tickets" }, { id: "b8", text: "Sorted mail" }] },
+      ],
+    });
+    const sel = selectTailoredResume(irrelevantIntern, [applied("b8", "Triaged 40 support tickets a week")], reqs, { paperSize: "a4", extraRemovals: 100 });
+    expect(bulletsOf(sel.model, "Intern")).toEqual(["Triaged 40 support tickets a week"]);
+  });
+
   it("fits a long profile to the estimate budget, marking cut scored items page_limit", () => {
     const many = Array.from({ length: 60 }, (_, i) => ({ id: `m${i}`, text: `Did Kafka thing number ${i} `.repeat(4) }));
     const sel = selectTailoredResume(profileWith({ experiences: [{ ...profileWith().experiences[0], bullets: many }] }), [], reqs, { paperSize: "a4" });
