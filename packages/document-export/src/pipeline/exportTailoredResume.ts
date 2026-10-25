@@ -8,6 +8,7 @@ import {
 import type { ResumeProfile } from "../model/resumeProfile";
 import { selectTailoredResume, type TailoredSelection } from "../model/selectTailoredResume";
 import { normalizeModel } from "../model/normalizeModel";
+import { hasUnsafeText } from "@ai-career/ingestion/text";
 import { assertSafeModel } from "../model/assertSafeModel";
 import { tailoredContentHash } from "../model/hash";
 import { buildDownloadFilename } from "../model/filename";
@@ -56,21 +57,23 @@ export async function exportTailoredResume(
       .from(jobRequirements).where(eq(jobRequirements.jobId, input.jobId))
   );
   const applied = optimization.selectedBullets as AppliedBullet[];
-  const build = (extraRemovals: number): TailoredSelection => {
-    const selection = selectTailoredResume(profile, applied, requirements, { paperSize: input.paperSize, extraRemovals });
+  const build = (extraRemovals: number, include?: ReadonlySet<string>): TailoredSelection => {
+    const selection = selectTailoredResume(profile, applied, requirements, { paperSize: input.paperSize, extraRemovals, include });
     return { ...selection, model: normalizeModel(selection.model) };
   };
 
-  // Later fits only remove items, so checking the first fit covers every model that can be rendered.
+  // The estimate fit is checked here, and refusing it is the user's 422. Trims only remove items from it; the refill
+  // (D217) can bring back items it never contained, so fitToPage skips any refill page that fails the same checks.
   const first = build(0);
   assertSafeModel(first.model);
   const location = findUnsupportedCharacter(first.model);
   if (location !== null) throw new DocumentExportError("unsupported_character", { detail: location });
+  const isRenderable = (model: DocumentModel) => !hasUnsafeText(model) && findUnsupportedCharacter(model) === null;
 
   const render = (model: DocumentModel) => renderTex(model, { paperSize: input.paperSize });
   let fit: FitResult;
   try {
-    fit = await fitToPage(build, render, compiler);
+    fit = await fitToPage(build, render, compiler, { isRenderable });
   } catch (err) {
     if (input.format === "tex" && err instanceof DocumentExportError && COMPILER_DOWN.has(err.errorClass)) fit = await fitToPage(build, render, null);
     else throw err;

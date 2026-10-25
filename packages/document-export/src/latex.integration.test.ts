@@ -55,6 +55,21 @@ describe.skipIf(!enabled)("real pdflatex compile", () => {
     expect(squash(await extract(out.pdf))).toContain(squash(injection).replace(/'/g, "\u2019"));
   });
 
+  it("reports the page's free space, which shrinks by about one line per added line (D217)", async () => {
+    const withBullets = (n: number): DocumentModel => ({
+      title: "Jane Doe", contactLine: "jane@example.com",
+      blocks: [{ type: "heading", text: "Experience" }, { type: "bullets", items: Array.from({ length: n }, (_, i) => `Short bullet ${i}`) }],
+    });
+    const few = await compiler!.compile(renderTex(withBullets(2), { paperSize: "a4" }));
+    const more = await compiler!.compile(renderTex(withBullets(12), { paperSize: "a4" }));
+    expect(few.freeSpacePt).not.toBeNull();
+    expect(more.freeSpacePt).not.toBeNull();
+    expect(few.freeSpacePt!).toBeGreaterThan(600); // A4 text height ≈ 755pt; header + heading + 2 lines take < 150pt
+    const perLine = (few.freeSpacePt! - more.freeSpacePt!) / 10;
+    expect(perLine).toBeGreaterThan(10); // one-line bullets: 12pt baseline plus 1pt itemsep
+    expect(perLine).toBeLessThan(16);
+  });
+
   it("compiles every whitelisted character (whitelist is honest)", async () => {
     const model: DocumentModel = { title: "Sample", contactLine: null, blocks: [{ type: "paragraph", text: SUPPORTED_SAMPLE }] };
     await expect(compiler!.compile(renderTex(model, { paperSize: "a4" }))).resolves.toMatchObject({ pageCount: 1 });

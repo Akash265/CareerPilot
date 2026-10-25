@@ -105,6 +105,56 @@ describe("selectTailoredResume", () => {
     expect(reasons.b3).toBeUndefined(); // floor-protected (second-best bullet of the first role)
   });
 
+  it("lets an older role (third onward) drop to its header when none of its bullets is relevant", () => {
+    const irrelevantIntern = profileWith({
+      experiences: [
+        ...profileWith().experiences.slice(0, 2),
+        { ...profileWith().experiences[2], bullets: [{ id: "b6", text: "Filed tickets" }, { id: "b8", text: "Sorted mail" }] },
+      ],
+    });
+    const sel = selectTailoredResume(irrelevantIntern, [], reqs, { paperSize: "a4", extraRemovals: 100 });
+    expect(sel.model.blocks.some((b) => b.type === "entry" && b.title === "Intern")).toBe(true); // header always kept
+    expect(bulletsOf(sel.model, "Intern")).toEqual([]);
+    const reasons = Object.fromEntries(sel.omitted.map((o) => [o.sourceFactId, o.reason]));
+    expect(reasons.b6).toBe("no_requirement_match");
+    expect(reasons.b8).toBe("no_requirement_match");
+    // The two most recent roles keep their 2-bullet floor even when the bullets match nothing (b2, b4 score 0).
+    expect(bulletsOf(sel.model, "Engineer")).toHaveLength(2);
+    expect(bulletsOf(sel.model, "Analyst")).toHaveLength(2);
+    expect(sel.exhausted).toBe(true);
+  });
+
+  it("keeps an older role's floor bullet when the optimizer selected it, even with no requirement match", () => {
+    const irrelevantIntern = profileWith({
+      experiences: [
+        ...profileWith().experiences.slice(0, 2),
+        { ...profileWith().experiences[2], bullets: [{ id: "b6", text: "Filed tickets" }, { id: "b8", text: "Sorted mail" }] },
+      ],
+    });
+    const sel = selectTailoredResume(irrelevantIntern, [applied("b8", "Triaged 40 support tickets a week")], reqs, { paperSize: "a4", extraRemovals: 100 });
+    expect(bulletsOf(sel.model, "Intern")).toEqual(["Triaged 40 support tickets a week"]);
+  });
+
+  it("lists the cut items best-ranked first, each with the lines it would add back", () => {
+    // extraRemovals 3 cuts a1, p2, b6 (see the derivation above); rank order among them is b6, p2, a1.
+    const sel = selectTailoredResume(profileWith(), [], reqs, { paperSize: "a4", extraRemovals: 3 });
+    expect(sel.refill.map((c) => c.key)).toEqual(["work_experience_bullet:b6", "project:p2", "achievement:a1"]);
+    for (const c of sel.refill) expect(c.addedLines).toBeGreaterThan(0);
+    // Bringing back the only achievement also brings back its heading, so it costs more than a one-line bullet.
+    const byKey = Object.fromEntries(sel.refill.map((c) => [c.key, c.addedLines]));
+    expect(byKey["achievement:a1"]).toBeGreaterThan(byKey["work_experience_bullet:b6"]);
+    expect(selectTailoredResume(profileWith(), [], reqs, { paperSize: "a4" }).refill).toEqual([]);
+  });
+
+  it("puts back exactly the included items and keeps every other removal", () => {
+    const base = selectTailoredResume(profileWith(), [], reqs, { paperSize: "a4", extraRemovals: 3 });
+    const sel = selectTailoredResume(profileWith(), [], reqs, { paperSize: "a4", extraRemovals: 3, include: new Set(["project:p2"]) });
+    expect(sel.omitted.map((o) => o.sourceFactId)).toEqual(base.omitted.map((o) => o.sourceFactId).filter((id) => id !== "p2"));
+    expect(sel.model.blocks.some((b) => b.type === "entry" && b.title === "Blog")).toBe(true);
+    expect(sel.includedCount).toBe(base.includedCount + 1);
+    expect(sel.refill.map((c) => c.key)).not.toContain("project:p2");
+  });
+
   it("fits a long profile to the estimate budget, marking cut scored items page_limit", () => {
     const many = Array.from({ length: 60 }, (_, i) => ({ id: `m${i}`, text: `Did Kafka thing number ${i} `.repeat(4) }));
     const sel = selectTailoredResume(profileWith({ experiences: [{ ...profileWith().experiences[0], bullets: many }] }), [], reqs, { paperSize: "a4" });

@@ -98,6 +98,8 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse, deps:
         "Content-Length": outcome.pdf.length,
         "X-Page-Count": String(outcome.pageCount),
         "X-Tex-Version": deps.texVersion,
+        // Whole points left at the bottom of the page (D217); omitted when the template did not report it.
+        ...(outcome.freeSpacePt !== null ? { "X-Free-Space-Pt": String(outcome.freeSpacePt) } : {}),
       });
       res.end(outcome.pdf);
       return;

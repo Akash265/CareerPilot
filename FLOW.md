@@ -1872,6 +1872,8 @@ ResumeOptimizationPanel (changed) → TailoredResumeExport (new) → DownloadBut
      3. job_requirements rows for the job (termText, requirementLevel)
      4. build(extraRemovals) = selectTailoredResume (new; uses estimateLines (new), containsTerm): remove worst-first until it fits,
         one greedy refill pass over the removed items (best-ranked first), then extraRemovals; skills past the 2-line cap go to omitted → normalizeModel
+        floors never removed: every role header; top 2 bullets of the two most recent roles; an older role's top bullet only
+        when it is relevant (optimizer-selected or matching a requirement, D216); education, certifications, skills
      5. first model only: assertSafeModel, then findUnsupportedCharacter (new; render/tex/escapeTex.ts)
         → unsupported_character 422 with a location
      6. fitToPage (new; pipeline/fitToPage.ts), render = renderTex (new; render/tex/renderTex.ts, uses escapeTex)
@@ -1879,10 +1881,15 @@ ResumeOptimizationPanel (changed) → TailoredResumeExport (new) → DownloadBut
         ├─ createHttpTexCompiler (new; render/compileTex.ts) → POST {LATEX_COMPILER_URL}/compile, Bearer token
         │   ├─ services/latex-compiler/src/server.ts (new): auth → size limit 256 KB → limiter (2 running + 4 waiting, else 503)
         │   │   → compileTex (compile.ts): mkdtemp → runPdflatex (runPdflatex.ts, no shell-escape, 20 s kill)
-        │   │   → parseOutput (page count) → 200 PDF + X-Page-Count + X-Tex-Version (temp dir removed in finally)
+        │   │   → parseOutput (page count; free space from the template's line-anchored CAREERPILOT-FREE-SPACE marker, D217)
+        │   │   → 200 PDF + X-Page-Count + X-Tex-Version (+ X-Free-Space-Pt, whole points) (temp dir removed in finally)
         │   └─ failures → DocumentExportError: 503 busy → compiler_busy, 504 → compiler_timeout, 422 → compile_failed,
         │      transport errors (request or PDF body read) → compiler_timeout (TimeoutError/AbortError) or compiler_unavailable
         ├─ pageCount > 1 and extra < 3 and not exhausted → extra++ and again; otherwise stop (pageCount 2 is exported, flagged)
+        ├─ refill (D217): one page with a reported free space → for selection.refill (cut items, best-ranked first, each with
+        │  its estimated addedLines): skip if addedLines × 13 pt > free space or its page fails the export's checks; else build(extra, include + item) → compile;
+        │  keep only if still one page (free space updated); at most 4 refill compiles; compile_failed skips the candidate, compiler busy/timeout/unavailable ends the refill
+        │  (selectTailoredResume puts `include` back after all removals, so every other removal stays as it was)
         └─ format "tex" and the compiler was unavailable / busy / timed out → fitToPage(build, render, null): estimate only, pageVerified false
      7. details = { pageCount, pageVerified, includedCount, totalCount, omitted } (ids and reasons)
      8. tailoredContentHash (changed; model/hash.ts) → storeDocument (changed; pipeline/storeDocument.ts, `prerendered` buffer:

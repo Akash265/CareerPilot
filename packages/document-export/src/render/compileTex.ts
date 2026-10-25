@@ -1,6 +1,7 @@
 import { DocumentExportError } from "../errors";
 
-export interface CompiledPdf { pdf: Buffer; pageCount: number; texVersion: string }
+/** `freeSpacePt`: whole points left at the bottom of the last page, or null when the service did not report it (D217). */
+export interface CompiledPdf { pdf: Buffer; pageCount: number; texVersion: string; freeSpacePt: number | null }
 export interface TexCompiler { compile(tex: string): Promise<CompiledPdf> }
 export interface HttpTexCompilerOptions { url: string; token: string; timeoutMs?: number; fetchImpl?: typeof fetch }
 
@@ -41,7 +42,9 @@ export function createHttpTexCompiler(opts: HttpTexCompilerOptions): TexCompiler
         } catch (cause) {
           throw transportError(cause);
         }
-        return { pdf, pageCount, texVersion };
+        const free = res.headers.get("x-free-space-pt");
+        const freeSpacePt = free !== null && /^\d+$/.test(free) ? Number(free) : null;
+        return { pdf, pageCount, texVersion, freeSpacePt };
       }
       const body = (await res.json().catch(() => null)) as { line?: unknown } | null;
       switch (res.status) {

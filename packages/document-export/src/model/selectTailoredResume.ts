@@ -13,12 +13,21 @@ export interface TailoredSelection {
   omitted: OmittedItem[];
   /** True when every remaining rankable item is protected by a floor (nothing more can be removed). */
   exhausted: boolean;
+  /**
+   * Cut rankable items, best-ranked first, each with the estimated lines it would add back (its own lines plus a
+   * section heading it would bring back). fitToPage tries them against the real page's free space (D217).
+   */
+  refill: RefillCandidate[];
 }
+
+export interface RefillCandidate { key: string; addedLines: number }
 
 export interface SelectTailoredOptions {
   paperSize: PaperSize;
   /** Items to remove beyond the estimate fit -- the compile loop's lever (fitToPage). */
   extraRemovals?: number;
+  /** Item keys ("<sourceType>:<id>") the real compile showed still fit; put back after all removals (D217). */
+  include?: ReadonlySet<string>;
 }
 
 const REQUIRED_WEIGHT = 2;
@@ -145,12 +154,18 @@ export function selectTailoredResume(
   profile.achievements.forEach((a) => add("achievement", a.id, a.description, null));
 
   const ranked = [...items].sort(compareRank);
+  const isIrrelevant = (i: Item) => i.selectedRank === null && i.score === 0;
+  // Floors (D216, amends D207): the two most recent roles keep their top 2 bullets; an older role keeps its top bullet
+  // only when it is relevant (optimizer-selected or matching a requirement), else it may shrink to its header.
   const isProtected = new Set<string>();
   profile.experiences.forEach((_, roleIndex) => {
     const floor = roleIndex < FLOOR_RECENT_ROLES ? 2 : 1;
-    ranked.filter((i) => i.roleIndex === roleIndex).slice(0, floor).forEach((i) => isProtected.add(i.key));
+    ranked
+      .filter((i) => i.roleIndex === roleIndex)
+      .slice(0, floor)
+      .filter((i) => roleIndex < FLOOR_RECENT_ROLES || !isIrrelevant(i))
+      .forEach((i) => isProtected.add(i.key));
   });
-  const isIrrelevant = (i: Item) => i.selectedRank === null && i.score === 0;
   const worstFirst = [...ranked].reverse().filter((i) => !isProtected.has(i.key));
   const removalQueue = [
     ...worstFirst.filter((i) => i.sourceType !== "work_experience_bullet" && isIrrelevant(i)),
@@ -219,10 +234,25 @@ export function selectTailoredResume(
     removed.add(item.key);
     model = build(removed);
   }
+  // Items the compile loop confirmed on the real page come back last, so every other removal stays as it was.
+  if (opts.include && opts.include.size > 0) {
+    for (const key of opts.include) removed.delete(key);
+    model = build(removed);
+  }
+  const exhausted = nextIncluded() === undefined;
+
+  const lines = estimateLines(model, opts.paperSize);
+  const refill: RefillCandidate[] = ranked
+    .filter((i) => removed.has(i.key))
+    .map((i) => {
+      const without = new Set(removed);
+      without.delete(i.key);
+      return { key: i.key, addedLines: estimateLines(build(without), opts.paperSize) - lines };
+    });
 
   const omittedRankable: OmittedItem[] = items
     .filter((i) => removed.has(i.key))
     .map((i) => ({ sourceType: i.sourceType, sourceFactId: i.id, reason: isIrrelevant(i) ? "no_requirement_match" : "page_limit" }));
   const omitted = [...omittedRankable, ...omittedSkills];
-  return { model, includedCount: items.length - removed.size, totalCount: items.length, omitted, exhausted: nextIncluded() === undefined };
+  return { model, includedCount: items.length - removed.size, totalCount: items.length, omitted, exhausted, refill };
 }
