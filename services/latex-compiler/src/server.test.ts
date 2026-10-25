@@ -13,7 +13,7 @@ let server: http.Server | undefined;
 async function start(over: Partial<ServerDeps> = {}): Promise<string> {
   server = createCompilerServer({
     token: TOKEN, texVersion: "pdfTeX test", logger, limiter: createLimiter({ concurrency: 2, maxQueue: 4 }),
-    compile: async (): Promise<CompileOutcome> => ({ kind: "ok", pdf: Buffer.from("%PDF"), pageCount: 1 }),
+    compile: async (): Promise<CompileOutcome> => ({ kind: "ok", pdf: Buffer.from("%PDF"), pageCount: 1, freeSpacePt: null }),
     ...over,
   });
   await new Promise<void>((r) => server!.listen(0, "127.0.0.1", r));
@@ -39,7 +39,13 @@ describe("latex-compiler server", () => {
     expect(res.headers.get("content-type")).toBe("application/pdf");
     expect(res.headers.get("x-page-count")).toBe("1");
     expect(res.headers.get("x-tex-version")).toBe("pdfTeX test");
+    expect(res.headers.get("x-free-space-pt")).toBeNull(); // the default fake reports no free space
     expect(Buffer.from(await res.arrayBuffer()).toString()).toBe("%PDF");
+  });
+  it("reports the page's free space as a whole-points header when the compile measured it", async () => {
+    const base = await start({ compile: async (): Promise<CompileOutcome> => ({ kind: "ok", pdf: Buffer.from("%PDF"), pageCount: 1, freeSpacePt: 48 }) });
+    const res = await post(base, "/compile", "\\documentclass{article}");
+    expect(res.headers.get("x-free-space-pt")).toBe("48");
   });
   it("rejects a missing or wrong token with 401", async () => {
     const base = await start();

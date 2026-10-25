@@ -6,6 +6,7 @@ import { openTestDb, wipeUser, testStorageClient, seedResumeFixture, insertOptim
 import { exportTailoredResume } from "./exportTailoredResume";
 import { DocumentExportError } from "../errors";
 import type { TexCompiler } from "../render/compileTex";
+import { TEX_TEMPLATE_VERSION } from "../model/types";
 
 const USER = "00000000-0000-0000-0000-000000000d20";
 const storage = testStorageClient();
@@ -14,7 +15,7 @@ let testDb: TestDb;
 const fakeCompiler = (pages: number[] = [1]) => {
   const calls: string[] = [];
   const compiler: TexCompiler = {
-    async compile(tex) { calls.push(tex); return { pdf: Buffer.from(`%PDF fake ${calls.length}`), pageCount: pages.shift() ?? 1, texVersion: "pdfTeX test" }; },
+    async compile(tex) { calls.push(tex); return { pdf: Buffer.from(`%PDF fake ${calls.length}`), pageCount: pages.shift() ?? 1, texVersion: "pdfTeX test", freeSpacePt: null }; },
   };
   return { compiler, calls };
 };
@@ -55,7 +56,7 @@ describe("exportTailoredResume", () => {
     const { jobId, optimizationId } = await seed();
     const { compiler, calls } = fakeCompiler([1]);
     const { document, omittedItems } = await exportTailoredResume(testDb.db, storage, compiler, { userId: USER, jobId, optimizationId, format: "pdf", paperSize: "a4" });
-    expect(document).toMatchObject({ kind: "tailored_resume", format: "pdf", resumeOptimizationId: optimizationId, rendererVersion: "tex-1", downloadFilename: "Jane Doe - GitLab - Resume.pdf" });
+    expect(document).toMatchObject({ kind: "tailored_resume", format: "pdf", resumeOptimizationId: optimizationId, rendererVersion: `tex-${TEX_TEMPLATE_VERSION}`, downloadFilename: "Jane Doe - GitLab - Resume.pdf" });
     expect(document.details).toEqual({ pageCount: 1, pageVerified: true, includedCount: 2, totalCount: 2, omitted: [] });
     expect(omittedItems).toEqual([]);
     expect(calls).toHaveLength(1);

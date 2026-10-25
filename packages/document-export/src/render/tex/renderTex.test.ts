@@ -21,6 +21,13 @@ describe("renderTex", () => {
   it("renders the template (golden)", () => {
     expect(renderTex(model, { paperSize: "a4" })).toMatchSnapshot();
   });
+  it("ends by reporting the free space left on the page, as the last thing before \\end{document}", () => {
+    const lines = renderTex(model, { paperSize: "a4" }).trimEnd().split("\n");
+    expect(lines.slice(-2)).toEqual([
+      "\\par\\typeout{CAREERPILOT-FREE-SPACE=\\the\\dimexpr\\pagegoal-\\pagetotal\\relax}",
+      "\\end{document}",
+    ]);
+  });
   it("switches paper size", () => {
     expect(renderTex(model, { paperSize: "letter" })).toContain("\\usepackage[letterpaper,margin=0.6in]{geometry}");
     expect(renderTex(model, { paperSize: "a4" })).toContain("\\usepackage[a4paper,margin=0.6in]{geometry}");

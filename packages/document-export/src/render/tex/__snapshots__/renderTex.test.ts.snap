@@ -37,6 +37,7 @@ exports[`renderTex > renders the template (golden) 1`] = `
 A CLI\\par
 \\section*{Skills}
 C++, C\\#, .NET\\par
+\\par\\typeout{CAREERPILOT-FREE-SPACE=\\the\\dimexpr\\pagegoal-\\pagetotal\\relax}
 \\end{document}
 "
 `;

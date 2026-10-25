@@ -1,10 +1,13 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { parseErrorLine, parsePageCount } from "./parseOutput";
+import { parseErrorLine, parseFreeSpacePt, parsePageCount } from "./parseOutput";
 
 export type PdflatexRunner = (workDir: string, timeoutMs: number) => Promise<{ exitCode: number | null; timedOut: boolean; output: string }>;
-export type CompileOutcome = { kind: "ok"; pdf: Buffer; pageCount: number } | { kind: "failed"; line?: number } | { kind: "timeout" };
+export type CompileOutcome =
+  | { kind: "ok"; pdf: Buffer; pageCount: number; freeSpacePt: number | null }
+  | { kind: "failed"; line?: number }
+  | { kind: "timeout" };
 
 export const COMPILE_TIMEOUT_MS = 20_000;
 
@@ -17,7 +20,7 @@ export async function compileTex(tex: string, runner: PdflatexRunner, opts: { tm
     if (run.timedOut) return { kind: "timeout" };
     const pageCount = parsePageCount(run.output);
     if (run.exitCode !== 0 || pageCount === null) return { kind: "failed", line: parseErrorLine(run.output) };
-    return { kind: "ok", pdf: await readFile(path.join(dir, "resume.pdf")), pageCount };
+    return { kind: "ok", pdf: await readFile(path.join(dir, "resume.pdf")), pageCount, freeSpacePt: parseFreeSpacePt(run.output) };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

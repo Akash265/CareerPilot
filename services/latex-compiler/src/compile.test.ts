@@ -13,10 +13,10 @@ describe("compileTex", () => {
     const runner: PdflatexRunner = async (dir) => {
       seenTex = await readFile(path.join(dir, "resume.tex"), "utf8");
       await writeFile(path.join(dir, "resume.pdf"), "%PDF");
-      return { exitCode: 0, timedOut: false, output: "Output written on resume.pdf (1 page, 4 bytes)." };
+      return { exitCode: 0, timedOut: false, output: "CAREERPILOT-FREE-SPACE=120.5pt\nOutput written on resume.pdf (1 page, 4 bytes)." };
     };
     const out = await compileTex("\\documentclass{article}", runner, { tmpRoot: root });
-    expect(out).toEqual({ kind: "ok", pdf: Buffer.from("%PDF"), pageCount: 1 });
+    expect(out).toEqual({ kind: "ok", pdf: Buffer.from("%PDF"), pageCount: 1, freeSpacePt: 120 });
     expect(seenTex).toBe("\\documentclass{article}");
     expect(await readdir(root)).toEqual([]);
   });

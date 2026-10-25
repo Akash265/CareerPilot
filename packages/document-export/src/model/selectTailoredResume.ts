@@ -13,12 +13,21 @@ export interface TailoredSelection {
   omitted: OmittedItem[];
   /** True when every remaining rankable item is protected by a floor (nothing more can be removed). */
   exhausted: boolean;
+  /**
+   * Cut rankable items, best-ranked first, each with the estimated lines it would add back (its own lines plus a
+   * section heading it would bring back). fitToPage tries them against the real page's free space (D217).
+   */
+  refill: RefillCandidate[];
 }
+
+export interface RefillCandidate { key: string; addedLines: number }
 
 export interface SelectTailoredOptions {
   paperSize: PaperSize;
   /** Items to remove beyond the estimate fit -- the compile loop's lever (fitToPage). */
   extraRemovals?: number;
+  /** Item keys ("<sourceType>:<id>") the real compile showed still fit; put back after all removals (D217). */
+  include?: ReadonlySet<string>;
 }
 
 const REQUIRED_WEIGHT = 2;
@@ -225,10 +234,25 @@ export function selectTailoredResume(
     removed.add(item.key);
     model = build(removed);
   }
+  const exhausted = nextIncluded() === undefined;
+  // Items the compile loop confirmed on the real page come back last, so every other removal stays as it was.
+  if (opts.include && opts.include.size > 0) {
+    for (const key of opts.include) removed.delete(key);
+    model = build(removed);
+  }
+
+  const lines = estimateLines(model, opts.paperSize);
+  const refill: RefillCandidate[] = ranked
+    .filter((i) => removed.has(i.key))
+    .map((i) => {
+      const without = new Set(removed);
+      without.delete(i.key);
+      return { key: i.key, addedLines: estimateLines(build(without), opts.paperSize) - lines };
+    });
 
   const omittedRankable: OmittedItem[] = items
     .filter((i) => removed.has(i.key))
     .map((i) => ({ sourceType: i.sourceType, sourceFactId: i.id, reason: isIrrelevant(i) ? "no_requirement_match" : "page_limit" }));
   const omitted = [...omittedRankable, ...omittedSkills];
-  return { model, includedCount: items.length - removed.size, totalCount: items.length, omitted, exhausted: nextIncluded() === undefined };
+  return { model, includedCount: items.length - removed.size, totalCount: items.length, omitted, exhausted, refill };
 }

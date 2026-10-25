@@ -56,5 +56,8 @@ export function renderTex(model: DocumentModel, opts: { paperSize: PaperSize }):
     "\\end{center}",
   ];
   const body = model.blocks.map(blockTex).filter((s) => s.length > 0);
-  return [...preamble(model, opts.paperSize), "\\begin{document}", ...header, ...body, "\\end{document}", ""].join("\n");
+  // Last action before \end{document}: report the space left on the (last) page so the export can refill it from
+  // the real layout (D217). The compiler service reads only this line-anchored number from the log.
+  const reportFreeSpace = "\\par\\typeout{CAREERPILOT-FREE-SPACE=\\the\\dimexpr\\pagegoal-\\pagetotal\\relax}";
+  return [...preamble(model, opts.paperSize), "\\begin{document}", ...header, ...body, reportFreeSpace, "\\end{document}", ""].join("\n");
 }

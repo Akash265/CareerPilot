@@ -6,6 +6,22 @@ export function parsePageCount(output: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
+/** Above any real page's text height (A4/Letter ≈ 700-760 pt); \maxdimen (16383.99998pt) means an empty page. */
+const MAX_PLAUSIBLE_FREE_PT = 2000;
+
+/**
+ * Space left at the bottom of the last page, in whole points, from the template's own
+ * "CAREERPILOT-FREE-SPACE=<dimen>" line (D217). Line-anchored and last-match: box warnings echo document text
+ * only after a font prefix, so document text cannot pose as the marker. A number only ever leaves this service.
+ */
+export function parseFreeSpacePt(output: string): number | null {
+  const all = [...output.matchAll(/^CAREERPILOT-FREE-SPACE=(-?\d+(?:\.\d+)?)pt$/gm)];
+  const m = all[all.length - 1];
+  if (!m) return null;
+  const pt = Number(m[1]);
+  return Number.isFinite(pt) && pt >= 0 && pt <= MAX_PLAUSIBLE_FREE_PT ? Math.floor(pt) : null;
+}
+
 /** "-file-line-error" format: "./resume.tex:42: <message>". Only the number leaves this service. */
 export function parseErrorLine(output: string): number | undefined {
   const m = /^\.\/resume\.tex:(\d+):/m.exec(output);

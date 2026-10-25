@@ -20,7 +20,7 @@ export type DocumentKind = "resume" | "pitch" | "cover_letter" | "interview_prep
 export const RENDERER_VERSION = "1";
 
 /** Phase 13c. Bump whenever renderTex's output for the same model changes (part of the tailored content hash). */
-export const TEX_TEMPLATE_VERSION = "1";
+export const TEX_TEMPLATE_VERSION = "2";
 
 export type PaperSize = "a4" | "letter";
 

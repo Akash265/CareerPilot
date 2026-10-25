@@ -13,12 +13,19 @@ describe("createHttpTexCompiler", () => {
   it("POSTs the tex with the bearer token and returns pdf, page count and TeX version", async () => {
     const fetchImpl = vi.fn(async () => response(200, Buffer.from("%PDF-1.5"), { "X-Page-Count": "1", "X-Tex-Version": "pdfTeX 3.14" }));
     const out = await compilerWith(fetchImpl as unknown as typeof fetch).compile("\\documentclass{article}");
-    expect(out).toEqual({ pdf: Buffer.from("%PDF-1.5"), pageCount: 1, texVersion: "pdfTeX 3.14" });
+    expect(out).toEqual({ pdf: Buffer.from("%PDF-1.5"), pageCount: 1, texVersion: "pdfTeX 3.14", freeSpacePt: null });
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("http://127.0.0.1:8090/compile");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${"t".repeat(32)}`);
     expect(init.body).toBe("\\documentclass{article}");
+  });
+
+  it("reads the free-space header as whole points, and ignores a missing or malformed one", async () => {
+    const withHeader = (v: string) => compilerWith((async () => response(200, "%PDF", { "X-Page-Count": "1", "X-Tex-Version": "v", "X-Free-Space-Pt": v })) as unknown as typeof fetch);
+    expect((await withHeader("48").compile("x")).freeSpacePt).toBe(48);
+    expect((await withHeader("0").compile("x")).freeSpacePt).toBe(0);
+    for (const bad of ["-1", "4.5", "abc", ""]) expect((await withHeader(bad).compile("x")).freeSpacePt).toBeNull();
   });
 
   it.each([

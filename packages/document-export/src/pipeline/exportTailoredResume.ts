@@ -56,8 +56,8 @@ export async function exportTailoredResume(
       .from(jobRequirements).where(eq(jobRequirements.jobId, input.jobId))
   );
   const applied = optimization.selectedBullets as AppliedBullet[];
-  const build = (extraRemovals: number): TailoredSelection => {
-    const selection = selectTailoredResume(profile, applied, requirements, { paperSize: input.paperSize, extraRemovals });
+  const build = (extraRemovals: number, include?: ReadonlySet<string>): TailoredSelection => {
+    const selection = selectTailoredResume(profile, applied, requirements, { paperSize: input.paperSize, extraRemovals, include });
     return { ...selection, model: normalizeModel(selection.model) };
   };
 
