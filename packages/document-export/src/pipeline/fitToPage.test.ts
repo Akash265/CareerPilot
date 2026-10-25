@@ -107,16 +107,63 @@ describe("fitToPage", () => {
       expect(compile).toHaveBeenCalledTimes(MAX_EXTRA_TRIMS + 1);
     });
 
-    it("keeps the best page so far when a refill compile fails", async () => {
+    it("stops refilling, keeping the best page so far, when the compiler is busy, timed out or unavailable", async () => {
+      for (const errorClass of ["compiler_busy", "compiler_timeout", "compiler_unavailable"] as const) {
+        const { build, compiler } = pageWithRoom(4, [{ key: "a", estimated: 1, real: 1 }, { key: "c", estimated: 1, real: 1 }, { key: "d", estimated: 1, real: 1 }]);
+        const real = compiler.compile.getMockImplementation()!;
+        compiler.compile.mockImplementation(async (tex: string) => {
+          if (tex.endsWith("a,c")) throw new DocumentExportError(errorClass);
+          return real(tex);
+        });
+        const out = await fitToPage(build, render, compiler);
+        expect(out.tex).toBe("tex:m0+a");
+        expect(compiler.compile).toHaveBeenCalledTimes(3); // fit, "a", the failed "a,c" -- "d" is never tried
+      }
+    });
+
+    it("skips a candidate that fails to typeset and tries the next one", async () => {
       const { build, compiler } = pageWithRoom(4, [{ key: "a", estimated: 1, real: 1 }, { key: "c", estimated: 1, real: 1 }]);
       const real = compiler.compile.getMockImplementation()!;
       compiler.compile.mockImplementation(async (tex: string) => {
-        if (tex.endsWith("a,c")) throw new DocumentExportError("compiler_busy");
+        if (tex.endsWith("+a")) throw new DocumentExportError("compile_failed");
         return real(tex);
       });
       const out = await fitToPage(build, render, compiler);
+      expect(out.tex).toBe("tex:m0+c");
+    });
+
+    it("rethrows an unexpected (non-export) error from a refill compile", async () => {
+      const { build, compiler } = pageWithRoom(4, [{ key: "a", estimated: 1, real: 1 }]);
+      const real = compiler.compile.getMockImplementation()!;
+      compiler.compile.mockImplementation(async (tex: string) => {
+        if (tex.endsWith("+a")) throw new TypeError("bug");
+        return real(tex);
+      });
+      await expect(fitToPage(build, render, compiler)).rejects.toThrow("bug");
+    });
+
+    it("never compiles a candidate whose page the caller says cannot be rendered", async () => {
+      const { build, compiler } = pageWithRoom(4, [{ key: "a", estimated: 1, real: 1 }, { key: "c", estimated: 1, real: 1 }]);
+      const out = await fitToPage(build, render, compiler, { isRenderable: (m) => !m.title.split("+")[1].split(",").includes("a") });
+      expect(out.tex).toBe("tex:m0+c");
+      expect(compiler.compile).toHaveBeenCalledTimes(2); // fit and "c" only
+    });
+
+    it("refills at the trim level the fit ended on", async () => {
+      const { build, compiler } = pageWithRoom(4, [{ key: "a", estimated: 1, real: 1 }]);
+      const real = compiler.compile.getMockImplementation()!;
+      compiler.compile.mockImplementation(async (tex: string) => (tex.startsWith("tex:m0") ? { ...(await real(tex)), pageCount: 2 } : real(tex)));
+      const out = await fitToPage(build, render, compiler);
+      expect(out.tex).toBe("tex:m1+a");
+    });
+
+    it("stops refilling when a refill compile no longer reports the free space", async () => {
+      const { build, compiler } = pageWithRoom(4, [{ key: "a", estimated: 1, real: 1 }, { key: "c", estimated: 1, real: 1 }]);
+      const real = compiler.compile.getMockImplementation()!;
+      compiler.compile.mockImplementation(async (tex: string) => (tex.endsWith("+a") ? { ...(await real(tex)), freeSpacePt: null } : real(tex)));
+      const out = await fitToPage(build, render, compiler);
       expect(out.tex).toBe("tex:m0+a");
-      expect(out.compiled?.pageCount).toBe(1);
+      expect(compiler.compile).toHaveBeenCalledTimes(2);
     });
   });
 });

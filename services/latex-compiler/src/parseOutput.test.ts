@@ -19,7 +19,7 @@ describe("parseOutput", () => {
   });
 
   it("only trusts a marker at the start of a line, and the last one", () => {
-    // Box warnings echo document text after a font prefix, never at column 0.
+    // A look-alike not at line start is ignored; at line start, the template's own marker (printed last) wins.
     expect(parseFreeSpacePt("[]\\T1/lmr/m/n/10 CAREERPILOT-FREE-SPACE=9999pt\n")).toBeNull();
     expect(parseFreeSpacePt("CAREERPILOT-FREE-SPACE=500pt\nCAREERPILOT-FREE-SPACE=12.5pt\n")).toBe(12);
   });

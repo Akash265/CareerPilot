@@ -1887,8 +1887,8 @@ ResumeOptimizationPanel (changed) → TailoredResumeExport (new) → DownloadBut
         │      transport errors (request or PDF body read) → compiler_timeout (TimeoutError/AbortError) or compiler_unavailable
         ├─ pageCount > 1 and extra < 3 and not exhausted → extra++ and again; otherwise stop (pageCount 2 is exported, flagged)
         ├─ refill (D217): one page with a reported free space → for selection.refill (cut items, best-ranked first, each with
-        │  its estimated addedLines): skip if addedLines × 12 pt > free space; else build(extra, include + item) → compile;
-        │  keep only if still one page (free space updated); at most 4 refill compiles; a failed refill compile ends the refill
+        │  its estimated addedLines): skip if addedLines × 13 pt > free space or its page fails the export's checks; else build(extra, include + item) → compile;
+        │  keep only if still one page (free space updated); at most 4 refill compiles; compile_failed skips the candidate, compiler busy/timeout/unavailable ends the refill
         │  (selectTailoredResume puts `include` back after all removals, so every other removal stays as it was)
         └─ format "tex" and the compiler was unavailable / busy / timed out → fitToPage(build, render, null): estimate only, pageVerified false
      7. details = { pageCount, pageVerified, includedCount, totalCount, omitted } (ids and reasons)

@@ -11,8 +11,9 @@ const MAX_PLAUSIBLE_FREE_PT = 2000;
 
 /**
  * Space left at the bottom of the last page, in whole points, from the template's own
- * "CAREERPILOT-FREE-SPACE=<dimen>" line (D217). Line-anchored and last-match: box warnings echo document text
- * only after a font prefix, so document text cannot pose as the marker. A number only ever leaves this service.
+ * "CAREERPILOT-FREE-SPACE=<dimen>" line (D217). The last line-start match wins: the template prints the marker after
+ * all body text is typeset, so a look-alike echoed earlier (e.g. in a box warning) is superseded. A spoofed value can
+ * only misdirect the refill, whose every result is still checked by the real page count. Only a number leaves here.
  */
 export function parseFreeSpacePt(output: string): number | null {
   const all = [...output.matchAll(/^CAREERPILOT-FREE-SPACE=(-?\d+(?:\.\d+)?)pt$/gm)];

@@ -234,12 +234,12 @@ export function selectTailoredResume(
     removed.add(item.key);
     model = build(removed);
   }
-  const exhausted = nextIncluded() === undefined;
   // Items the compile loop confirmed on the real page come back last, so every other removal stays as it was.
   if (opts.include && opts.include.size > 0) {
     for (const key of opts.include) removed.delete(key);
     model = build(removed);
   }
+  const exhausted = nextIncluded() === undefined;
 
   const lines = estimateLines(model, opts.paperSize);
   const refill: RefillCandidate[] = ranked
