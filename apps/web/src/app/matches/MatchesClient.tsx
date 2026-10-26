@@ -81,7 +81,8 @@ export function MatchesClient() {
         .then((body: { run: RunStatus | null } | null) => {
           const run = body?.run;
           if (!run) return;
-          if (run.status === "failed") {
+          // An "interrupted" run was cut off by a stop and is re-run by the worker itself (D219): not a failure to report.
+          if (run.status === "failed" && run.errorClass !== "interrupted") {
             setRunFailure(`The last matching run failed${run.errorClass ? ` (${run.errorClass})` : ""}. Try Find matching jobs again, or check the matching worker.`);
           } else {
             setRunFailure(null);

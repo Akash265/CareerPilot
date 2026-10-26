@@ -19,5 +19,6 @@ export * from "./explanation/generateMatchExplanation";
 export * from "./pipeline/upsertMatch";
 export * from "./explanation/explanationStaleness";
 export * from "./pipeline/runMatching";
+export * from "./pipeline/markInterruptedMatchingRuns";
 export * from "./queue";
 export * from "./enqueue";

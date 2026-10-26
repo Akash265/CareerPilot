@@ -5,7 +5,7 @@ import { DbUsageSink, closeDbClient, createDbClient, loadRedactionValues } from 
 import { createLogger, initProcessLogging, throttleErrorLog } from "@ai-career/logging";
 import { createShutdown, originalJobError, startHeartbeat } from "@ai-career/monitoring";
 import { createAnthropicFor, withLangfuseExport, type AiUsageSink } from "@ai-career/ai";
-import { MATCHING_QUEUE_NAME, type MatchingJobData } from "@ai-career/matching";
+import { MATCHING_QUEUE_NAME, markInterruptedMatchingRuns, type MatchingJobData } from "@ai-career/matching";
 import { ensureTopMatchRequirements } from "@ai-career/resume-optimization";
 import { createRequirementsRefresh } from "./requirementsRefresh";
 import { createMatchingWorker } from "./worker";
@@ -30,6 +30,13 @@ async function main(): Promise<void> {
   // Phase 11b: beat from right after Redis opens, so /status shows this worker running -- and a crash later in
   // startup reads as "stale" -- at the configured interval; a clean shutdown records "stopped".
   const heartbeat = await startHeartbeat(connection, "matching", { intervalMs: env.HEARTBEAT_INTERVAL_MS });
+  // D219: before taking any work, fail matching runs a previous process left "running"; BullMQ re-runs that job itself.
+  try {
+    const interrupted = await markInterruptedMatchingRuns(db, env.DEFAULT_USER_ID);
+    if (interrupted > 0) log.info("interrupted_runs_marked", { matchingRuns: interrupted });
+  } catch (error) {
+    log.warn("interrupted_runs_mark_failed", { error });
+  }
 
   const aiFor = (userId: string) => {
     // Typed as AiUsageSink so the compiler checks DbUsageSink still matches the AI package's interface.

@@ -5,7 +5,7 @@ import { DbUsageSink, closeDbClient, createDbClient, loadRedactionValues } from 
 import { createLogger, initProcessLogging, throttleErrorLog } from "@ai-career/logging";
 import { createShutdown, originalJobError, startHeartbeat } from "@ai-career/monitoring";
 import {
-  INGEST_JOB_NAME, INGEST_JOB_OPTIONS, INGEST_QUEUE_NAME, createAdapterFor, createPoliteFetch, providerConfigFromEnv, ingestJobId, recordBoardsFromRun, retireIfGone, searchWebForBoards, validatePendingBoards,
+  INGEST_JOB_NAME, INGEST_JOB_OPTIONS, INGEST_QUEUE_NAME, createAdapterFor, createPoliteFetch, providerConfigFromEnv, ingestJobId, markInterruptedRuns, recordBoardsFromRun, retireIfGone, searchWebForBoards, validatePendingBoards,
   type IngestJobData,
 } from "@ai-career/ingestion";
 import { createAnthropicFor, withLangfuseExport } from "@ai-career/ai";
@@ -35,6 +35,14 @@ async function main(): Promise<void> {
   // Phase 11b: beat from right after Redis opens, so /status shows this worker running -- and a crash later in
   // startup reads as "stale" -- at the configured interval; a clean shutdown records "stopped".
   const heartbeat = await startHeartbeat(connection, "job-ingestion", { intervalMs: env.HEARTBEAT_INTERVAL_MS });
+  // D219: before taking any work, fail runs a previous process left "running" (it was stopped mid-run). Housekeeping
+  // only: if it fails, the worker still starts, and a stuck search run still ends under the 10-minute stall rule.
+  try {
+    const interrupted = await markInterruptedRuns(db, env.DEFAULT_USER_ID);
+    if (interrupted.ingestionRuns + interrupted.searchRuns > 0) log.info("interrupted_runs_marked", interrupted);
+  } catch (error) {
+    log.warn("interrupted_runs_mark_failed", { error });
+  }
   const queue = new Queue<IngestJobData>(INGEST_QUEUE_NAME, { connection });
   const matchingQueue = new Queue<MatchingJobData>(MATCHING_QUEUE_NAME, { connection });
   const rematch = () => requestRematch({ redis: connection, queue: matchingQueue }, env.DEFAULT_USER_ID, env.MATCH_DEBOUNCE_SECONDS * 1000);

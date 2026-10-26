@@ -23,9 +23,9 @@ health check and opens http://127.0.0.1:3000. On its first run it adds `LATEX_CO
 
 **Ctrl-C (or closing the terminal window) stops everything**: the web app, the workers, the compiler and the
 Postgres/Redis/MinIO containers. Your data is kept. It refuses to start if port 3000 is taken or a worker is already
-running elsewhere, and if any piece dies it names it, shows the end of its log and stops the rest. Note: stopping in
-the middle of a job fetch or a match run (each start triggers both) cuts that run off; the job is re-run on the next
-start, but its run record stays "running", which can make "Find matching jobs" wait up to about 10 minutes.
+running elsewhere, and if any piece dies it names it, shows the end of its log and stops the rest. Stopping in the
+middle of a job fetch or a match run (each start triggers both) cuts that run off; on the next start the workers mark
+it "interrupted" (D219), the job is re-run, and "Find matching jobs" can be clicked straight away.
 
 The steps below do the same by hand.
 

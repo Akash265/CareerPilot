@@ -59,6 +59,8 @@ const ERROR_CLASS: Record<string, string> = {
   no_active_goal: "Confirm a career goal first — search providers search for its roles and places",
   no_search_terms: "Your career goal has no target roles to search for",
   missing_api_key: "This provider's API key is missing from .env",
+  // D219: the job-ingestion worker found this run still "running" when it started, so it was cut off by a stop.
+  interrupted: "Interrupted — CareerPilot was stopped during the fetch; it runs again on schedule",
   unknown: "Something went wrong — it will retry",
 };
 // Own-property lookup: the class is data from the database, and "constructor" must not resolve to Object's.

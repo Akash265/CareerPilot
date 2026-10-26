@@ -23,6 +23,7 @@ export * from "./pipeline/recomputeJob";
 export * from "./pipeline/closeMissing";
 export * from "./pipeline/hashPayload";
 export * from "./pipeline/storeUpload";
+export * from "./pipeline/markInterruptedRuns";
 export * from "./pipeline/adapterFor";
 export * from "./pipeline/runIngestion";
 export * from "./discovery/boardLinks";

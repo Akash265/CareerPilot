@@ -1946,3 +1946,27 @@ Files: `scripts/start.sh` **(new)**, root `package.json` (`start`, **changed**),
 stop_all (once): TERM every piece's process group → wait until each group is empty (pgrep -g, up to 20 s)
   → KILL what is left → docker compose … stop (postgres, redis, minio, latex-compiler; volumes kept)
 ```
+
+## 24. Interrupted runs — marked on worker startup (D219)
+
+Files: `packages/ingestion/src/pipeline/markInterruptedRuns.ts` **(new)**, `packages/matching/src/pipeline/markInterruptedMatchingRuns.ts`
+**(new)**, `services/job-ingestion/src/main.ts` and `services/matching-worker/src/main.ts` **(changed)**,
+`apps/web/src/lib/jobs/format.ts`, `apps/web/src/lib/searchRuns/format.ts`, `apps/web/src/app/matches/MatchesClient.tsx` **(changed)**.
+
+```
+job-ingestion main(): … startHeartbeat("job-ingestion")
+  → markInterruptedRuns(db, DEFAULT_USER_ID)            (one transaction, RLS as the user)
+      ingestion_runs running → failed, error_class "interrupted", finished_at now
+        → job_sources (only if last_run_at < that run's started_at): last_run_status failed, last_error_class "interrupted"
+      search_runs running|matching → failed, error_code "interrupted"; sources queued|running|late → failed/"interrupted"
+      (queued search runs untouched: their BullMQ job is still waiting)
+  → log interrupted_runs_marked {ingestionRuns, searchRuns} when > 0 (a failure: interrupted_runs_mark_failed, start anyway)
+  → queues, createIngestWorker, createSearchRunWorker, …            (BullMQ re-runs the stalled ingest job → new run row)
+
+matching-worker main(): … startHeartbeat("matching")
+  → markInterruptedMatchingRuns: matching_runs running → failed, error_class "interrupted"
+  → createMatchingWorker                                            (stalled matching job re-run → new run row)
+
+UI: Sources row → formatErrorClass("interrupted"); FindJobsPanel → runFailureText("interrupted") + sourceLine reason;
+    MatchesClient → no failure banner when the latest matching run's errorClass is "interrupted".
+```

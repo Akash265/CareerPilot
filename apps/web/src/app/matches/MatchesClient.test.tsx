@@ -98,6 +98,20 @@ describe("MatchesClient", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/last matching run failed \(no_active_goal\)/i);
   });
 
+  it("shows no failure alert for a run interrupted by a stop (D219): the worker re-runs it on its own", async () => {
+    const fetchFn = mockFetch({
+      "GET /api/matches?eligible=true&page=1": () => ({ body: { matches: [], page: 1, pageSize: 25, total: 0 } }),
+      "GET /api/search-runs/latest": () => ({ body: { run: null } }),
+      "GET /api/matches/runs/latest": () => ({
+        body: { run: { status: "failed", errorClass: "interrupted", startedAt: "2026-10-26T08:00:00Z", finishedAt: "2026-10-26T09:00:00Z", jobsEvaluated: 0, jobsEligible: 0, jobsExplained: 0 } },
+      }),
+    });
+    render(<MatchesClient />);
+    await waitFor(() => expect(fetchFn.mock.calls.some(([url]) => url === "/api/matches/runs/latest")).toBe(true));
+    await act(async () => {}); // let the status response settle
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it.each(["matching_failed", "matching_timeout"])(
     "shows one alert, the search panel's, when the latest search run already explains the matching failure (%s)",
     async (errorCode) => {
