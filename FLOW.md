@@ -1920,3 +1920,29 @@ getJobAutofillOverview (changed; readSessions.ts): resumeAvailable counts kind r
 ### 22d. Not changed
 
 `exportResume` (full-profile PDF/DOCX), the pitch, cover letter and interview prep exports, and the optimizer, whose `selectedBullets` this feature reads and whose guard (D63) remains the only authority on applied bullets.
+
+## 23. Running everything — `scripts/start.sh` (D218)
+
+Files: `scripts/start.sh` **(new)**, root `package.json` (`start`, **changed**), `.gitignore` (`logs/`, **changed**).
+
+```
+./scripts/start.sh  (or pnpm start)
+  1. preflight: .env exists; pnpm + docker installed; port 3000 free; no worker already running from this checkout
+     (pgrep "src/main.ts" + the process's cwd under services/<name>)
+  2. docker_ready (docker info, 10 s per probe) → else open -a Docker, retry until 3 min → else fail with the restart hint
+  3. .env: append LATEX_COMPILER_URL / LATEX_COMPILER_TOKEN (openssl rand -hex 32) only if missing
+  4. trap INT TERM HUP → stop_all
+  5. docker compose -f infra/docker-compose.yml --env-file .env --profile latex up -d --wait postgres redis minio
+  6. pnpm install --frozen-lockfile → logs/install.log
+     pnpm --filter @ai-career/db db:migrate → logs/migrate.log
+     pnpm build (turbo-cached) → logs/build.log
+     docker compose … up -d --build latex-compiler → logs/latex-compiler-build.log
+  7. start_piece (set -m: own process group, stdout/err → logs/<name>.log, stdin /dev/null):
+     web (pnpm --filter web start), job-ingestion, matching-worker, maintenance-worker,
+     browser-worker (only if Chrome / BROWSER_EXECUTABLE_PATH exists)
+  8. wait for GET /api/health (60 s, checking every piece), then GET :8090/health (30 s, warning only)
+  9. print the URL, open it, loop every 2 s: a piece that exited → died(): name + tail of its log → stop_all → exit 1
+
+stop_all (once): TERM every piece's process group → wait until each group is empty (pgrep -g, up to 20 s)
+  → KILL what is left → docker compose … stop (postgres, redis, minio, latex-compiler; volumes kept)
+```

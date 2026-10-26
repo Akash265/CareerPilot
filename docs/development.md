@@ -20,6 +20,7 @@ Node 22+, pnpm 9 (`packageManager` pins 9.15.0), Docker (Postgres + pgvector, Re
 
 | Command | Does |
 |---|---|
+| `pnpm start` (`./scripts/start.sh`) | Runs the whole application (infra, migrations, build, compiler, web app, all four workers); Ctrl-C stops it all (README, D218) |
 | `pnpm dev` | Web app in dev mode on `http://localhost:3000` (bound to `APP_HOST`, default 127.0.0.1) |
 | `pnpm build` | Production build of the web app (also generates the route types `typecheck` needs) |
 | `pnpm lint` | ESLint (keep it at 0 warnings: checked before every merge, not enforced by the script) |

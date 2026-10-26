@@ -11,3 +11,6 @@ coverage/
 
 # Phase 11d E2E logs and failure screenshots
 e2e/.out/
+
+# scripts/start.sh output, one log per piece
+logs/

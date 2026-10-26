@@ -7,6 +7,28 @@ human-approved submission → outcome tracking.
 See `docs/architecture.md` for system design and `DECISIONS.md` for the
 rationale behind each architectural choice.
 
+## Run everything with one command
+
+Once `.env` exists (step 1 below), start the whole application with:
+
+```bash
+./scripts/start.sh        # or: pnpm start
+```
+
+It starts Docker Desktop if needed, brings up Postgres/Redis/MinIO, installs dependencies, applies migrations,
+builds the web app (cached when nothing changed), starts the LaTeX compiler, the web app and the four workers
+(ingestion, matching, maintenance, browser autofill — skipped with a warning if Chrome is missing), waits for the
+health check and opens http://127.0.0.1:3000. On its first run it adds `LATEX_COMPILER_URL` and a random
+`LATEX_COMPILER_TOKEN` to `.env`; nothing else in `.env` is changed. Each piece logs to `logs/<name>.log`.
+
+**Ctrl-C (or closing the terminal window) stops everything**: the web app, the workers, the compiler and the
+Postgres/Redis/MinIO containers. Your data is kept. It refuses to start if port 3000 is taken or a worker is already
+running elsewhere, and if any piece dies it names it, shows the end of its log and stops the rest. Note: stopping in
+the middle of a job fetch or a match run (each start triggers both) cuts that run off; the job is re-run on the next
+start, but its run record stays "running", which can make "Find matching jobs" wait up to about 10 minutes.
+
+The steps below do the same by hand.
+
 ## Quick Start (local, no paid services required)
 
 1. Copy env template: `cp .env.example .env`. Two DB URLs are required, per
