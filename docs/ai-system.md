@@ -1,6 +1,6 @@
 # AI System
 
-How CareerPilot uses LLMs and embeddings, as built. Design rationale lives in [DECISIONS.md](../DECISIONS.md); the per-feature pipelines are in [architecture.md](architecture.md) §4–§7 and §11–§21.
+How CarrierPilot uses LLMs and embeddings, as built. Design rationale lives in [DECISIONS.md](../DECISIONS.md); the per-feature pipelines are in [architecture.md](architecture.md) §4–§7 and §11–§21.
 
 ## Principles
 

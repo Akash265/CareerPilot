@@ -1,5 +1,5 @@
 # Maintenance worker (daily retention sweep). Build from the repo root -- the context must be the pnpm workspace:
-#   docker build -f services/maintenance-worker/Dockerfile -t careerpilot-maintenance-worker .
+#   docker build -f services/maintenance-worker/Dockerfile -t carrierpilot-maintenance-worker .
 # Workspace packages ship raw TypeScript (no build step), so the worker runs under tsx, exactly as
 # `pnpm --filter @ai-career/maintenance-worker start` does outside Docker (DECISIONS.md D125).
 

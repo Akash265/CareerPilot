@@ -25,7 +25,7 @@ export function renderDocx(model: DocumentModel): Promise<Buffer> {
   }
 
   const doc = new Document({
-    creator: "CareerPilot",
+    creator: "CarrierPilot",
     title: model.title,
     numbering: {
       config: [

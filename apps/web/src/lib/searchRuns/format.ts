@@ -9,7 +9,7 @@ const REASONS: Record<string, string> = {
   network: "the site could not be reached",
   server_error: "the site had an error",
   not_found: "the job board no longer exists",
-  interrupted: "cut off when CareerPilot stopped", // D219
+  interrupted: "cut off when CarrierPilot stopped", // D219
   missing_api_key: "its API key is not set in .env",
   no_active_goal: "no confirmed career goal",
   no_search_terms: "the career goal has no target roles",
@@ -63,7 +63,7 @@ const FAILURES: Record<string, string> = {
   no_active_goal: "Confirm a career goal first.",
   consent_missing: "Permission for discovery was withdrawn.",
   // D219: marked by the job-ingestion worker on startup -- a cut-off search is never resumed.
-  interrupted: "The search was cut off when CareerPilot stopped. Click Find matching jobs to start a new one.",
+  interrupted: "The search was cut off when CarrierPilot stopped. Click Find matching jobs to start a new one.",
 };
 
 /** A failed search run with one of these codes already explains a failed matching run (MatchesClient's own alert). */

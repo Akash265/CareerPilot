@@ -1,5 +1,5 @@
 # LaTeX compiler sidecar (Phase 13c, DECISIONS.md D209). Build from the repo root -- the context must be the pnpm workspace:
-#   docker build -f services/latex-compiler/Dockerfile -t careerpilot-latex-compiler .
+#   docker build -f services/latex-compiler/Dockerfile -t carrierpilot-latex-compiler .
 # Same two-stage pattern as services/maintenance-worker (D125), plus Debian's TeX Live packages and poppler-utils
 # (pdftotext, used only by the test-mode /extract endpoint).
 ARG NODE_IMAGE=public.ecr.aws/docker/library/node:22-slim

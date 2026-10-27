@@ -108,7 +108,7 @@ The steps below do the same by hand.
       recognize are left for you, shown in the panel's field audit.
     - The resume and cover letter are uploaded under fixed file names
       (`resume.pdf`, `cover_letter.pdf`) regardless of what you named them or
-      how CareerPilot stores them internally — that's the file name the
+      how CarrierPilot stores them internally — that's the file name the
       employer sees attached, and it's also why your own file name or any
       other local text never reaches the page.
     - **You always click Submit yourself.** The worker has no code path

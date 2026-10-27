@@ -176,7 +176,7 @@ jobs:
             for src in public.ecr.aws/docker/library/node:22-slim mirror.gcr.io/library/node:22-slim docker.io/library/node:22-slim; do
               for attempt in 1 2; do
                 if docker pull "$src"; then
-                  docker tag "$src" careerpilot-node-base:22-slim
+                  docker tag "$src" carrierpilot-node-base:22-slim
                   echo "Node base image from $src"
                   return 0
                 fi
@@ -194,7 +194,7 @@ jobs:
         # The base image is the local tag pulled above (D214); the retry absorbs transient errors in the build itself.
         run: |
           for attempt in 1 2 3; do
-            if docker build --build-arg NODE_IMAGE=careerpilot-node-base:22-slim -f services/maintenance-worker/Dockerfile -t careerpilot-maintenance-worker .; then
+            if docker build --build-arg NODE_IMAGE=carrierpilot-node-base:22-slim -f services/maintenance-worker/Dockerfile -t carrierpilot-maintenance-worker .; then
               break
             fi
             if [ "$attempt" = 3 ]; then
@@ -204,8 +204,8 @@ jobs:
             echo "docker build failed (attempt $attempt), retrying in 15s" >&2
             sleep 15
           done
-          docker run --rm careerpilot-maintenance-worker node_modules/.bin/tsx --version
-          if docker run --rm careerpilot-maintenance-worker sh -c 'find / -name .env -not -path "/proc/*" 2>/dev/null' | grep -q .; then
+          docker run --rm carrierpilot-maintenance-worker node_modules/.bin/tsx --version
+          if docker run --rm carrierpilot-maintenance-worker sh -c 'find / -name .env -not -path "/proc/*" 2>/dev/null' | grep -q .; then
             echo "A .env file was baked into the image" >&2
             exit 1
           fi
@@ -217,15 +217,15 @@ jobs:
           LATEX_COMPILER_URL: http://127.0.0.1:8090
         run: |
           for attempt in 1 2 3; do
-            if docker build --build-arg NODE_IMAGE=careerpilot-node-base:22-slim -f services/latex-compiler/Dockerfile -t careerpilot-latex-compiler .; then break; fi
+            if docker build --build-arg NODE_IMAGE=carrierpilot-node-base:22-slim -f services/latex-compiler/Dockerfile -t carrierpilot-latex-compiler .; then break; fi
             if [ "$attempt" = 3 ]; then echo "docker build failed 3 times" >&2; exit 1; fi
             echo "docker build failed (attempt $attempt), retrying in 15s" >&2; sleep 15
           done
-          if docker run --rm careerpilot-latex-compiler sh -c 'find / -name .env -not -path "/proc/*" 2>/dev/null' | grep -q .; then
+          if docker run --rm carrierpilot-latex-compiler sh -c 'find / -name .env -not -path "/proc/*" 2>/dev/null' | grep -q .; then
             echo "A .env file was baked into the image" >&2; exit 1
           fi
           docker run -d --name latex-compiler -p 127.0.0.1:8090:8090 --read-only --tmpfs /tmp:size=64m \
             --cap-drop ALL --security-opt no-new-privileges:true --memory 512m --pids-limit 64 \
-            -e LATEX_COMPILER_TOKEN -e LATEX_COMPILER_TEST_MODE=1 careerpilot-latex-compiler
+            -e LATEX_COMPILER_TOKEN -e LATEX_COMPILER_TEST_MODE=1 carrierpilot-latex-compiler
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8090/health && break; sleep 1; done
           pnpm --filter @ai-career/document-export test:latex || { docker logs latex-compiler; exit 1; }

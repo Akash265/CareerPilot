@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs all of CareerPilot with one command (DECISIONS.md D218): Docker infrastructure, migrations, the web app,
+# Runs all of CarrierPilot with one command (DECISIONS.md D218): Docker infrastructure, migrations, the web app,
 # the four workers and the LaTeX compiler. Press Ctrl-C to stop everything; data in Postgres/MinIO is kept.
 # Usage: ./scripts/start.sh   (or: pnpm start)
 set -euo pipefail
@@ -10,8 +10,8 @@ LOGS="$ROOT/logs"
 COMPOSE=(docker compose -f infra/docker-compose.yml --env-file .env --profile latex)
 
 # Never fails: after the terminal window closes there is nowhere to print, and stopping must still finish.
-say() { printf '\033[1m[careerpilot]\033[0m %s\n' "$*" 2>/dev/null || true; }
-fail() { printf '\033[1;31m[careerpilot] %s\033[0m\n' "$*" >&2; exit 1; }
+say() { printf '\033[1m[carrierpilot]\033[0m %s\n' "$*" 2>/dev/null || true; }
+fail() { printf '\033[1;31m[carrierpilot] %s\033[0m\n' "$*" >&2; exit 1; }
 env_value() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- || true; }
 
 # ---------- preflight ----------
@@ -22,7 +22,7 @@ command -v docker >/dev/null || fail "Docker is not installed."
 APP_HOST="$(env_value APP_HOST)"; APP_HOST="${APP_HOST:-127.0.0.1}"
 APP_URL="http://$APP_HOST:3000"
 if lsof -iTCP:3000 -sTCP:LISTEN -n -P >/dev/null 2>&1; then
-  fail "Port 3000 is already in use -- is CareerPilot (or another app) already running? Stop it first."
+  fail "Port 3000 is already in use -- is CarrierPilot (or another app) already running? Stop it first."
 fi
 # Two ingestion or matching workers would fight over the same work, so refuse to start a second copy.
 for svc in job-ingestion matching-worker maintenance-worker browser-worker; do
@@ -73,7 +73,7 @@ stop_all() {
   STOPPING=1
   trap '' INT TERM HUP
   printf '\n' 2>/dev/null || true
-  say "Stopping CareerPilot..."
+  say "Stopping CarrierPilot..."
   for i in "${!PIDS[@]}"; do kill -TERM -- "-${PIDS[$i]}" 2>/dev/null || true; done
   # Wait for every process in each piece's group, not just pnpm: the worker underneath finishes its current job and
   # records that it stopped (its own deadline is 8 s, D175). Anything still running after 20 s is killed.
@@ -129,7 +129,7 @@ else
 fi
 
 died() { # name: report a piece that exited, then stop everything
-  printf '\033[1;31m[careerpilot] %s stopped unexpectedly. Last lines of logs/%s.log:\033[0m\n' "$1" "$1" >&2 2>/dev/null || true
+  printf '\033[1;31m[carrierpilot] %s stopped unexpectedly. Last lines of logs/%s.log:\033[0m\n' "$1" "$1" >&2 2>/dev/null || true
   tail -20 "$LOGS/$1.log" >&2 2>/dev/null || true
   stop_all
   exit 1
@@ -145,7 +145,7 @@ curl -sf -m 5 "$APP_URL/api/health" >/dev/null 2>&1 || { stop_all; fail "The web
 for _ in $(seq 1 30); do curl -sf -m 5 http://127.0.0.1:8090/health >/dev/null 2>&1 && break; sleep 1; done
 curl -sf -m 5 http://127.0.0.1:8090/health >/dev/null 2>&1 || say "Warning: the LaTeX compiler is not answering; tailored PDF export will say how to start it."
 
-say "CareerPilot is running at $APP_URL  (logs in logs/, worker health at $APP_URL/status)"
+say "CarrierPilot is running at $APP_URL  (logs in logs/, worker health at $APP_URL/status)"
 say "Press Ctrl-C to stop everything."
 open "$APP_URL" >/dev/null 2>&1 || true
 

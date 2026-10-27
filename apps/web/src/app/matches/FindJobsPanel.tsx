@@ -125,7 +125,7 @@ export function FindJobsPanel({ onResultsChanged, onRunLoaded }: {
       {needsConsent && (
         <div className="flex flex-col gap-2 rounded border p-3 text-sm">
           <p>
-            To search for you, CareerPilot fetches public job listings from job-search APIs and the public job boards of
+            To search for you, CarrierPilot fetches public job listings from job-search APIs and the public job boards of
             companies it finds (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee), politely and within each
             site&apos;s limits. You can change this any time on <Link href="/sources" className="underline">Sources</Link>.
           </p>
