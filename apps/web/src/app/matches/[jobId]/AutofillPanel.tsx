@@ -215,7 +215,7 @@ export function AutofillPanel({ jobId }: { jobId: string }) {
       {overview && overview.support.supported && (
         <>
           <p className="text-sm text-gray-600">
-            Chrome opens on this computer with the form filled where possible. Review every field and click Submit yourself; CarrierPilot never submits.
+            Chrome opens on this computer with the form filled where possible. Review every field and click Submit yourself; CareerPilot never submits.
           </p>
           <button type="button" onClick={() => void start()} disabled={busy || active || !overview.resumeAvailable}
             className="self-start rounded bg-black px-3 py-1.5 text-sm text-white disabled:opacity-50">

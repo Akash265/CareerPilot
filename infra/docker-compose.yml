@@ -61,7 +61,7 @@ services:
     build:
       context: ..
       dockerfile: services/maintenance-worker/Dockerfile
-    image: carrierpilot-maintenance-worker
+    image: careerpilot-maintenance-worker
     restart: unless-stopped
     env_file: ../.env
     environment:
@@ -86,7 +86,7 @@ services:
     build:
       context: ..
       dockerfile: services/latex-compiler/Dockerfile
-    image: carrierpilot-latex-compiler
+    image: careerpilot-latex-compiler
     restart: unless-stopped
     environment:
       LATEX_COMPILER_TOKEN: ${LATEX_COMPILER_TOKEN:-}

@@ -10,7 +10,7 @@ const BULLET_INDENT = 12;
  * tables, automatic page breaks -- the machine-readable shape the spec's §10.2 scorecard asks for.
  */
 export function renderPdf(model: DocumentModel): Promise<Buffer> {
-  const doc = new PDFDocument({ size: "A4", margin: MARGIN, info: { Title: model.title, Producer: "CarrierPilot" } });
+  const doc = new PDFDocument({ size: "A4", margin: MARGIN, info: { Title: model.title, Producer: "CareerPilot" } });
   const chunks: Buffer[] = [];
   const done = new Promise<Buffer>((resolve, reject) => {
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));

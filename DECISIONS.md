@@ -1582,5 +1582,11 @@ Minor cleanups: `probeEmployerNames` lost its unused `goalId` option.
 **Decision:** The product name is now CarrierPilot wherever a person sees it: web app text (unlock page heading, the discovery permission and autofill notes, the "interrupted" messages), the Producer/Creator metadata of exported PDF and DOCX files, `scripts/start.sh` messages (prefix `[carrierpilot]`), the Docker image names (`carrierpilot-latex-compiler`, `carrierpilot-maintenance-worker`, CI's `carrierpilot-node-base`), README and `docs/`. Unchanged on purpose: the Redis key prefixes `careerpilot:worker:`, `careerpilot:rl:`, `careerpilot:rematch:` (renaming would orphan live keys), the browser storage key `careerpilot.rankWithHistory` (renaming would reset the saved "Rank with my history" choice), the compiler's `CAREERPILOT-FREE-SPACE` marker, the autofill temp-directory prefix and the telemetry service name (internal identifiers nobody reads), the word "career" in product text and code (career goal, `@ai-career/*`, `career_goals`, `career_intel`), and earlier DECISIONS entries, specs and plans (history).
 **Why:** the user asked for the spelling change and chose the product name only; the GitHub repository is already named CarrierPilot. Stored documents are not re-rendered: the content hash covers the document model, not file metadata, so an identical export still reuses its stored file.
 **What it affects:** the files listed above; local images were retagged to the new names (no rebuild).
+**Superseded by D221:** reverted the next day; the product name is CareerPilot again.
+
+### D221. The product name stays CareerPilot (D220 reverted)
+**Decision:** commit `b6f4851` (D220) is reverted with `git revert`: every visible use is CareerPilot again (web app text, exported PDF/DOCX producer metadata, start script messages and `[careerpilot]` prefix, Docker image names `careerpilot-latex-compiler`, `careerpilot-maintenance-worker`, CI's `careerpilot-node-base`, README and docs). Local images were retagged back to the original names.
+**Why:** the user asked to change the spelling back to "Career".
+**What it affects:** the same files as D220.
 
 *Entries are appended chronologically. Do not edit or delete past entries when a decision is later reversed — add a new entry that supersedes it and cross-reference the original.*

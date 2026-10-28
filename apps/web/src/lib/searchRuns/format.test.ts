@@ -7,7 +7,7 @@ describe("search run text (Phase 13a)", () => {
     expect(sourceLine({ ...s, state: "reused" })).toBe("Remotive — up to date, reused");
     expect(sourceLine({ ...s, state: "queued" })).toBe("Remotive — waiting");
     expect(sourceLine({ ...s, state: "running" })).toBe("Remotive — fetching…");
-    expect(sourceLine({ ...s, state: "failed", reason: "interrupted" })).toBe("Remotive — failed: cut off when CarrierPilot stopped");
+    expect(sourceLine({ ...s, state: "failed", reason: "interrupted" })).toBe("Remotive — failed: cut off when CareerPilot stopped");
     expect(sourceLine({ ...s, state: "done", newCount: 3 })).toBe("Remotive — 3 new jobs");
     expect(sourceLine({ ...s, state: "done", newCount: 1 })).toBe("Remotive — 1 new job");
     expect(sourceLine({ ...s, state: "failed", reason: "rate_limited" })).toBe("Remotive — failed: the site asked us to slow down; it will be retried later");
@@ -24,7 +24,7 @@ describe("search run text (Phase 13a)", () => {
   it("explains run failures", () => {
     expect(runFailureText("stalled")).toMatch(/job-ingestion worker/);
     expect(runFailureText("matching_failed")).toMatch(/ranking/);
-    expect(runFailureText("interrupted")).toBe("The search was cut off when CarrierPilot stopped. Click Find matching jobs to start a new one.");
+    expect(runFailureText("interrupted")).toBe("The search was cut off when CareerPilot stopped. Click Find matching jobs to start a new one.");
     // Nothing refreshes the list after the run has ended, so the text must not promise results "will appear".
     expect(runFailureText("matching_timeout")).toMatch(/then use Find matching jobs again/);
     expect(runFailureText("matching_timeout")).not.toMatch(/will appear/);
